@@ -35,7 +35,7 @@ def upgrade() -> None:
 
     # Drop redundant index (unique constraint already covers it)
     try:
-        op.drop_index("ix_cached_requests_marketplace_id", table_name="cached_requests")
+        op.execute("DROP INDEX IF EXISTS ix_cached_requests_marketplace_id")
     except Exception:
         pass  # Index may not exist if 016 was applied after the fix
 
