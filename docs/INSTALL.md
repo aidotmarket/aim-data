@@ -10,8 +10,6 @@ A machine with Docker Desktop or docker engine. Around 16GB of RAM is enough for
 
 If you plan to publish data from S3, an AWS account with an S3 bucket and the ability to create IAM roles. The setup walkthrough covers this.
 
-An Anthropic API key for the embedded AI assistant. Get one at console.anthropic.com.
-
 A serial and a bootstrap token from me. I send these per customer when you activate.
 
 ## Get the install file
