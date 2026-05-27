@@ -1,8 +1,8 @@
-# vectorAIz
+# AIM Data
 
-**Your data. Your infrastructure. AI-ready.**
+**Connect your private data to ai.market.**
 
-vectorAIz transforms your corporate data into searchable, AI-optimized assets — completely private, running entirely on your hardware. Connect your own LLM, upload your files, and query everything with natural language.
+AIM Data is the seller-side toolkit for the ai.market marketplace. Stand up a private data store, connect it to your buckets and databases, publish dataset metadata to ai.market, and let buyers discover your data without ever moving it off your infrastructure.
 
 [![License: ELv2](https://img.shields.io/badge/License-ELv2-3F51B5.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-3F51B5.svg)](https://www.python.org/downloads/)
@@ -11,193 +11,98 @@ vectorAIz transforms your corporate data into searchable, AI-optimized assets �
 
 ---
 
-## Why vectorAIz?
+## What AIM Data does
 
-Most AI data tools send your data to the cloud. vectorAIz doesn't. Everything runs locally — your files never leave your network.
+AIM Data is the data-seller half of ai.market. It runs on your hardware, indexes the datasets you want to sell, and pushes the metadata buyers need to find them. The actual data stays where it is.
 
-- **Private by design** — data stays on your machine, always
-- **Bring your own LLM** — OpenAI, Anthropic Claude, or Google Gemini
-- **Upload anything** — CSV, JSON, TXT, Markdown, HTML, PDF, DOCX, PPTX, XLS, and more
-- **Local directory import** — mount a local folder and import files directly, no upload needed
-- **Database connectivity** — connect to Postgres and MySQL databases, extract and vectorize table data
-- **Natural language queries** — ask questions about your data in plain English
-- **AI copilot** — allAI assistant helps you explore and understand your datasets
-- **Parallel upload** — concurrent upload workers with real progress tracking
-- **Large file streaming** — handles files of any size with chunked processing
-- **Auto-update** — automatic software updates for Docker deployments
-- **Data preview** — inspect schemas, stats, and samples before vectorizing
-- **Diagnostic tools** — structured logging, health checks, one-click diagnostic export
+- **Non-custodial by design.** Your files never leave your infrastructure.
+- **S3 STS connectors.** Bring your own bucket. AIM Data assumes a scoped IAM role to scan and index, never receives credentials.
+- **Buyer portal.** Sellers grant access via access codes. Buyers search dataset metadata, request samples, and complete transactions through ai.market.
+- **Raw file listings.** Publish individual files for one-off sales without batch-indexing them first.
+- **Marketplace publish.** Push dataset metadata to ai.market signed with your seller key.
+- **Trust attestation.** Every published listing carries an attestation trail buyers can verify.
 
-## Quick Start
+## Getting started
 
-### Option 1: One-line install (recommended)
+AIM Data is currently in private beta. If you are a prospective seller, get in touch through [ai.market](https://ai.market) and we will set up your environment.
 
-```bash
-git clone https://github.com/aidotmarket/vectoraiz.git && cd vectoraiz && ./start.sh
+Once provisioned, your deployment runs as three Docker containers on your infrastructure:
+
+```
+AIM Data API + UI  —  PostgreSQL  —  Qdrant
 ```
 
-### Option 2: Platform installers
-
-Download from the [latest release](https://github.com/aidotmarket/vectoraiz/releases/latest):
-
-| Platform | Download | Run |
-|----------|----------|-----|
-| **macOS** | `install-mac.sh` | `chmod +x install-mac.sh && ./install-mac.sh` |
-| **Linux** | `install-linux.sh` | `chmod +x install-linux.sh && ./install-linux.sh` |
-| **Windows** | `install-vectoraiz.ps1` | Run in PowerShell as Administrator |
-
-To install the `aim-data` channel instead of the standard deployment:
-
-```bash
-# macOS
-curl -fsSL https://raw.githubusercontent.com/aidotmarket/vectoraiz/main/installers/mac/install-mac.sh | bash -s -- --channel aim-data
-
-# Linux
-curl -fsSL https://raw.githubusercontent.com/aidotmarket/vectoraiz/main/installers/linux/install-linux.sh | bash -s -- --channel aim-data
-```
-
-```powershell
-# Windows PowerShell
-$tmp = Join-Path $env:TEMP 'install-vectoraiz.ps1'
-irm https://raw.githubusercontent.com/aidotmarket/vectoraiz/main/installers/windows/install-vectoraiz.ps1 -OutFile $tmp
-& $tmp -Channel 'aim-data'
-```
-
-### Option 3: Docker Compose (manual)
-
-```bash
-git clone https://github.com/aidotmarket/vectoraiz.git
-cd vectoraiz
-docker compose -f docker-compose.customer.yml up -d
-```
-
-Use `docker-compose.customer.yml` for the standard customer deployment, or `docker-compose.aim-data.yml` for the `aim-data` channel:
-
-```bash
-# Standard customer deployment
-docker compose -f docker-compose.customer.yml up -d
-
-# aim-data channel deployment
-docker compose -f docker-compose.aim-data.yml up -d
-```
-
-Once running:
-
-- **vectorAIz UI** → [http://localhost:8080](http://localhost:8080)
-- **API docs** → [http://localhost:8080/docs](http://localhost:8080/docs)
-- **Health check** → [http://localhost:8080/api/health](http://localhost:8080/api/health)
-
-## Deployment Channels
-
-vectorAIz supports multiple deployment channels using the same application image and codebase.
-
-- Standard customer deployments use [`docker-compose.customer.yml`](/Users/max/Projects/vectoraiz/vectoraiz-monorepo/docker-compose.customer.yml). This is the default installer path.
-- `aim-data` is the seller-oriented variant and uses [`docker-compose.aim-data.yml`](/Users/max/Projects/vectoraiz/vectoraiz-monorepo/docker-compose.aim-data.yml) with `VECTORAIZ_CHANNEL=aim-data`.
-
-If you use an installer, pass `--channel aim-data` to deploy the `aim-data` experience. If you do not set a channel, the standard customer deployment is used.
-
-## First-Time Setup
-
-1. **Launch vectorAIz** — open `http://localhost:8080` in your browser
-2. **Create your account** — set up a local admin username and password
-3. **Connect your LLM** — go to Settings → LLM and add your API key (OpenAI, Anthropic, or Gemini)
-4. **Upload data** — drag and drop files or use bulk upload
-5. **Start querying** — ask questions about your data in the chat interface
-
-## Supported File Formats
-
-| Format | Extensions |
-|--------|-----------|
-| Tabular | `.csv`, `.tsv`, `.json`, `.jsonl` |
-| Text | `.txt`, `.md`, `.rst`, `.html` |
-| Documents | `.pdf`, `.docx`, `.pptx`, `.xls`, `.xlsx` (via Apache Tika) |
+The API serves your seller dashboard and the buyer portal. PostgreSQL stores listing metadata, ACL, and audit logs. Qdrant holds the search vectors for fast buyer-side discovery.
 
 ## Architecture
 
-vectorAIz runs as Docker containers on your machine:
-
 ```
-┌──────────────────────────────────────────┐
-│              Your Machine                │
+┌─────────────────────────────────────────┐
+│             Your Infrastructure         │
 │                                          │
-│  ┌───────────┐  ┌────────────┐           │
-│  │ vectorAIz │──│   Qdrant   │           │
-│  │   API     │  │  (vectors) │           │
-│  │  :8080    │  │   :6333    │           │
-│  │  (ext)    │  └────────────┘           │
-│  │  :80 int  │  ┌────────────┐           │
-│  │           │──│ PostgreSQL │           │
-│  │           │  │(meta+auth) │           │
-│  └─────┬─────┘  │   :5432    │           │
-│        │        └────────────┘           │
-│        │ Your LLM key                    │
-│        ▼                                 │
-│  ┌───────────┐                           │
-│  │ OpenAI /  │  (external, API calls     │
-│  │ Anthropic │   only — no data sent)    │
-│  │ / Gemini  │                           │
-│  └───────────┘                           │
-└──────────────────────────────────────────┘
+│  ┌───────────┐  ┌────────────┐         │
+│  │  AIM Data │──│   Qdrant   │         │
+│  │   API     │  │  (vectors) │         │
+│  │  + buyer  │  │            │         │
+│  │   portal  │  └────────────┘         │
+│  │           │  ┌────────────┐         │
+│  │           │──│ PostgreSQL │         │
+│  │           │  │(meta+auth) │         │
+│  └───┬───────┘  └────────────┘         │
+│      │                                  │
+│      │ STS-scoped read                  │
+│      ▼                                  │
+│  ┌───────────┐                          │
+│  │ Your S3   │   (scanned in place;    │
+│  │ buckets   │    files never leave)   │
+│  └───────────┘                          │
+└─────────────────────────────────────────┘
+             │                                              
+             │ Metadata + listings only                     
+             ▼                                              
+     ┌──────────────┐                                     
+     │  ai.market   │    (buyers discover and transact      
+     │  marketplace │     here — actual data stays on        
+     │              │     seller infrastructure)             
+     └──────────────┘                                     
 ```
 
-- **vectorAIz API** — FastAPI backend handling uploads, vectorization, search, and the AI copilot
-- **Qdrant** — vector database storing embeddings locally
-- **PostgreSQL** — metadata storage and authentication
-- **Your LLM** — queries go to your chosen provider using your own API key
+## Repo structure
 
-No data is sent to ai.market or any third party. Only metadata (if you choose to publish) leaves your network.
-
-## Configuration
-
-Environment variables (set in `.env` or `docker-compose.yml`):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DEBUG` | `false` | Enable debug logging |
-| `VECTORAIZ_AUTH_ENABLED` | `true` | Require authentication |
-| `QDRANT_HOST` | `qdrant` | Qdrant hostname |
-| `QDRANT_PORT` | `6333` | Qdrant port |
-
-LLM keys are configured through the UI (Settings → LLM) and stored encrypted on disk.
-
-## Development
-
-```bash
-# Clone and start with hot reload
-git clone https://github.com/aidotmarket/vectoraiz.git
-cd vectoraiz
-docker-compose up --build
-
-# Run tests
-docker-compose exec vectoraiz-api pytest
-
-# API docs (auto-generated)
-open http://localhost:8080/docs
+```
+app/              FastAPI backend (Python 3.11+)
+  routers/        API endpoints including portal, marketplace publish, S3 connections
+  services/       Business logic, indexing, search, listing publishing
+  models/         SQLAlchemy + Pydantic models
+  core/           Auth, DB, config, channel switch (always set to aim-data here)
+frontend/         React + Vite + Tailwind + shadcn/ui
+  src/pages/      Seller dashboard pages + buyer portal
+  src/api/        API client functions
+alembic/          Database migrations
+specs/            Build specs (BQ-AIM-* for AIM Data work; SHARED specs duplicated from vectoraiz upstream)
+deploy/           nginx + entrypoint for the container image
 ```
 
-The `docker-compose.yml` mounts `app/` as a volume — code changes reflect immediately without rebuilding.
+See [CLAUDE.md](CLAUDE.md) for conventions.
 
-## Connect to ai.market (optional)
+## Shared codebase
 
-vectorAIz can optionally connect to [ai.market](https://ai.market) to publish your dataset metadata and make it discoverable by AI agents and buyers. This is entirely opt-in — no data is shared, only metadata you explicitly publish.
+AIM Data and [vectorAIz](https://github.com/aidotmarket/vectoraiz) share a core platform. The shared code lives in both repos and is maintained upstream in vectoraiz-monorepo. AIM Data syncs from the upstream weekly. If you find a bug in the core platform, file it against vectoraiz-monorepo so the fix lands in both products.
 
-## Requirements
-
-- **Docker** and **Docker Compose** (v2+)
-- **8 GB RAM** minimum (16 GB recommended for large datasets)
-- An API key from OpenAI, Anthropic, or Google (for LLM queries)
+AIM Data-specific surfaces (buyer portal, raw listings, marketplace publish, S3 STS seller flows, aim-data release machinery) live only in this repo.
 
 ## License
 
-Source available under [Elastic License 2.0](LICENSE). Free to use, modify, and run internally. You may not offer vectorAIz as a managed service.
+Source available under [Elastic License 2.0](LICENSE).
 
 ## Links
 
-- 🌐 [vectoraiz.com](https://vectoraiz.com) — project homepage
-- 🛒 [ai.market](https://ai.market) — data marketplace
-- 📦 [Releases](https://github.com/aidotmarket/vectoraiz/releases) — downloads
-- 🐛 [Issues](https://github.com/aidotmarket/vectoraiz/issues) — bug reports
+- [ai.market](https://ai.market) — the marketplace this product serves
+- [vectorAIz](https://github.com/aidotmarket/vectoraiz) — sister product for customer-hosted private data
+- [Issues](https://github.com/aidotmarket/aim-data/issues) — bug reports
 
 ---
 
-Built by [ai.market](https://ai.market) · Made with ❤️ for data teams who take privacy seriously.
+## History
+
+This repository was forked out of [vectoraiz-monorepo](https://github.com/aidotmarket/vectoraiz) on 2026-05-27. Pre-fork history is preserved in the inherited git log back to commit 596fdda (2026-02-25 consolidation point). Pre-consolidation history lives in the archived source repos.
