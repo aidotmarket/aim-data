@@ -2,7 +2,6 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Database,
-  Search,
   Code,
   Settings,
   ChevronLeft,
@@ -14,7 +13,6 @@ import {
   FileOutput,
   Store,
   HandHelping,
-  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMode } from "@/contexts/ModeContext";
@@ -32,12 +30,10 @@ interface NavItem {
 const ALL_NAV_ITEMS: NavItem[] = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/datasets", label: "Datasets", icon: Database },
-  { path: "/search", label: "Search", icon: Search },
   { path: "/sql", label: "SQL Query", icon: Code },
   { path: "/artifacts", label: "Artifacts", icon: FileOutput },
   { path: "/databases", label: "Databases", icon: Database },
   { path: "/settings", label: "Settings", icon: Settings },
-  { path: "/billing", label: "Billing", icon: CreditCard },
   { path: "/ai-market", label: "ai.market", icon: Store },
   { path: "/data-requests", label: "I Need Data", icon: HandHelping },
   { path: "/earnings", label: "Earnings", icon: DollarSign, feature: "marketplace" },
@@ -46,25 +42,25 @@ const ALL_NAV_ITEMS: NavItem[] = [
 
 // direct channel: data-focused items first, marketplace items at bottom
 const NAV_ORDER_DIRECT = [
-  "/", "/datasets", "/search", "/sql", "/artifacts", "/databases", "/settings",
-  "/ai-market", "/data-requests", "/earnings", "/billing", "/data-types",
+  "/", "/datasets", "/sql", "/artifacts", "/databases", "/settings",
+  "/ai-market", "/data-requests", "/earnings", "/data-types",
 ];
 
 // marketplace channel: marketplace items promoted to top, then data items
 const NAV_ORDER_MARKETPLACE = [
   "/ai-market", "/data-requests", "/",
-  "/datasets", "/search", "/sql", "/artifacts", "/databases",
-  "/earnings", "/billing", "/data-types", "/settings",
+  "/datasets", "/sql", "/artifacts", "/databases",
+  "/earnings", "/data-types", "/settings",
 ];
 
 const NAV_ORDER_AIM_DATA = [
   "/", "/datasets", "/ai-market", "/data-requests",
-  "/search", "/sql", "/artifacts", "/databases",
-  "/earnings", "/billing", "/data-types", "/settings",
+  "/sql", "/artifacts", "/databases",
+  "/earnings", "/data-types", "/settings",
 ];
 
 // Separator index: items after this index go in the bottom section
-const SEPARATOR_INDEX_DIRECT = 7;    // after Settings
+const SEPARATOR_INDEX_DIRECT = 6;    // after Settings
 const SEPARATOR_INDEX_MARKETPLACE = 2; // after Dashboard
 const SEPARATOR_INDEX_AIM_DATA = 4;
 

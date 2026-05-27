@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Database,
-  Search,
   Code,
   Settings,
   DollarSign,
@@ -35,7 +34,6 @@ interface CommandPaletteProps {
 const pages = [
   { name: "Dashboard", path: "/", icon: LayoutDashboard },
   { name: "Datasets", path: "/datasets", icon: Database },
-  { name: "Search", path: "/search", icon: Search },
   { name: "SQL Query", path: "/sql", icon: Code },
   { name: "Artifacts", path: "/artifacts", icon: FileOutput },
   { name: "Databases", path: "/databases", icon: Database },

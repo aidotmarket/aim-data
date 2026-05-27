@@ -1,19 +1,17 @@
 /**
  * BQ-VZ-SHARED-SEARCH: Portal Datasets Page
  *
- * Lists portal-visible datasets. Clicking navigates to search.
+ * Lists portal-visible datasets.
  */
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Database, Search, AlertCircle } from "lucide-react";
+import { Database, AlertCircle } from "lucide-react";
 import { portalApi, type PortalDataset } from "@/api/portalApi";
 
 const PortalDatasets = () => {
-  const navigate = useNavigate();
   const [datasets, setDatasets] = useState<PortalDataset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,8 +69,7 @@ const PortalDatasets = () => {
         {datasets.map((ds) => (
           <Card
             key={ds.dataset_id}
-            className="bg-card border-border hover:border-primary/30 transition-colors cursor-pointer"
-            onClick={() => navigate(`/portal/search?dataset=${ds.dataset_id}`)}
+            className="bg-card border-border"
           >
             <CardContent className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -83,13 +80,9 @@ const PortalDatasets = () => {
                   <h3 className="font-medium text-foreground">{ds.name}</h3>
                   <p className="text-sm text-muted-foreground">
                     {ds.row_count.toLocaleString()} rows
-                    {ds.searchable_columns.length > 0 && (
-                      <> &middot; {ds.searchable_columns.length} searchable columns</>
-                    )}
                   </p>
                 </div>
               </div>
-              <Search className="w-5 h-5 text-muted-foreground" />
             </CardContent>
           </Card>
         ))}

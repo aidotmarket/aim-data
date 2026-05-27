@@ -19,13 +19,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useBrand } from "@/contexts/BrandContext";
-import { useCoPilot } from "@/contexts/CoPilotContext";
 
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
   "/datasets": "Datasets",
   "/earnings": "Earnings",
-  "/search": "Search",
   "/sql": "SQL Query",
   "/settings": "Settings",
   "/data-types": "Data Types",
@@ -42,7 +40,6 @@ const TopBar = ({ onOpenCommandPalette }: TopBarProps) => {
   const brand = useBrand();
   const title = pageTitles[location.pathname] || brand.name;
   const { status: backendStatus } = useBackendConnection();
-  const { connectionStatus } = useCoPilot();
   const { logout } = useAuth();
 
   return (
@@ -70,42 +67,38 @@ const TopBar = ({ onOpenCommandPalette }: TopBarProps) => {
         {/* Notifications */}
         <NotificationBell />
 
-        {/* ai.market connection status (customer-facing). Local backend health is in the tooltip. */}
+        {/* Backend connection status */}
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary border border-border">
-              {connectionStatus === 'connecting' && (
+              {backendStatus === 'checking' && (
                 <>
                   <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
                   <span className="text-xs font-medium text-muted-foreground">
-                    Connecting...
+                    Checking...
                   </span>
                 </>
               )}
-              {connectionStatus === 'connected' && (
+              {backendStatus === 'connected' && (
                 <>
                   <Wifi className="w-3 h-3 text-[hsl(var(--haven-success))]" />
                   <span className="text-xs font-medium text-[hsl(var(--haven-success))]">
-                    ai.market
+                    Online
                   </span>
                 </>
               )}
-              {connectionStatus === 'disconnected' && (
+              {backendStatus === 'disconnected' && (
                 <>
                   <WifiOff className="w-3 h-3 text-muted-foreground" />
                   <span className="text-xs font-medium text-muted-foreground">
-                    Not connected
+                    Offline
                   </span>
                 </>
               )}
             </div>
           </TooltipTrigger>
           <TooltipContent>
-            {connectionStatus === 'connected'
-              ? "Connected to ai.market"
-              : connectionStatus === 'disconnected'
-                ? `Not connected to ai.market. Backend: ${backendStatus === 'connected' ? 'OK' : backendStatus}.`
-                : "Connecting to ai.market..."}
+            Backend: {backendStatus}
           </TooltipContent>
         </Tooltip>
 

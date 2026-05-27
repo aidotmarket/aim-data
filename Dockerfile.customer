@@ -63,7 +63,7 @@ RUN rm -rf /install/lib/python3.11/site-packages/onnxruntime* \
 FROM python:3.11.11-slim-bookworm AS runtime
 
 LABEL maintainer="ai.market <ops@ai.market>"
-LABEL description="vectorAIz — Self-hosted data processing & semantic search"
+LABEL description="AIM Data — Self-hosted listing management for ai.market"
 ARG VERSION=dev
 LABEL version="${VERSION}"
 ENV VECTORAIZ_VERSION=${VERSION}
