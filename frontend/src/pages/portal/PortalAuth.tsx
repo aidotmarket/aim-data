@@ -2,7 +2,7 @@
  * BQ-VZ-SHARED-SEARCH: Portal Auth Page
  *
  * Access code entry form for the "code" tier.
- * Redirects to /portal/search after successful auth.
+ * Redirects to /portal after successful auth.
  */
 
 import { useState } from "react";
@@ -32,7 +32,7 @@ const PortalAuth = () => {
     setLocalError(null);
     try {
       await login(code);
-      navigate("/portal/search", { replace: true });
+      navigate("/portal", { replace: true });
     } catch {
       // Error is set by the hook
     } finally {
@@ -85,7 +85,7 @@ const PortalAuth = () => {
           </div>
           <CardTitle>Access Required</CardTitle>
           <CardDescription>
-            Enter the shared access code to search this portal.
+            Enter the shared access code to access this portal.
           </CardDescription>
         </CardHeader>
         <CardContent>

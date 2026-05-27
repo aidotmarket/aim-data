@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
-  Search,
   Code,
   Trash2,
   FileSpreadsheet,
@@ -388,14 +387,6 @@ const DatasetDetail = () => {
 
           {dataset.status !== "preview_ready" && (
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(`/search?dataset=${dataset.id}`)}
-            >
-              <Search className="w-4 h-4 mr-2" />
-              Search
-            </Button>
             <Button
               variant="outline"
               size="sm"

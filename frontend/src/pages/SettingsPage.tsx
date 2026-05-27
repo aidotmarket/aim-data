@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   HardDrive,
-  Code,
   Eye,
   EyeOff,
   FolderOpen,
@@ -10,7 +9,6 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  AlertTriangle,
   Cpu,
   ShoppingBag,
   Server,
@@ -24,12 +22,10 @@ import {
   ArrowUpCircle,
   Download,
   Terminal,
-  Coins,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Progress } from "@/components/ui/progress";
@@ -103,9 +99,6 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
   
   // Storage state
   const [dataDirectory, setDataDirectory] = useState(defaultDataDirectory);
-  
-  // Developer mode state
-  const [devMode, setDevMode] = useState(false);
   
   // Marketplace state
   const [marketplaceKey, setMarketplaceKey] = useState("");
@@ -431,26 +424,6 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
           Configure {brand.settingsTitle} to match your workflow
         </p>
       </div>
-
-      {/* Section: allAI Credits — moved to /billing */}
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-              <Coins className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-foreground">allAI Credits</CardTitle>
-              <CardDescription>AI-powered features for your data</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <a href="/billing" className="text-sm text-primary underline underline-offset-2 hover:text-primary/80">
-            Manage billing and credits &rarr;
-          </a>
-        </CardContent>
-      </Card>
 
       {/* Section 0: Backend Connection */}
       <Card className="bg-card border-border">
@@ -852,60 +825,6 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
         <DataSourceSettings />
       </div>
 
-      {/* Section 4: Developer Mode */}
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-              <Code className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-foreground">Developer Mode</CardTitle>
-              <CardDescription>Advanced features for developers</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-foreground">Expose Vector Database</Label>
-              <p className="text-sm text-muted-foreground">
-                Make Qdrant accessible for external connections
-              </p>
-            </div>
-            <Switch checked={devMode} onCheckedChange={(v) => { setDevMode(v); setIsDirty(true); }} />
-          </div>
-
-          {devMode && (
-            <>
-              <div className="flex items-start gap-2 p-3 bg-[hsl(var(--haven-warning))]/10 border border-[hsl(var(--haven-warning))]/30 rounded-lg">
-                <AlertTriangle className="w-4 h-4 text-[hsl(var(--haven-warning))] mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-[hsl(var(--haven-warning))]">
-                  Qdrant will be accessible on localhost:6333. Only enable for development.
-                </p>
-              </div>
-
-              <div className="p-4 bg-secondary/50 rounded-lg space-y-3">
-                <h4 className="text-sm font-medium text-foreground">Connection Info</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <span className="text-muted-foreground">Host:</span>
-                  <span className="font-mono text-foreground">localhost</span>
-                  <span className="text-muted-foreground">Port:</span>
-                  <span className="font-mono text-foreground">6333</span>
-                </div>
-                <div className="pt-2 border-t border-border">
-                  <p className="text-xs text-muted-foreground mb-2">Example connection:</p>
-                  <pre className="text-xs font-mono bg-background p-2 rounded border border-border overflow-x-auto">
-{`from qdrant_client import QdrantClient
-client = QdrantClient(host="localhost", port=6333)`}
-                  </pre>
-                </div>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Section 5: Marketplace (only in connected mode) */}
       {hasFeature("marketplace") && (
         <Card className="bg-card border-border">
@@ -974,9 +893,6 @@ client = QdrantClient(host="localhost", port=6333)`}
           </CardContent>
         </Card>
       )}
-
-      {/* Section: Shared Search Portal (BQ-VZ-SHARED-SEARCH) */}
-      <PortalSettingsSection />
 
       {/* Section 6: Software Updates & About */}
       <Card className="bg-card border-border">
@@ -1146,415 +1062,6 @@ client = QdrantClient(host="localhost", port=6333)`}
         </div>
       </div>
     </div>
-  );
-};
-
-/**
- * BQ-VZ-SHARED-SEARCH: Portal Settings Section
- * Inline component for admin portal configuration.
- */
-const PortalSettingsSection = () => {
-  const brand = useBrand();
-  const [portalEnabled, setPortalEnabled] = useState(false);
-  const [portalTier, setPortalTier] = useState<"open" | "code" | "sso">("open");
-  const [portalBaseUrl, setPortalBaseUrl] = useState("");
-  const [portalAccessCode, setPortalAccessCode] = useState("");
-  const [portalLoading, setPortalLoading] = useState(true);
-  const [portalSaving, setPortalSaving] = useState(false);
-  const [portalSessionCount, setPortalSessionCount] = useState(0);
-  const [portalDatasets, setPortalDatasets] = useState<Array<{
-    id: string;
-    name: string;
-    visible: boolean;
-  }>>([]);
-  const [portalError, setPortalError] = useState<string | null>(null);
-  // Phase 2: OIDC fields
-  const [oidcIssuer, setOidcIssuer] = useState("");
-  const [oidcClientId, setOidcClientId] = useState("");
-  const [oidcClientSecret, setOidcClientSecret] = useState("");
-  const [ssoEnabled, setSsoEnabled] = useState(true);
-  const [oidcTesting, setOidcTesting] = useState(false);
-  const [oidcTestResult, setOidcTestResult] = useState<{ success: boolean; error?: string } | null>(null);
-  const [accessLogs, setAccessLogs] = useState<Array<{ timestamp: string; oidc_email: string | null; action: string; detail: string | null }>>([]);
-  const [showAccessLogs, setShowAccessLogs] = useState(false);
-
-  const apiUrl = getApiUrl();
-
-  // Load portal config + datasets on mount
-  useEffect(() => {
-    const loadPortalConfig = async () => {
-      try {
-        const res = await fetch(`${apiUrl}/api/settings/portal`, {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setPortalEnabled(data.enabled);
-          setPortalTier(data.tier === "code" ? "code" : data.tier === "sso" ? "sso" : "open");
-          setPortalBaseUrl(data.base_url || "");
-          setPortalSessionCount(data.active_session_count || 0);
-          setOidcIssuer(data.oidc_issuer || "");
-          setOidcClientId(data.oidc_client_id || "");
-          setSsoEnabled(data.sso_enabled !== false);
-        }
-
-        // Load datasets to show visibility toggles
-        const dsRes = await fetch(`${apiUrl}/api/datasets`, {
-          credentials: "include",
-        });
-        if (dsRes.ok) {
-          const dsData = await dsRes.json();
-          const datasets = (dsData.datasets || dsData || []).map((ds: { id: string; original_filename?: string; filename?: string }) => ({
-            id: ds.id,
-            name: ds.original_filename || ds.filename || ds.id,
-            visible: false,
-          }));
-
-          // Overlay portal visibility from config
-          const portalRes = await fetch(`${apiUrl}/api/settings/portal`, {
-            credentials: "include",
-          });
-          if (portalRes.ok) {
-            const portalData = await portalRes.json();
-            const portalDs = portalData.datasets || {};
-            datasets.forEach((ds: { id: string; visible: boolean }) => {
-              const cfg = portalDs[ds.id];
-              if (cfg) ds.visible = cfg.portal_visible;
-            });
-          }
-          setPortalDatasets(datasets);
-        }
-      } catch {
-        setPortalError("Failed to load portal settings");
-      } finally {
-        setPortalLoading(false);
-      }
-    };
-    loadPortalConfig();
-  }, [apiUrl]);
-
-  const savePortalSettings = async () => {
-    setPortalSaving(true);
-    setPortalError(null);
-    try {
-      const body: Record<string, unknown> = {
-        enabled: portalEnabled,
-        tier: portalTier,
-        base_url: portalBaseUrl,
-      };
-      if (portalAccessCode) body.access_code = portalAccessCode;
-      if (portalTier === "sso") {
-        body.oidc_issuer = oidcIssuer;
-        body.oidc_client_id = oidcClientId;
-        if (oidcClientSecret) body.oidc_client_secret = oidcClientSecret;
-      }
-
-      const res = await fetch(`${apiUrl}/api/settings/portal`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "Failed to save portal settings");
-      }
-      setPortalAccessCode("");
-      toast({ title: "Portal settings saved" });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Save failed";
-      setPortalError(msg);
-      toast({ title: "Error", description: msg, variant: "destructive" });
-    } finally {
-      setPortalSaving(false);
-    }
-  };
-
-  const toggleDatasetVisibility = async (datasetId: string, visible: boolean) => {
-    try {
-      await fetch(`${apiUrl}/api/settings/portal/datasets/${datasetId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ portal_visible: visible }),
-      });
-      setPortalDatasets((prev) =>
-        prev.map((ds) => (ds.id === datasetId ? { ...ds, visible } : ds))
-      );
-    } catch {
-      toast({ title: "Failed to update dataset visibility", variant: "destructive" });
-    }
-  };
-
-  const revokeAllSessions = async () => {
-    try {
-      await fetch(`${apiUrl}/api/settings/portal/revoke-sessions`, {
-        method: "POST",
-        credentials: "include",
-      });
-      setPortalSessionCount(0);
-      toast({ title: "All portal sessions revoked" });
-    } catch {
-      toast({ title: "Failed to revoke sessions", variant: "destructive" });
-    }
-  };
-
-  const codeStrength = (code: string): "weak" | "medium" | "strong" | "" => {
-    if (!code) return "";
-    if (code.length < 6 || /^\d+$/.test(code)) return "weak";
-    if (code.length < 10) return "medium";
-    return "strong";
-  };
-
-  const strength = codeStrength(portalAccessCode);
-  const shareUrl = portalBaseUrl ? `${portalBaseUrl}/portal` : "";
-
-  if (portalLoading) return null;
-
-  return (
-    <Card className="bg-card border-border">
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-            <ExternalLink className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <CardTitle className="text-foreground">Shared Search Portal</CardTitle>
-            <CardDescription>Let others search your datasets via a shareable link</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Enable toggle */}
-        <div className="flex items-center justify-between">
-          <Label htmlFor="portal-enabled">Enable Portal</Label>
-          <Switch
-            id="portal-enabled"
-            checked={portalEnabled}
-            onCheckedChange={setPortalEnabled}
-          />
-        </div>
-
-        {/* Tier selector */}
-        <div className="space-y-1.5">
-          <Label>Access Tier</Label>
-          <Select value={portalTier} onValueChange={(v) => setPortalTier(v as "open" | "code" | "sso")}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="open">Open (no authentication)</SelectItem>
-              <SelectItem value="code">Shared Access Code</SelectItem>
-              <SelectItem value="sso" disabled={!ssoEnabled}>
-                SSO (OIDC){!ssoEnabled ? " — Requires Enterprise" : ""}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Access code (only for code tier) */}
-        {portalTier === "code" && (
-          <div className="space-y-1.5">
-            <Label>Access Code</Label>
-            <Input
-              type="password"
-              placeholder="Enter new access code (min 6 chars, alphanumeric)"
-              value={portalAccessCode}
-              onChange={(e) => setPortalAccessCode(e.target.value)}
-            />
-            {strength && (
-              <p className={`text-xs ${
-                strength === "weak" ? "text-destructive" :
-                strength === "medium" ? "text-yellow-500" : "text-green-500"
-              }`}>
-                Strength: {strength}
-                {strength === "weak" && " — must be 6+ alphanumeric chars, not purely numeric"}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* OIDC config (only for SSO tier) */}
-        {portalTier === "sso" && (
-          <div className="space-y-3 p-3 border border-border rounded-md">
-            <Label className="text-sm font-medium">OIDC Configuration</Label>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Issuer URL</Label>
-              <Input
-                placeholder="https://accounts.google.com"
-                value={oidcIssuer}
-                onChange={(e) => setOidcIssuer(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Client ID</Label>
-              <Input
-                placeholder="your-client-id"
-                value={oidcClientId}
-                onChange={(e) => setOidcClientId(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Client Secret</Label>
-              <Input
-                type="password"
-                placeholder="Enter new client secret (leave empty to keep existing)"
-                value={oidcClientSecret}
-                onChange={(e) => setOidcClientSecret(e.target.value)}
-              />
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!oidcIssuer || oidcTesting}
-              onClick={async () => {
-                setOidcTesting(true);
-                setOidcTestResult(null);
-                try {
-                  // Save first so the backend has the issuer
-                  const res = await fetch(`${apiUrl}/api/settings/portal/test-oidc`, {
-                    method: "POST",
-                    credentials: "include",
-                  });
-                  const data = await res.json();
-                  setOidcTestResult(data);
-                } catch {
-                  setOidcTestResult({ success: false, error: "Connection failed" });
-                } finally {
-                  setOidcTesting(false);
-                }
-              }}
-            >
-              {oidcTesting ? "Testing..." : "Test Connection"}
-            </Button>
-            {oidcTestResult && (
-              <p className={`text-xs ${oidcTestResult.success ? "text-green-500" : "text-destructive"}`}>
-                {oidcTestResult.success ? "Connection successful" : `Error: ${oidcTestResult.error}`}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Base URL */}
-        <div className="space-y-1.5">
-          <Label>Portal Base URL</Label>
-          <Input
-            placeholder="https://your-server.example.com"
-            value={portalBaseUrl}
-            onChange={(e) => setPortalBaseUrl(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            Required. The external URL where your {brand.name} instance is reachable.
-          </p>
-        </div>
-
-        {/* Shareable URL */}
-        {shareUrl && (
-          <div className="space-y-1.5">
-            <Label>Shareable Link</Label>
-            <div className="flex gap-2">
-              <Input value={shareUrl} readOnly className="font-mono text-sm" />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  navigator.clipboard.writeText(shareUrl);
-                  toast({ title: "Copied to clipboard" });
-                }}
-              >
-                <Copy className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Per-dataset visibility */}
-        {portalDatasets.length > 0 && (
-          <div className="space-y-2">
-            <Label>Dataset Visibility</Label>
-            <div className="space-y-2 p-3 border border-border rounded-md">
-              {portalDatasets.map((ds) => (
-                <div key={ds.id} className="flex items-center justify-between">
-                  <span className="text-sm text-foreground truncate max-w-[250px]">{ds.name}</span>
-                  <Switch
-                    checked={ds.visible}
-                    onCheckedChange={(v) => toggleDatasetVisibility(ds.id, v)}
-                  />
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Only visible datasets can be searched on the portal. Default: none visible.
-            </p>
-          </div>
-        )}
-
-        {/* Active sessions */}
-        {portalEnabled && portalSessionCount > 0 && (
-          <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-            <span className="text-sm text-foreground">
-              {portalSessionCount} active session{portalSessionCount !== 1 ? "s" : ""}
-            </span>
-            <Button variant="outline" size="sm" onClick={revokeAllSessions}>
-              Revoke All
-            </Button>
-          </div>
-        )}
-
-        {/* SSO Access Logs */}
-        {portalTier === "sso" && portalEnabled && (
-          <div className="space-y-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                if (showAccessLogs) {
-                  setShowAccessLogs(false);
-                  return;
-                }
-                try {
-                  const res = await fetch(`${apiUrl}/api/admin/portal/access-logs?limit=50`, {
-                    credentials: "include",
-                  });
-                  if (res.ok) {
-                    const data = await res.json();
-                    setAccessLogs(data.logs || []);
-                  }
-                } catch { /* ignore */ }
-                setShowAccessLogs(true);
-              }}
-            >
-              {showAccessLogs ? "Hide Access Logs" : "View SSO Access Logs"}
-            </Button>
-            {showAccessLogs && accessLogs.length > 0 && (
-              <div className="max-h-48 overflow-y-auto border border-border rounded-md p-2 space-y-1">
-                {accessLogs.map((log, i) => (
-                  <div key={i} className="text-xs text-muted-foreground flex gap-2">
-                    <span>{new Date(log.timestamp).toLocaleString()}</span>
-                    <span className="text-foreground">{log.oidc_email || "unknown"}</span>
-                    <span>{log.action}</span>
-                    {log.detail && <span className="truncate max-w-[200px]">{log.detail}</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-            {showAccessLogs && accessLogs.length === 0 && (
-              <p className="text-xs text-muted-foreground">No access logs yet.</p>
-            )}
-          </div>
-        )}
-
-        {/* Error */}
-        {portalError && (
-          <p className="text-sm text-destructive">{portalError}</p>
-        )}
-
-        {/* Save button */}
-        <Button onClick={savePortalSettings} disabled={portalSaving} className="w-full">
-          {portalSaving ? "Saving..." : "Save Portal Settings"}
-        </Button>
-      </CardContent>
-    </Card>
   );
 };
 

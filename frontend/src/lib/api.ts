@@ -139,23 +139,6 @@ export interface DatasetListResponse {
   count: number;
 }
 
-export interface SearchResult {
-  dataset_id: string;
-  dataset_name: string;
-  score: number;
-  row_index: number;
-  text_content: string;
-  row_data: Record<string, unknown>;
-}
-
-export interface SearchResponse {
-  query: string;
-  results: SearchResult[];
-  total: number;
-  datasets_searched: number;
-  duration_ms: number;
-}
-
 export interface SQLResponse {
   query: string;
   columns: string[];
@@ -342,40 +325,6 @@ export interface PIIEntitiesResponse {
     risk_level: string;
   }[];
   count: number;
-}
-
-export interface VectorHealthResponse {
-  status: string;
-  collections: number;
-  total_vectors: number;
-}
-
-export interface VectorCollectionsResponse {
-  collections: {
-    name: string;
-    vectors_count: number;
-    status: string;
-  }[];
-  count: number;
-}
-
-export interface SearchStatsResponse {
-  total_datasets: number;
-  total_vectors: number;
-  datasets: {
-    dataset_id: string;
-    dataset_name: string;
-    vectors_count: number;
-    status: string;
-  }[];
-}
-
-export interface SearchSuggestResponse {
-  query: string;
-  suggestions: {
-    text: string;
-    score: number;
-  }[];
 }
 
 // BQ-109: Dataset preview types
@@ -638,27 +587,6 @@ export const datasetsApi = {
     }),
 };
 
-// Search API
-export const searchApi = {
-  search: (query: string, options?: { dataset_id?: string; limit?: number; min_score?: number }) => {
-    const params = new URLSearchParams({ q: query });
-    if (options?.dataset_id) params.append('dataset_id', options.dataset_id);
-    if (options?.limit) params.append('limit', options.limit.toString());
-    if (options?.min_score) params.append('min_score', options.min_score.toString());
-    
-    return apiFetch<SearchResponse>(`/api/search?${params}`);
-  },
-  
-  searchDataset: (datasetId: string, query: string, limit = 10) =>
-    apiFetch<SearchResponse>(`/api/search/dataset/${datasetId}?q=${encodeURIComponent(query)}&limit=${limit}`),
-  
-  suggest: (query: string) =>
-    apiFetch<SearchSuggestResponse>(`/api/search/suggest?q=${encodeURIComponent(query)}`),
-  
-  stats: () =>
-    apiFetch<SearchStatsResponse>('/api/search/stats'),
-};
-
 // SQL API
 export const sqlApi = {
   query: (sql: string, options?: { dataset_id?: string; limit?: number; offset?: number }) =>
@@ -718,12 +646,6 @@ export const systemApi = {
 export const healthApi = {
   check: () => apiFetch<HealthResponse>('/api/health'),
   ready: () => apiFetch<ReadyResponse>('/api/health/ready'),
-};
-
-// Vectors API
-export const vectorsApi = {
-  health: () => apiFetch<VectorHealthResponse>('/api/vectors/health'),
-  collections: () => apiFetch<VectorCollectionsResponse>('/api/vectors/collections'),
 };
 
 // Notification types

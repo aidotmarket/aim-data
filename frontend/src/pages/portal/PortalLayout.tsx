@@ -1,7 +1,7 @@
 /**
  * BQ-VZ-SHARED-SEARCH: Portal Layout
  *
- * Minimal layout for the shared search portal.
+ * Minimal layout for the shared portal.
  * No admin nav, no sidebar — just logo + content + footer.
  */
 
@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { useBrand } from "@/contexts/BrandContext";
 import { usePortalAuth } from "@/hooks/usePortalAuth";
-import PortalAllAIChat from "./PortalAllAIChat";
 
 const PortalLayout = () => {
   const { config, ssoUser, logout } = usePortalAuth();
@@ -24,7 +23,7 @@ const PortalLayout = () => {
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-sm">{brand.shortName}</span>
           </div>
-          <h1 className="text-lg font-semibold text-foreground">{brand.productName} Search Portal</h1>
+          <h1 className="text-lg font-semibold text-foreground">{brand.productName} Portal</h1>
           {/* SSO user info */}
           {config?.tier === "sso" && ssoUser && (
             <div className="ml-auto flex items-center gap-3">
@@ -54,9 +53,6 @@ const PortalLayout = () => {
           <span className="font-medium text-foreground">{brand.productName}</span>
         </p>
       </footer>
-
-      {/* allAI Chat (Phase 1.5) */}
-      <PortalAllAIChat />
     </div>
   );
 };

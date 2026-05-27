@@ -1,5 +1,5 @@
 /**
- * ArtifactsPage — View, download, and manage allAI-generated output files.
+ * ArtifactsPage — View, download, and manage generated output files.
  *
  * PHASE: BQ-VZ-ARTIFACTS Phase 1
  * CREATED: 2026-03-06
@@ -18,9 +18,9 @@ const FORMAT_BADGES: Record<string, { label: string; className: string; icon: Re
 };
 
 const SOURCE_LABELS: Record<string, string> = {
-  "allai-copilot": "allAI Copilot",
+  "allai-copilot": "Copilot",
   "allai-query": "SQL Export",
-  "allai-agent": "allAI Agent",
+  "allai-agent": "Agent",
   "manual": "Manual",
 };
 
@@ -134,7 +134,7 @@ export default function ArtifactsPage() {
         <div className="rounded-lg border border-border bg-muted/30 p-12 text-center">
           <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
           <p className="text-muted-foreground text-sm">
-            No artifacts yet. Ask allAI to create an export, extract, or report from your data.
+            No artifacts yet. Exports, extracts, and reports will appear here.
           </p>
         </div>
       ) : (

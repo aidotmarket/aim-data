@@ -12,7 +12,6 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  Zap,
   ShoppingCart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -271,14 +270,6 @@ export default function RawFileDetail() {
     navigate("/ai-market", { state: { createListing: { rawFileId: file.id, title, description, tags } } });
   };
 
-  const handleVectorize = () => {
-    if (!file) return;
-    toast({
-      title: "Coming Soon",
-      description: "Vectorization from raw files is not yet available. Upload the file as a dataset to vectorize it.",
-    });
-  };
-
   if (loading) {
     return (
       <div className="container mx-auto py-6 max-w-4xl space-y-6">
@@ -374,7 +365,7 @@ export default function RawFileDetail() {
             />
           </div>
 
-          {/* Show allAI-extracted technical metadata if present */}
+          {/* Show extracted technical metadata if present */}
           {file.metadata && (file.metadata as Record<string, unknown>).technical_metadata && (
             <div className="pt-2">
               <Label className="text-muted-foreground text-xs">Technical Metadata (auto-extracted)</Label>
@@ -395,25 +386,6 @@ export default function RawFileDetail() {
         {/* Listing Readiness */}
         <ListingReadiness file={file} isConnected={isConnected} />
 
-        {/* Vectorize CTA */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Zap className="w-4 h-4" />
-              Vectorize for AI Queries
-            </CardTitle>
-            <CardDescription>
-              Enable semantic search, RAG, and ai_queryable fulfillment by vectorizing this file.
-              After vectorization, your listing can be upgraded from direct download to AI-queryable.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={handleVectorize} className="w-full">
-              <Zap className="w-4 h-4 mr-2" />
-              Vectorize This File
-            </Button>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Actions */}

@@ -1,18 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   datasetsApi, 
-  searchApi, 
   sqlApi, 
   healthApi,
   type DatasetListResponse,
   type ApiDataset,
-  type SearchResponse, 
   type SQLResponse,
   type SQLTablesResponse,
   type DatasetSampleResponse,
   type DatasetProfileResponse,
   type DatasetStatisticsResponse,
-  type SearchStatsResponse,
   type UploadResponse,
 } from '@/lib/api';
 
@@ -97,41 +94,6 @@ export function useUpload() {
   return { upload, uploading, error, result, reset };
 }
 
-// Search hook
-export function useSearch() {
-  const [results, setResults] = useState<SearchResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const search = async (query: string, options?: { dataset_id?: string; limit?: number }) => {
-    if (!query.trim()) {
-      setResults(null);
-      return;
-    }
-    
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const res = await searchApi.search(query, options);
-      setResults(res);
-      return res;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Search failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const reset = () => {
-    setResults(null);
-    setError(null);
-    setLoading(false);
-  };
-
-  return { search, results, loading, error, reset };
-}
-
 // SQL hook
 export function useSQLQuery() {
   const [results, setResults] = useState<SQLResponse | null>(null);
@@ -173,11 +135,6 @@ export function useSQLQuery() {
 // SQL Tables hook
 export function useSQLTables() {
   return useAsyncState<SQLTablesResponse>(() => sqlApi.tables(), []);
-}
-
-// Search stats hook
-export function useSearchStats() {
-  return useAsyncState<SearchStatsResponse>(() => searchApi.stats(), []);
 }
 
 // Polling hook for dataset status

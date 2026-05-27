@@ -49,8 +49,6 @@ AIM_DATA_BOOTSTRAP_TOKEN=...
 
 Activation is automatic at first boot. The container reads both values, calls home once to register with ai.market, and clears the bootstrap token from memory after a successful activation. After that point you only need your serial.
 
-AIM Data routes the embedded assistant through ai.market, so you do not need your own Anthropic API key. If you have an `ANTHROPIC_API_KEY` line in an older `.env`, it is safe to remove.
-
 And the connection setting that points the install at the marketplace.
 
 ```
@@ -63,7 +61,7 @@ AIM_DATA_AI_MARKET_URL=https://api.ai.market
 docker compose -f docker-compose.aim-data.yml up -d
 ```
 
-Wait about a minute for Postgres and Qdrant to settle. Then check the health endpoint.
+Wait about a minute for Postgres to settle. Then check the health endpoint.
 
 ```
 curl http://localhost:8080/api/health

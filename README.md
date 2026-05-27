@@ -13,11 +13,11 @@ AIM Data is the seller-side toolkit for the ai.market marketplace. Stand up a pr
 
 ## What AIM Data does
 
-AIM Data is the data-seller half of ai.market. It runs on your hardware, indexes the datasets you want to sell, and pushes the metadata buyers need to find them. The actual data stays where it is.
+AIM Data is the data-seller half of ai.market. It runs on your hardware, helps you manage the datasets you want to sell, and pushes the listing metadata buyers need to find them. The actual data stays where it is.
 
 - **Non-custodial by design.** Your files never leave your infrastructure.
-- **S3 STS connectors.** Bring your own bucket. AIM Data assumes a scoped IAM role to scan and index, never receives credentials.
-- **Buyer portal.** Sellers grant access via access codes. Buyers search dataset metadata, request samples, and complete transactions through ai.market.
+- **S3 STS connectors.** Bring your own bucket. AIM Data assumes a scoped IAM role to scan files, never receives credentials.
+- **Buyer portal.** Sellers grant access via access codes. Buyers review shared dataset metadata, request samples, and complete transactions through ai.market.
 - **Raw file listings.** Publish individual files for one-off sales without batch-indexing them first.
 - **Marketplace publish.** Push dataset metadata to ai.market signed with your seller key.
 - **Trust attestation.** Every published listing carries an attestation trail buyers can verify.
@@ -26,13 +26,13 @@ AIM Data is the data-seller half of ai.market. It runs on your hardware, indexes
 
 AIM Data is currently in private beta. If you are a prospective seller, get in touch through [ai.market](https://ai.market) and we will set up your environment.
 
-Once provisioned, your deployment runs as three Docker containers on your infrastructure:
+Once provisioned, your deployment runs as two Docker containers on your infrastructure:
 
 ```
-AIM Data API + UI  —  PostgreSQL  —  Qdrant
+AIM Data API + UI  —  PostgreSQL
 ```
 
-The API serves your seller dashboard and the buyer portal. PostgreSQL stores listing metadata, ACL, and audit logs. Qdrant holds the search vectors for fast buyer-side discovery.
+The API serves your seller dashboard and the buyer portal. PostgreSQL stores listing metadata, ACL, and audit logs.
 
 ## Architecture
 
@@ -41,14 +41,11 @@ The API serves your seller dashboard and the buyer portal. PostgreSQL stores lis
 │             Your Infrastructure         │
 │                                          │
 │  ┌───────────┐  ┌────────────┐         │
-│  │  AIM Data │──│   Qdrant   │         │
-│  │   API     │  │  (vectors) │         │
-│  │  + buyer  │  │            │         │
-│  │   portal  │  └────────────┘         │
-│  │           │  ┌────────────┐         │
-│  │           │──│ PostgreSQL │         │
-│  │           │  │(meta+auth) │         │
-│  └───┬───────┘  └────────────┘         │
+│  │  AIM Data │  │ PostgreSQL │         │
+│  │   API     │──│(meta+auth) │         │
+│  │  + buyer  │  └────────────┘         │
+│  │   portal  │                         │
+│  └───┬───────┘                         │
 │      │                                  │
 │      │ STS-scoped read                  │
 │      ▼                                  │
@@ -72,7 +69,7 @@ The API serves your seller dashboard and the buyer portal. PostgreSQL stores lis
 ```
 app/              FastAPI backend (Python 3.11+)
   routers/        API endpoints including portal, marketplace publish, S3 connections
-  services/       Business logic, indexing, search, listing publishing
+  services/       Business logic, listing management, marketplace publishing
   models/         SQLAlchemy + Pydantic models
   core/           Auth, DB, config, channel switch (always set to aim-data here)
 frontend/         React + Vite + Tailwind + shadcn/ui

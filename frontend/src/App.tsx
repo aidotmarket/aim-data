@@ -9,22 +9,17 @@ import { BrandProvider, useBrand } from "./contexts/BrandContext";
 import { ModeProvider, useMode } from "./contexts/ModeContext";
 import { MarketplaceProvider } from "./contexts/MarketplaceContext";
 import { UploadProvider } from "./contexts/UploadContext";
-import { CoPilotProvider } from "./contexts/CoPilotContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import MainLayout from "./components/layout/MainLayout";
-import ChatPanel from "./components/copilot/ChatPanel";
-import CoPilotFab from "./components/copilot/CoPilotFab";
 import { useChannel } from "./hooks/useChannel";
 import Dashboard from "./pages/Dashboard";
 import Datasets from "./pages/Datasets";
 import DatasetDetail from "./pages/DatasetDetail";
 import EarningsPage from "./pages/EarningsPage";
-import SearchPage from "./pages/SearchPage";
 import SqlQuery from "./pages/SqlQuery";
 import ArtifactsPage from "./pages/ArtifactsPage";
 import DatabasePage from "./pages/DatabasePage";
 import SettingsPage from "./pages/SettingsPage";
-import BillingPage from "./pages/BillingPage";
 import DataTypesPage from "./pages/DataTypesPage";
 import AiMarketPage from "./pages/AiMarketPage";
 import DataRequestsPage from "./pages/DataRequestsPage";
@@ -38,7 +33,6 @@ import NotFound from "./pages/NotFound";
 import PortalLayout from "./pages/portal/PortalLayout";
 import PortalGate from "./pages/portal/PortalGate";
 import PortalAuth from "./pages/portal/PortalAuth";
-import PortalSearch from "./pages/portal/PortalSearch";
 import PortalDatasets from "./pages/portal/PortalDatasets";
 
 const queryClient = new QueryClient();
@@ -113,7 +107,6 @@ const App = () => (
           <BrowserRouter>
             <AuthProvider>
               <ModeProvider>
-                <CoPilotProvider>
                   <Toaster />
                   <Sonner />
                   <Routes>
@@ -125,7 +118,7 @@ const App = () => (
                   <Route path="/portal" element={<PortalLayout />}>
                     <Route path="auth" element={<PortalAuth />} />
                     <Route element={<PortalGate />}>
-                      <Route index element={<PortalSearch />} />
+                      <Route index element={<PortalDatasets />} />
                       <Route path="datasets" element={<PortalDatasets />} />
                     </Route>
                   </Route>
@@ -136,8 +129,6 @@ const App = () => (
                       <RequireAuth>
                         <MarketplaceProvider>
                           <UploadProvider>
-                            <ChatPanel />
-                            <CoPilotFab />
                             <MainLayout />
                           </UploadProvider>
                         </MarketplaceProvider>
@@ -149,12 +140,10 @@ const App = () => (
                     <Route path="/datasets/:id" element={<DatasetDetail />} />
                     <Route path="/raw-files/:id" element={<RawFileDetail />} />
                     <Route path="/earnings" element={<EarningsPage />} />
-                    <Route path="/search" element={<SearchPage />} />
                     <Route path="/sql" element={<SqlQuery />} />
                     <Route path="/artifacts" element={<ArtifactsPage />} />
                     <Route path="/databases" element={<DatabasePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="/billing" element={<BillingPage />} />
                     <Route path="/data-types" element={<DataTypesPage />} />
                     <Route path="/ai-market" element={<AiMarketPage />} />
                     <Route path="/data-requests" element={<DataRequestsPage />} />
@@ -165,7 +154,6 @@ const App = () => (
 
                   <Route path="*" element={<NotFound />} />
                   </Routes>
-                </CoPilotProvider>
               </ModeProvider>
             </AuthProvider>
           </BrowserRouter>

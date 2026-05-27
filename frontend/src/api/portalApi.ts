@@ -81,25 +81,6 @@ export interface PortalDataset {
   searchable_columns: string[];
 }
 
-export interface PortalSearchResultItem {
-  score: number;
-  row_data: Record<string, unknown>;
-  text_content: string;
-}
-
-export interface PortalSearchResponse {
-  dataset_id: string;
-  dataset_name: string;
-  total_count: number;
-  results: PortalSearchResultItem[];
-  query: string;
-}
-
-export interface PortalChatEvent {
-  type: "chunk" | "done" | "error";
-  text: string;
-}
-
 export interface PortalSSOUserInfo {
   email: string | null;
   name: string | null;
@@ -145,72 +126,4 @@ export const portalApi = {
   /** List portal-visible datasets */
   getDatasets: () =>
     portalFetch<{ datasets: PortalDataset[] }>("/api/portal/datasets"),
-
-  /** Search a dataset */
-  search: (datasetId: string, query: string, limit = 20) =>
-    portalFetch<PortalSearchResponse>("/api/portal/search", {
-      method: "POST",
-      body: JSON.stringify({ dataset_id: datasetId, query, limit }),
-    }),
-
-  /** Search single dataset (GET) */
-  searchDataset: (datasetId: string, query: string, limit = 20) =>
-    portalFetch<PortalSearchResponse>(
-      `/api/portal/search/${datasetId}?q=${encodeURIComponent(query)}&limit=${limit}`
-    ),
-
-  /** Stream allAI chat (SSE) */
-  chatStream: async function* (
-    messages: Array<{ role: "user" | "assistant"; content: string }>
-  ): AsyncGenerator<PortalChatEvent> {
-    const url = `${getApiUrl()}/api/portal/allai/chat`;
-    const token = getPortalToken();
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ messages }),
-      credentials: "omit",
-    });
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ detail: response.statusText }));
-      const error = new Error(body.detail || `Chat error: ${response.status}`);
-      (error as any).status = response.status;
-      throw error;
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) return;
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            const event: PortalChatEvent = JSON.parse(line.slice(6));
-            yield event;
-          } catch {
-            // Skip malformed SSE lines
-          }
-        }
-      }
-    }
-  },
 };

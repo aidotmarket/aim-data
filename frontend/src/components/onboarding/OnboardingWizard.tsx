@@ -14,9 +14,7 @@ import {
   ChevronRight,
   Database,
   Globe,
-  Layers,
   Rocket,
-  Search,
   ShoppingBag,
   Upload,
   Zap,
@@ -69,20 +67,20 @@ function getDirectSteps(brand: BrandConfig): StepDef[] {
     features: ["Drag-and-drop upload", "CSV, JSON, Parquet support", "Local-only processing"],
   },
   {
-    title: "Vectorize & Index",
-    subtitle: "Choose embedding model",
+    title: "Prepare metadata",
+    subtitle: "Review the details",
     description:
-      "Transform your data into searchable vectors. Pick an embedding model that fits your use case.",
-    icon: <Layers className={ICON_CLASS} />,
-    features: ["Multiple embedding models", "Automatic indexing", "BYO API key"],
+      "Review columns, descriptions, privacy checks, and the details buyers need before you publish.",
+    icon: <Database className={ICON_CLASS} />,
+    features: ["Metadata review", "Privacy checks", "Local-only processing"],
   },
   {
-    title: "Query your data",
-    subtitle: "Try a RAG query",
+    title: "Work with your data",
+    subtitle: "Use SQL when you need it",
     description:
-      "Search with natural language. Combine vector search with SQL for powerful data exploration.",
-    icon: <Search className={ICON_CLASS} />,
-    features: ["Natural language search", "SQL queries", "RAG with your LLM"],
+      "Inspect datasets, run SQL queries, and package the assets you want to list on ai.market.",
+    icon: <Zap className={ICON_CLASS} />,
+    features: ["Dataset preview", "SQL queries", "ai.market publishing"],
   },
   {
     title: "Ready!",
@@ -90,7 +88,7 @@ function getDirectSteps(brand: BrandConfig): StepDef[] {
     description:
       `Explore your data, run queries, and build insights in ${brand.name}. You can also list datasets on ai.market when you're ready.`,
     icon: <Rocket className={ICON_CLASS} />,
-    features: ["Full-text & vector search", "Dashboard analytics", "ai.market publishing"],
+    features: ["Dashboard analytics", "Listing management", "ai.market publishing"],
   },
 ];
 }
