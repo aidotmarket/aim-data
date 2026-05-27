@@ -88,9 +88,9 @@ jobs:
         run: |
           TAG="${{ needs.build-push.outputs.version }}"
           docker pull "ghcr.io/aidotmarket/aim-data:${TAG}"
-          CID=$(docker run -d -p 8080:8080 "ghcr.io/aidotmarket/aim-data:${TAG}")
+          CID=$(docker run -d -p 8080:80 "ghcr.io/aidotmarket/aim-data:${TAG}")
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8080/health >/dev/null 2>&1; then
+            if curl -fsS http://localhost:8080/api/health >/dev/null 2>&1; then
               echo "Health check passed"
               docker rm -f "$CID"
               exit 0
