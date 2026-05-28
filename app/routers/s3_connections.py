@@ -72,7 +72,7 @@ def _trust_policy(connection: S3Connection) -> Dict[str, Any]:
             {
                 "Effect": "Allow",
                 "Principal": {
-                    "AWS": f"arn:aws:iam::{settings.ai_market_aws_account_id}:root",
+                    "AWS": f"arn:aws:iam::{settings.ai_market_aws_account_id}:user/ai-market-backend-sts",
                 },
                 "Action": "sts:AssumeRole",
                 "Condition": {
