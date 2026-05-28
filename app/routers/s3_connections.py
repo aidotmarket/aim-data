@@ -17,6 +17,8 @@ from sqlmodel import select
 from app.config import settings
 from app.core.database import get_session_context
 from app.models.s3_connection import S3Connection
+from app.models.s3_scan_job import S3ScanJob
+from app.models.s3_object_metadata import S3ObjectMetadata
 
 router = APIRouter()
 
@@ -245,6 +247,115 @@ async def verify_connection(connection_id: str) -> S3VerifyResponse:
         session.add(connection)
         session.commit()
         return S3VerifyResponse(status=connection.status, verified_at=verified_at.isoformat())
+
+
+@router.post("/{connection_id}/scan", summary="Scan the S3 bucket and record objects")
+async def scan_connection(connection_id: str) -> Dict[str, Any]:
+    """Assume the connection role and enumerate bucket objects into S3ObjectMetadata.
+
+    Reuses the exact STS assume-role + s3 client path proven by verify_connection.
+    A fresh scan clears prior object metadata for this connection so the seller
+    always sees the current bucket contents.
+    """
+    import mimetypes
+
+    with get_session_context() as session:
+        connection = session.get(S3Connection, connection_id)
+        if not connection:
+            raise HTTPException(status_code=404, detail="S3 connection not found")
+        if not connection.role_arn:
+            raise HTTPException(status_code=400, detail="S3 connection role ARN is not configured")
+
+        # Clear prior object metadata for a clean re-scan (history of scan jobs is kept).
+        for old in session.exec(
+            select(S3ObjectMetadata).where(S3ObjectMetadata.connection_id == connection_id)
+        ).all():
+            session.delete(old)
+        session.commit()
+
+        scan_job = S3ScanJob(id=str(uuid.uuid4()), connection_id=connection.id, status="running")
+        session.add(scan_job)
+        session.commit()
+        session.refresh(scan_job)
+
+        try:
+            sts_client = _boto3_client("sts", region_name=connection.region)
+            assumed = sts_client.assume_role(
+                RoleArn=connection.role_arn,
+                RoleSessionName="aim-data-scan",
+                ExternalId=connection.external_id,
+            )
+            creds = assumed["Credentials"]
+            s3_client = _boto3_client(
+                "s3",
+                region_name=connection.region,
+                aws_access_key_id=creds["AccessKeyId"],
+                aws_secret_access_key=creds["SecretAccessKey"],
+                aws_session_token=creds["SessionToken"],
+            )
+            paginator = s3_client.get_paginator("list_objects_v2")
+            count = 0
+            for page in paginator.paginate(Bucket=connection.bucket, Prefix=connection.prefix or ""):
+                for obj in page.get("Contents", []):
+                    key = obj["Key"]
+                    if key.endswith("/"):
+                        continue  # skip folder placeholder keys
+                    ctype = mimetypes.guess_type(key)[0] or "application/octet-stream"
+                    session.add(S3ObjectMetadata(
+                        id=str(uuid.uuid4()),
+                        connection_id=connection.id,
+                        scan_job_id=scan_job.id,
+                        object_key=key,
+                        size_bytes=int(obj.get("Size", 0)),
+                        content_type=ctype[:128],
+                        last_modified=obj.get("LastModified") or datetime.now(timezone.utc),
+                        etag=str(obj.get("ETag", "")).strip('"')[:128],
+                    ))
+                    count += 1
+        except Exception as exc:  # noqa: BLE001
+            now = datetime.now(timezone.utc)
+            scan_job.status = "error"
+            scan_job.error_message = str(exc)
+            scan_job.completed_at = now
+            scan_job.updated_at = now
+            session.add(scan_job)
+            session.commit()
+            raise HTTPException(status_code=502, detail=f"Scan failed: {exc}")
+
+        now = datetime.now(timezone.utc)
+        scan_job.status = "completed"
+        scan_job.completed_at = now
+        scan_job.objects_enumerated = count
+        scan_job.updated_at = now
+        connection.last_scanned_at = now
+        connection.updated_at = now
+        session.add(scan_job)
+        session.add(connection)
+        session.commit()
+        return {"scan_job_id": scan_job.id, "status": "completed", "objects_enumerated": count}
+
+
+@router.get("/{connection_id}/objects", summary="List scanned S3 objects")
+async def list_connection_objects(connection_id: str) -> List[Dict[str, Any]]:
+    with get_session_context() as session:
+        connection = session.get(S3Connection, connection_id)
+        if not connection:
+            raise HTTPException(status_code=404, detail="S3 connection not found")
+        rows = session.exec(
+            select(S3ObjectMetadata).where(S3ObjectMetadata.connection_id == connection_id)
+        ).all()
+        return [
+            {
+                "id": r.id,
+                "object_key": r.object_key,
+                "size_bytes": r.size_bytes,
+                "content_type": r.content_type,
+                "etag": r.etag,
+                "dataset_id": r.dataset_id,
+                "scan_job_id": r.scan_job_id,
+            }
+            for r in rows
+        ]
 
 
 @router.delete("/{connection_id}", status_code=204, summary="Delete S3 connection")
