@@ -54,6 +54,7 @@ class PublishObjectRequest(BaseModel):
     title: Optional[str] = Field(default=None, max_length=200)
     description: Optional[str] = Field(default=None, max_length=5000)
     price_cents: Optional[int] = Field(default=None, ge=0)
+    pricing_type: Optional[str] = "one_time"
     tags: Optional[list[str]] = None
 
 
@@ -159,7 +160,7 @@ async def claim_install(body: ClaimRequest):
 
     # 7. Persist seller identity locally (no password stored)
     store = get_serial_store()
-    store.update_status_cache({"gateway_user_id": seller_id}, datetime.now(timezone.utc).isoformat())
+    store.update_status_cache({"gateway_user_id": seller_id, "install_id": reg_data.get("install_id")}, datetime.now(timezone.utc).isoformat())
     if reg_data.get("install_token"):
         store.transition_to_active(reg_data["install_token"])
     store.save()
@@ -202,6 +203,7 @@ async def publish_object(body: PublishObjectRequest):
         "description": (body.description or f"{fname} — data file delivered from S3 bucket {bucket} via AIM Data.")[:5000],
         "tags": body.tags or [],
         "price_cents": body.price_cents if body.price_cents is not None else 2500,
+        "pricing_type": body.pricing_type or "one_time",
         "file_format": fmt,
         "file_size_bytes": size_bytes,
         "compliance_status": "not_checked",
@@ -210,11 +212,13 @@ async def publish_object(body: PublishObjectRequest):
     }
     payload = {k: v for k, v in payload.items() if v is not None}
 
+    install_id = cache.get("install_id")
+    if not install_id:
+        raise HTTPException(status_code=409, detail="Install id missing — re-run /api/seller/claim.")
     crypto = _get_crypto()
     ed_priv, _ed_pub, _x_priv, _x_pub = crypto.get_or_create_keypairs()
-    device_id = _get_device_id()
     metadata_hash = _jcs_hash(payload)
-    token = _build_jwt(seller_id, device_id, metadata_hash, ed_priv)
+    token = _build_jwt(seller_id, install_id, metadata_hash, ed_priv)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
