@@ -43,6 +43,9 @@ router = APIRouter(prefix="/api/seller", tags=["seller"])
 class ClaimRequest(BaseModel):
     email: str
     password: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    company_name: Optional[str] = None
 
 
 class PublishObjectRequest(BaseModel):
@@ -72,66 +75,102 @@ async def seller_status():
     }
 
 
-@router.post("/claim")
-async def claim_install(body: ClaimRequest):
-    """One-time: claim this install under the seller's ai.market account."""
-    # 1. Sign in to ai.market
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        r = await client.post(
-            f"{_market()}/api/v1/auth/login",
-            json={"email": body.email, "password": body.password},
-        )
+async def _login(client, email, password):
+    r = await client.post(f"{_market()}/api/v1/auth/login", json={"email": email, "password": password})
     if r.status_code == 401:
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if r.status_code != 200:
         raise HTTPException(status_code=r.status_code, detail=f"ai.market login failed: {r.text[:300]}")
-    data = r.json()
-    token = data.get("access_token")
-    if not token:
+    tok = r.json().get("access_token")
+    if not tok:
         raise HTTPException(status_code=501, detail="2FA accounts not supported for claim; disable 2FA on this account.")
+    return tok
 
-    # 2. Resolve seller id
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        me = await client.get(
-            f"{_market()}/api/v1/auth/me",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-    if me.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Could not read account: {me.text[:200]}")
-    me_data = me.json()
-    seller_id = me_data.get("id") or me_data.get("user_id")
-    if not seller_id:
-        raise HTTPException(status_code=502, detail="ai.market /me did not return a user id")
 
-    # 3. Device Ed25519 public key
-    crypto = _get_crypto()
-    crypto.get_or_create_keypairs()
-    ed_pub_b64, _x_pub_b64 = crypto.get_public_keys_b64()
+async def _complete_seller_onboarding(client, token, first_name, last_name, company_name):
+    """Walk the ai.market seller onboarding to completion. Returns list of steps performed."""
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    performed = []
+    for _ in range(8):
+        st = await client.get(f"{_market()}/api/v1/auth/onboarding/status", headers=headers)
+        if st.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"onboarding status failed: {st.text[:200]}")
+        sd = st.json()
+        if sd.get("completed"):
+            return performed
+        step = sd.get("current_step")
+        if not step:
+            return performed
+        body = {"step": step}
+        if step == "profile":
+            body["first_name"] = first_name
+            body["last_name"] = last_name
+        elif step == "role_selection":
+            body["role"] = "seller"
+        elif step == "company_info":
+            body["company_name"] = company_name
+        r = await client.patch(f"{_market()}/api/v1/auth/onboarding/step", headers=headers, json=body)
+        if r.status_code not in (200, 201):
+            raise HTTPException(status_code=r.status_code, detail=f"onboarding step '{step}' failed: {r.text[:200]}")
+        performed.append(step)
+    return performed
 
-    # 4. Register this install under the seller
-    async with httpx.AsyncClient(timeout=15.0) as client:
+
+@router.post("/claim")
+async def claim_install(body: ClaimRequest):
+    """One-time: complete seller onboarding (if needed) and claim this install under the account."""
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        # 1. Sign in
+        token = await _login(client, body.email, body.password)
+
+        # 2. Resolve account
+        me = await client.get(f"{_market()}/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        if me.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Could not read account: {me.text[:200]}")
+        me_data = me.json()
+        seller_id = me_data.get("id") or me_data.get("user_id")
+        if not seller_id:
+            raise HTTPException(status_code=502, detail="ai.market /me did not return a user id")
+
+        # 3. Complete seller onboarding if needed (name -> role=seller -> company -> complete)
+        fn = body.first_name or me_data.get("first_name") or "Max"
+        ln = body.last_name or me_data.get("last_name") or "Robbins"
+        co = body.company_name or "Kisa"
+        onboarding_steps = await _complete_seller_onboarding(client, token, fn, ln, co)
+
+        # 4. Re-login so the token carries the (possibly new) seller role
+        if onboarding_steps:
+            token = await _login(client, body.email, body.password)
+
+        # 5. Device Ed25519 public key
+        crypto = _get_crypto()
+        crypto.get_or_create_keypairs()
+        ed_pub_b64, _x_pub_b64 = crypto.get_public_keys_b64()
+
+        # 6. Register this install under the seller
         reg = await client.post(
             f"{_market()}/api/v1/vz/register",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json={"public_key_b64": ed_pub_b64},
         )
-    if reg.status_code not in (200, 201):
-        raise HTTPException(status_code=reg.status_code, detail=f"vz/register failed: {reg.text[:300]}")
-    reg_data = reg.json()
+        if reg.status_code not in (200, 201):
+            raise HTTPException(status_code=reg.status_code, detail=f"vz/register failed: {reg.text[:300]}")
+        reg_data = reg.json()
 
-    # 5. Persist seller identity locally (no password stored)
+    # 7. Persist seller identity locally (no password stored)
     store = get_serial_store()
     store.update_status_cache({"gateway_user_id": seller_id}, datetime.now(timezone.utc).isoformat())
     if reg_data.get("install_token"):
         store.transition_to_active(reg_data["install_token"])
     store.save()
 
-    logger.info("Seller claim complete: seller_id=%s install_id=%s", seller_id, reg_data.get("install_id"))
+    logger.info("Seller claim complete: seller_id=%s install_id=%s onboarding=%s",
+                seller_id, reg_data.get("install_id"), onboarding_steps)
     return {
         "claimed": True,
         "seller_id": seller_id,
         "install_id": reg_data.get("install_id"),
-        "ed25519_public_key_b64": ed_pub_b64,
+        "onboarding_completed_steps": onboarding_steps,
     }
 
 
