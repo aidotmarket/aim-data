@@ -16,7 +16,7 @@ faulthandler.enable(file=sys.stderr, all_threads=True)
 from app.config import settings
 
 # BQ-127: Stock routers — always imported regardless of mode
-from app.routers import health, datasets, search, sql, vectors, pii, docs, diagnostics, imports, s3_connections
+from app.routers import health, datasets, sql, pii, docs, diagnostics, imports, s3_connections
 from app.routers import auth as auth_router_module
 from app.core.database import init_db, close_db
 from app.core.structured_logging import setup_logging
@@ -117,20 +117,8 @@ TAGS_METADATA = [
         "description": "Dataset upload, processing, and management. Supports CSV, JSON, Parquet, PDF, Word, Excel, and PowerPoint files. **Requires API Key.**",
     },
     {
-        "name": "search",
-        "description": "Semantic search using natural language queries. Powered by sentence-transformers embeddings and Qdrant vector database. This is a read-only, public endpoint.",
-    },
-    {
-        "name": "allai",
-        "description": "RAG (Retrieval-Augmented Generation) powered Q&A. Ask questions and get AI-generated answers grounded in your indexed datasets. **Requires API Key for generation.**",
-    },
-    {
         "name": "sql",
         "description": "SQL query interface for power users. Execute SELECT queries directly against your processed datasets. **Requires API Key.**",
-    },
-    {
-        "name": "vectors",
-        "description": "Vector database management. Create, inspect, and delete Qdrant collections. **Requires API Key.**",
     },
     {
         "name": "pii",
@@ -368,14 +356,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("Failed to re-queue uploaded records: %s", e)
 
-    # Preload embedding model to avoid MemoryError during first indexing
-    from app.services.embedding_service import get_embedding_service
-    try:
-        _emb_info = await asyncio.to_thread(get_embedding_service().preload)
-        logger.info("Embedding model preloaded: %s", _emb_info)
-    except Exception as e:
-        logger.error("Embedding model preload failed (will retry on first use): %s", e)
-
     logger.info("API ready — all background tasks launched")
 
     yield
@@ -557,9 +537,6 @@ def create_app() -> FastAPI:
     # PUBLIC — Portal (BQ-VZ-SHARED-SEARCH) — own trust zone, own auth (M2)
     from app.routers.portal import router as portal_router, admin_router as portal_admin_router
     app.include_router(portal_router, prefix="/api/portal", tags=["portal"])
-    # PUBLIC — Portal allAI Chat (Phase 1.5) — portal auth, read-only tools
-    from app.routers.portal_allai import router as portal_allai_router
-    app.include_router(portal_allai_router, prefix="/api/portal/allai", tags=["portal-allai"])
     # ADMIN ONLY — Portal management
     app.include_router(
         portal_admin_router,
@@ -572,12 +549,6 @@ def create_app() -> FastAPI:
         prefix="/api/auth",
         tags=["auth"],
     )
-    app.include_router(
-        search.router,
-        prefix="/api/search",
-        tags=["search"],
-    )
-
     # ADMIN + USER — datasets (GET = any, POST/PUT/DELETE = admin enforced per-endpoint)
     app.include_router(
         datasets.router,
@@ -594,13 +565,7 @@ def create_app() -> FastAPI:
         dependencies=admin_route_dependency,
     )
 
-    # ADMIN ONLY — vectors, sql, pii
-    app.include_router(
-        vectors.router,
-        prefix="/api/vectors",
-        tags=["vectors"],
-        dependencies=admin_route_dependency,
-    )
+    # ADMIN ONLY — sql, pii
     app.include_router(
         sql.router,
         prefix="/api/sql",
@@ -647,29 +612,6 @@ def create_app() -> FastAPI:
     )
     app.include_router(copilot_ws_router)  # WebSocket at /ws/copilot (no prefix, own auth)
 
-    # ADMIN + USER — allAI features
-    if settings.allai_enabled:
-        from app.routers import allai
-
-        app.include_router(
-            allai.router,
-            prefix="/api/allai",
-            tags=["allai"],
-            dependencies=any_user_dependency,
-        )
-        logger.info("allAI router mounted (allai_enabled=True)")
-
-    # ADMIN + USER — allAI credits (balance + purchase)
-    if settings.allai_enabled:
-        from app.routers import allai_credits
-
-        app.include_router(
-            allai_credits.router,
-            prefix="/api/allai",
-            tags=["allai"],
-            dependencies=any_user_dependency,
-        )
-
     # CONNECTED MODE — billing/marketplace
     if settings.mode == "connected":
         from app.routers import billing, integrations, webhooks
@@ -692,7 +634,7 @@ def create_app() -> FastAPI:
             dependencies=admin_route_dependency,
         )
         logger.info("Connected mode: premium routers mounted (billing, integrations, webhooks)")
-    elif not settings.allai_enabled:
+    else:
         logger.info("Standalone mode: premium routers NOT mounted")
 
     # PUBLIC — website chat widget (no auth)
