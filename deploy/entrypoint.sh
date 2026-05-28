@@ -75,6 +75,9 @@ fi
 echo "[INFO] Running database migrations..."
 cd /app && python -m alembic upgrade head
 echo "[INFO] Migrations complete"
+# S723: entrypoint already migrated; tell the app to skip its redundant in-app
+# Alembic pass, which otherwise deadlocks the async startup lifespan.
+export AIM_SKIP_STARTUP_MIGRATION=1
 
 # Co-Pilot requires single-worker mode (file lock enforced).
 # Multi-worker support would require switching Co-Pilot to Redis pub/sub.
