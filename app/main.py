@@ -17,6 +17,7 @@ from app.config import settings
 
 # BQ-127: Stock routers — always imported regardless of mode
 from app.routers import health, datasets, sql, pii, docs, diagnostics, imports, s3_connections
+from app.routers import seller_publish
 from app.routers import auth as auth_router_module
 from app.core.database import init_db, close_db
 from app.core.structured_logging import setup_logging
@@ -610,6 +611,7 @@ def create_app() -> FastAPI:
         tags=["copilot"],
         dependencies=any_user_dependency,
     )
+    app.include_router(seller_publish.router)
     app.include_router(copilot_ws_router)  # WebSocket at /ws/copilot (no prefix, own auth)
 
     # CONNECTED MODE — billing/marketplace
