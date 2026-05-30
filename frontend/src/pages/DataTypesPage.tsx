@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
 
 interface FormatCard {
   name: string;
@@ -146,12 +145,12 @@ const DataTypesPage = () => {
           </div>
 
           <div className="flex items-center gap-4 pt-2">
-            <Link to="/ai-market">
+            <a href="https://ai.market" target="_blank" rel="noopener noreferrer">
               <Button className="gap-2">
                 Upgrade via ai.market
                 <span aria-hidden="true">&rarr;</span>
               </Button>
-            </Link>
+            </a>
             <span className="text-xs text-muted-foreground">Powered by Unstructured.io</span>
           </div>
         </CardContent>

@@ -11,7 +11,6 @@ import {
   Globe,
   FileStack,
   FileOutput,
-  Store,
   HandHelping,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,7 +32,6 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { path: "/sql", label: "SQL Query", icon: Code },
   { path: "/databases", label: "Databases", icon: Database },
   { path: "/settings", label: "Settings", icon: Settings },
-  { path: "/ai-market", label: "ai.market", icon: Store },
   { path: "/data-requests", label: "I Need Data", icon: HandHelping },
   { path: "/earnings", label: "Earnings", icon: DollarSign, feature: "marketplace" },
 ];
@@ -41,18 +39,18 @@ const ALL_NAV_ITEMS: NavItem[] = [
 // direct channel: data-focused items first, marketplace items at bottom
 const NAV_ORDER_DIRECT = [
   "/", "/datasets", "/sql", "/databases", "/settings",
-  "/ai-market", "/data-requests", "/earnings",
+  "/data-requests", "/earnings",
 ];
 
 // marketplace channel: marketplace items promoted to top, then data items
 const NAV_ORDER_MARKETPLACE = [
-  "/ai-market", "/data-requests", "/",
+  "/data-requests", "/",
   "/datasets", "/sql", "/databases",
   "/earnings", "/settings",
 ];
 
 const NAV_ORDER_AIM_DATA = [
-  "/", "/datasets", "/ai-market", "/data-requests",
+  "/", "/datasets", "/data-requests",
   "/sql", "/databases",
   "/earnings", "/settings",
 ];
@@ -133,7 +131,7 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
           <img
             src={brand.logoPath}
             alt={brand.sidebarLogoAlt}
-            className="w-8 h-8 rounded-lg object-cover"
+            className={cn("h-8 object-contain", collapsed ? "w-8" : "w-24")}
           />
           {!collapsed && (
             <span className="text-foreground font-semibold text-lg tracking-tight">{brand.name}</span>

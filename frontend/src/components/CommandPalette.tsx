@@ -10,7 +10,6 @@ import {
   FileSpreadsheet,
   Loader2,
   FileOutput,
-  Store,
   HandHelping,
   FileStack,
 } from "lucide-react";
@@ -38,7 +37,6 @@ const pages = [
   { name: "Artifacts", path: "/artifacts", icon: FileOutput },
   { name: "Databases", path: "/databases", icon: Database },
   { name: "Settings", path: "/settings", icon: Settings },
-  { name: "ai.market", path: "/ai-market", icon: Store },
   { name: "I Need Data", path: "/data-requests", icon: HandHelping },
   { name: "Earnings", path: "/earnings", icon: DollarSign },
   { name: "Data Types", path: "/data-types", icon: FileStack },

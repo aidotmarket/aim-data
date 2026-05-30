@@ -11,7 +11,6 @@ import { MarketplaceProvider } from "./contexts/MarketplaceContext";
 import { UploadProvider } from "./contexts/UploadContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import MainLayout from "./components/layout/MainLayout";
-import { useChannel } from "./hooks/useChannel";
 import Dashboard from "./pages/Dashboard";
 import Datasets from "./pages/Datasets";
 import DatasetDetail from "./pages/DatasetDetail";
@@ -21,7 +20,6 @@ import ArtifactsPage from "./pages/ArtifactsPage";
 import DatabasePage from "./pages/DatabasePage";
 import SettingsPage from "./pages/SettingsPage";
 import DataTypesPage from "./pages/DataTypesPage";
-import AiMarketPage from "./pages/AiMarketPage";
 import DataRequestsPage from "./pages/DataRequestsPage";
 import CreateDataRequestPage from "./pages/CreateDataRequestPage";
 import DataRequestDetailPage from "./pages/DataRequestDetailPage";
@@ -91,11 +89,9 @@ const RequireFeature = ({ feature, children }: { feature: "marketplace" | "allai
   return <>{children}</>;
 };
 
-/** Channel-aware landing page: marketplace → /ai-market, aim-data/direct → /datasets */
+/** Landing page: all channels → /datasets */
 const ChannelLanding = () => {
-  const channel = useChannel();
-  const target = channel === "marketplace" ? "/ai-market" : "/datasets";
-  return <Navigate to={target} replace />;
+  return <Navigate to="/datasets" replace />;
 };
 
 const App = () => (
@@ -143,7 +139,6 @@ const App = () => (
                     <Route path="/sql" element={<SqlQuery />} />
                     <Route path="/databases" element={<DatabasePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="/ai-market" element={<AiMarketPage />} />
                     <Route path="/data-requests" element={<DataRequestsPage />} />
                     <Route path="/data-requests/new" element={<CreateDataRequestPage />} />
                     <Route path="/data-requests/:slug" element={<DataRequestDetailPage />} />
