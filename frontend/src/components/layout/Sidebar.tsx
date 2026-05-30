@@ -31,32 +31,30 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/datasets", label: "Datasets", icon: Database },
   { path: "/sql", label: "SQL Query", icon: Code },
-  { path: "/artifacts", label: "Artifacts", icon: FileOutput },
   { path: "/databases", label: "Databases", icon: Database },
   { path: "/settings", label: "Settings", icon: Settings },
   { path: "/ai-market", label: "ai.market", icon: Store },
   { path: "/data-requests", label: "I Need Data", icon: HandHelping },
   { path: "/earnings", label: "Earnings", icon: DollarSign, feature: "marketplace" },
-  { path: "/data-types", label: "Data Types", icon: FileStack },
 ];
 
 // direct channel: data-focused items first, marketplace items at bottom
 const NAV_ORDER_DIRECT = [
-  "/", "/datasets", "/sql", "/artifacts", "/databases", "/settings",
-  "/ai-market", "/data-requests", "/earnings", "/data-types",
+  "/", "/datasets", "/sql", "/databases", "/settings",
+  "/ai-market", "/data-requests", "/earnings",
 ];
 
 // marketplace channel: marketplace items promoted to top, then data items
 const NAV_ORDER_MARKETPLACE = [
   "/ai-market", "/data-requests", "/",
-  "/datasets", "/sql", "/artifacts", "/databases",
-  "/earnings", "/data-types", "/settings",
+  "/datasets", "/sql", "/databases",
+  "/earnings", "/settings",
 ];
 
 const NAV_ORDER_AIM_DATA = [
   "/", "/datasets", "/ai-market", "/data-requests",
-  "/sql", "/artifacts", "/databases",
-  "/earnings", "/data-types", "/settings",
+  "/sql", "/databases",
+  "/earnings", "/settings",
 ];
 
 // Separator index: items after this index go in the bottom section
@@ -168,21 +166,12 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
               collapsed ? "justify-center" : ""
             )}
           >
-            {isStandalone ? (
-              <>
-                <Monitor className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                {!collapsed && (
-                  <span className="text-xs text-muted-foreground">Standalone Mode</span>
-                )}
-              </>
-            ) : (
-              <>
-                <Globe className="w-4 h-4 text-primary flex-shrink-0" />
-                {!collapsed && (
-                  <span className="text-xs text-primary">Connected to ai.market</span>
-                )}
-              </>
-            )}
+            <>
+              <Globe className="w-4 h-4 text-primary flex-shrink-0" />
+              {!collapsed && (
+                <span className="text-xs text-primary">Connected to ai.market</span>
+              )}
+            </>
           </div>
           <button
             onClick={onToggle}

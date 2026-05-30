@@ -141,10 +141,8 @@ const App = () => (
                     <Route path="/raw-files/:id" element={<RawFileDetail />} />
                     <Route path="/earnings" element={<EarningsPage />} />
                     <Route path="/sql" element={<SqlQuery />} />
-                    <Route path="/artifacts" element={<ArtifactsPage />} />
                     <Route path="/databases" element={<DatabasePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="/data-types" element={<DataTypesPage />} />
                     <Route path="/ai-market" element={<AiMarketPage />} />
                     <Route path="/data-requests" element={<DataRequestsPage />} />
                     <Route path="/data-requests/new" element={<CreateDataRequestPage />} />
