@@ -27,7 +27,6 @@ const pageTitles: Record<string, string> = {
   "/sql": "SQL Query",
   "/settings": "Settings",
   "/data-types": "Data Types",
-  "/ai-market": "ai.market",
 };
 
 interface TopBarProps {

@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useMode } from "@/contexts/ModeContext";
 import {
+  DataRequestsApiError,
   fetchDataRequests,
   type DataRequest,
   type Urgency,
@@ -80,6 +81,10 @@ const DataRequestsPage = () => {
         const res = await fetchDataRequests(params);
         setRequests(res.items || []);
       } catch (e: unknown) {
+        if (e instanceof DataRequestsApiError && e.status === 404) {
+          setRequests([]);
+          return;
+        }
         setError(e instanceof Error ? e.message : "Failed to load data requests");
       } finally {
         setLoading(false);

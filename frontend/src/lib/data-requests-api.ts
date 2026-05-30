@@ -32,7 +32,18 @@ export interface DataRequestListResponse {
   items: DataRequest[];
   total: number;
   page: number;
-  page_size: number;
+  page_size?: number;
+  per_page?: number;
+}
+
+export class DataRequestsApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "DataRequestsApiError";
+    this.status = status;
+  }
 }
 
 export interface DataRequestCreate {
@@ -107,7 +118,7 @@ async function marketFetch<T>(endpoint: string, options: RequestInit = {}): Prom
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: "Unknown error" }));
     const message = error.detail || error.error?.safe_message || `API error: ${response.status}`;
-    throw new Error(message);
+    throw new DataRequestsApiError(message, response.status);
   }
 
   return response.json();
@@ -129,7 +140,11 @@ export async function fetchDataRequests(params?: {
   if (params?.page) searchParams.set("page", String(params.page));
   if (params?.page_size) searchParams.set("page_size", String(params.page_size));
   const qs = searchParams.toString();
-  return marketFetch<DataRequestListResponse>(`/api/v1/data-requests${qs ? `?${qs}` : ""}`);
+  const res = await marketFetch<DataRequestListResponse | DataRequest[]>(`/api/v1/data-requests${qs ? `?${qs}` : ""}`);
+  if (Array.isArray(res)) {
+    return { items: res, total: res.length, page: params?.page || 1, page_size: params?.page_size };
+  }
+  return res;
 }
 
 export async function fetchDataRequest(slugOrId: string): Promise<DataRequest> {

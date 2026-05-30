@@ -12,7 +12,6 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  ShoppingCart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +19,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import { rawFilesApi, type RawFile } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { useMode } from "@/contexts/ModeContext";
@@ -261,15 +259,6 @@ export default function RawFileDetail() {
     }
   };
 
-  const handleCreateListing = () => {
-    if (!file) return;
-    const meta = file.metadata as Record<string, unknown> | null;
-    const title = (meta?.title as string) || file.filename;
-    const description = (meta?.description as string) || "";
-    const tags = Array.isArray(meta?.tags) ? (meta.tags as string[]) : [];
-    navigate("/ai-market", { state: { createListing: { rawFileId: file.id, title, description, tags } } });
-  };
-
   if (loading) {
     return (
       <div className="container mx-auto py-6 max-w-4xl space-y-6">
@@ -386,15 +375,6 @@ export default function RawFileDetail() {
         {/* Listing Readiness */}
         <ListingReadiness file={file} isConnected={isConnected} />
 
-      </div>
-
-      {/* Actions */}
-      <Separator />
-      <div className="flex gap-3">
-        <Button onClick={handleCreateListing} variant="default">
-          <ShoppingCart className="w-4 h-4 mr-2" />
-          Create Listing
-        </Button>
       </div>
     </div>
   );
