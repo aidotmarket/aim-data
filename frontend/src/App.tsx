@@ -9,8 +9,11 @@ import { BrandProvider, useBrand } from "./contexts/BrandContext";
 import { ModeProvider, useMode } from "./contexts/ModeContext";
 import { MarketplaceProvider } from "./contexts/MarketplaceContext";
 import { UploadProvider } from "./contexts/UploadContext";
+import { CoPilotProvider } from "./contexts/CoPilotContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import MainLayout from "./components/layout/MainLayout";
+import ChatPanel from "./components/copilot/ChatPanel";
+import CoPilotFab from "./components/copilot/CoPilotFab";
 import Dashboard from "./pages/Dashboard";
 import Datasets from "./pages/Datasets";
 import DatasetDetail from "./pages/DatasetDetail";
@@ -103,6 +106,7 @@ const App = () => (
           <BrowserRouter>
             <AuthProvider>
               <ModeProvider>
+                <CoPilotProvider>
                   <Toaster />
                   <Sonner />
                   <Routes>
@@ -125,6 +129,8 @@ const App = () => (
                       <RequireAuth>
                         <MarketplaceProvider>
                           <UploadProvider>
+                            <ChatPanel />
+                            <CoPilotFab />
                             <MainLayout />
                           </UploadProvider>
                         </MarketplaceProvider>
@@ -147,6 +153,7 @@ const App = () => (
 
                   <Route path="*" element={<NotFound />} />
                   </Routes>
+                </CoPilotProvider>
               </ModeProvider>
             </AuthProvider>
           </BrowserRouter>
