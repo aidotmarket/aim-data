@@ -28,6 +28,7 @@ class S3Connection(SQLModel, table=True):
     )
 
     id: str = Field(primary_key=True, max_length=36)
+    owner_id: Optional[str] = Field(default=None, max_length=64, nullable=True, index=True)
     name: str = Field(max_length=255)
     bucket: str = Field(max_length=255)
     region: str = Field(max_length=64)
@@ -56,7 +57,3 @@ class S3Connection(SQLModel, table=True):
 def _enforce_configured_credentials(mapper, connection, target):
     if target.status == "configured" and (target.role_arn is None or target.external_id is None):
         raise ValueError("configured S3 connections require role_arn and external_id")
-
-
-from app.models.s3_object_metadata import S3ObjectMetadata  # noqa: F401, E402  (ensure SQLAlchemy mapper registration)
-from app.models.s3_scan_job import S3ScanJob  # noqa: F401, E402  (ensure SQLAlchemy mapper registration)
