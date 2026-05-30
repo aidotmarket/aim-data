@@ -6,13 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useBrand } from "@/contexts/BrandContext";
 import VersionBadge from "@/components/VersionBadge";
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const brand = useBrand();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,14 +39,17 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      {/* ai.market logo, upper-right */}
+      <img
+        src="https://ai.market/logo.svg"
+        alt="ai.market"
+        className="fixed top-4 right-4 w-12 h-12"
+      />
       <div className="w-full max-w-md space-y-8">
-        {/* Logo + heading */}
-        <div className="flex flex-col items-center gap-4">
-          <img src={brand.logoSmPath} alt={brand.sidebarLogoAlt} className="w-14 h-14 rounded-2xl" />
-          <div className="text-center space-y-1">
-            <h1 className="text-2xl font-bold text-foreground">Sign in with ai.market</h1>
-            <p className="text-muted-foreground">Use your ai.market credentials to access AIM Data</p>
-          </div>
+        {/* AIM DATA header */}
+        <div className="text-center space-y-2">
+          <h1 className="text-5xl font-extrabold tracking-tight text-primary">AIM DATA</h1>
+          <p className="text-muted-foreground">Sign in with your ai.market account to access AIM Data</p>
         </div>
 
         <Card className="bg-card border-border">

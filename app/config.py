@@ -251,6 +251,17 @@ class Settings(BaseSettings):
             raise ValueError("AI_MARKET_AWS_ACCOUNT_ID must be a 12-digit string")
         return value
 
+    @field_validator("ai_market_url", mode="before")
+    @classmethod
+    def _coalesce_blank_ai_market_url(cls, value):
+        # A present-but-empty env var (e.g. a blank AIM_DATA_AI_MARKET_URL emitted
+        # by the installer compose) is selected by AliasChoices and would shadow a
+        # populated VECTORAIZ_AI_MARKET_URL or the default, blanking the auth base
+        # URL and breaking ai.market sign-in. Treat blank/whitespace as absent.
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return (os.environ.get("VECTORAIZ_AI_MARKET_URL") or "").strip() or _DEFAULT_AI_MARKET_URL
+        return value.strip() if isinstance(value, str) else value
+
     def model_post_init(self, __context) -> None:
         if not self.allowed_raw_file_dirs:
             default_raw_dir = os.environ.get("VECTORAIZ_DATA_DIR") or self.data_directory
