@@ -359,15 +359,18 @@ async def _handle_ai_market_token(
     return user_data, authenticated_user
 
 
-async def _validate_ai_market_bearer(token: str, request: Request) -> AuthenticatedUser:
+async def _validate_ai_market_bearer_token(token: str) -> AuthenticatedUser:
     cache_key = _ai_market_bearer_cache_key(token)
     cached_user = api_key_cache.get(cache_key)
     if cached_user:
-        request.state.user = cached_user
-        request.state.user_role = "admin" if "admin" in cached_user.scopes else "user"
         return cached_user
 
     _, authenticated_user = await _handle_ai_market_token(token)
+    return authenticated_user
+
+
+async def _validate_ai_market_bearer(token: str, request: Request) -> AuthenticatedUser:
+    authenticated_user = await _validate_ai_market_bearer_token(token)
     request.state.user = authenticated_user
     request.state.user_role = "admin" if "admin" in authenticated_user.scopes else "user"
     return authenticated_user
@@ -540,7 +543,10 @@ async def get_current_user_ws(websocket: WebSocket) -> Optional[AuthenticatedUse
             except HTTPException:
                 return None
         else:
-            return None  # Invalid prefix
+            try:
+                validated_user = await _validate_ai_market_bearer_token(api_key)
+            except HTTPException:
+                return None
 
     if not validated_user:
         return None
