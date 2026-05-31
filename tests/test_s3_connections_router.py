@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from fnmatch import fnmatchcase
 from typing import Optional
 from uuid import uuid4
 
@@ -52,6 +53,7 @@ def client(s3_engine, monkeypatch):
     monkeypatch.setattr(s3_connections, "get_session_context", _session_context)
     monkeypatch.setattr(s3_scan_service, "get_session_context", _session_context)
     monkeypatch.setattr(s3_connections.settings, "ai_market_aws_account_id", "123456789012")
+    monkeypatch.setattr(s3_connections.settings, "ai_market_assume_role_principal_arn", None)
     app.dependency_overrides[get_current_user] = lambda: USER_A
     yield TestClient(app)
     app.dependency_overrides.pop(get_current_user, None)
@@ -169,6 +171,64 @@ def test_post_creates_row_and_returns_substituted_policies(client):
     assert data["permission_policy"]["Statement"][0]["Resource"] == "arn:aws:s3:::seller-bucket"
     assert data["permission_policy"]["Statement"][0]["Condition"]["StringLike"]["s3:prefix"] == ["exports/*"]
     assert data["permission_policy"]["Statement"][1]["Resource"] == "arn:aws:s3:::seller-bucket/exports/*"
+
+
+def test_trust_policy_uses_configured_principal_and_external_id(monkeypatch):
+    configured_principal = "arn:aws:iam::123456789012:role/aim-data-assumer"
+    s3_connection = S3Connection(
+        id=str(uuid4()),
+        name="Seller bucket",
+        bucket="seller-bucket",
+        region="us-east-1",
+        prefix=None,
+        external_id="external-123",
+    )
+    monkeypatch.setattr(s3_connections.settings, "ai_market_assume_role_principal_arn", configured_principal)
+
+    policy = s3_connections._trust_policy(s3_connection)
+    statement = policy["Statement"][0]
+
+    assert statement["Principal"]["AWS"] == configured_principal
+    assert statement["Condition"]["StringEquals"]["sts:ExternalId"] == "external-123"
+
+
+def test_trust_policy_falls_back_to_account_root_and_external_id(monkeypatch):
+    s3_connection = S3Connection(
+        id=str(uuid4()),
+        name="Seller bucket",
+        bucket="seller-bucket",
+        region="us-east-1",
+        prefix=None,
+        external_id="external-456",
+    )
+    monkeypatch.setattr(s3_connections.settings, "ai_market_assume_role_principal_arn", None)
+    monkeypatch.setattr(s3_connections.settings, "ai_market_aws_account_id", "123456789012")
+
+    policy = s3_connections._trust_policy(s3_connection)
+    statement = policy["Statement"][0]
+
+    assert statement["Principal"]["AWS"] == "arn:aws:iam::123456789012:root"
+    assert statement["Condition"]["StringEquals"]["sts:ExternalId"] == "external-456"
+
+
+def test_permission_policy_prefix_scopes_to_folder_children():
+    s3_connection = S3Connection(
+        id=str(uuid4()),
+        name="Seller bucket",
+        bucket="seller-bucket",
+        region="us-east-1",
+        prefix="reports",
+        external_id="external-789",
+    )
+
+    policy = s3_connections._permission_policy(s3_connection)
+    list_statement = policy["Statement"][0]
+    get_statement = policy["Statement"][1]
+
+    assert list_statement["Condition"]["StringLike"]["s3:prefix"] == ["reports/*"]
+    assert get_statement["Resource"] == "arn:aws:s3:::seller-bucket/reports/*"
+    assert not fnmatchcase("reports-archive/file.csv", list_statement["Condition"]["StringLike"]["s3:prefix"][0])
+    assert not fnmatchcase("arn:aws:s3:::seller-bucket/reports-archive/file.csv", get_statement["Resource"])
 
 
 def test_post_stamps_owner_id(client, s3_engine):
