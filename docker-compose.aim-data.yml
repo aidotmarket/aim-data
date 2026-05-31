@@ -27,7 +27,7 @@ services:
     environment:
       - VECTORAIZ_CHANNEL=aim-data
       - VECTORAIZ_VERSION=${VECTORAIZ_VERSION:-v1.20.41}
-      - VECTORAIZ_MODE=${VECTORAIZ_MODE:-standalone}
+      - VECTORAIZ_MODE=${VECTORAIZ_MODE:-connected}
       - VECTORAIZ_SECRET_KEY=${VECTORAIZ_SECRET_KEY:-}
       - AIM_DATA_APIKEY_HMAC_SECRET=${AIM_DATA_APIKEY_HMAC_SECRET:-}
       - DATABASE_URL=postgresql://vectoraiz:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/vectoraiz
