@@ -1,32 +1,32 @@
 import { useEffect, useState } from "react";
 import { getApiUrl } from "@/lib/api";
 
+interface VersionInfo {
+  current?: string;
+}
+
 const VersionBadge = () => {
   const [version, setVersion] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${getApiUrl()}/api/health`)
+    fetch(`${getApiUrl()}/api/version`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.version) setVersion(data.version);
+      .then((data: VersionInfo | null) => {
+        if (data?.current) setVersion(data.current);
       })
       .catch(() => {});
   }, []);
 
   if (!version) return null;
 
-  // Only render badge for real release versions (semver-like).
-  // Suppresses placeholder values like "latest", "dev", "unknown", "0.0.0".
-  const normalized = version.replace(/^v/i, "");
-  const isReleaseVersion = /^\d+\.\d+\.\d+/.test(normalized) && !/^0\.0\.0$/.test(normalized);
-  if (!isReleaseVersion) return null;
+  const normalized = version.replace(/^v/, "");
 
   return (
     <span
-      className="fixed bottom-3 right-4 text-muted-foreground/70 select-none pointer-events-none"
+      className="fixed bottom-3 right-4 z-40 text-muted-foreground/70 select-none pointer-events-none"
       style={{ fontSize: 12 }}
     >
-      v{normalized}
+      {normalized}
     </span>
   );
 };

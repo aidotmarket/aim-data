@@ -8,7 +8,6 @@ import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
 import FileUploadModal from "@/components/FileUploadModal";
 import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
 import { useUpload } from "@/contexts/UploadContext";
-import VersionBadge from "@/components/VersionBadge";
 import OnboardingWizard, { isOnboardingComplete } from "@/components/onboarding/OnboardingWizard";
 import { useChannel } from "@/hooks/useChannel";
 
@@ -56,7 +55,6 @@ const MainLayout = () => {
         onOpenChange={setHelpModalOpen}
       />
       <FileUploadModal />
-      <VersionBadge />
       {showOnboarding && (
         <OnboardingWizard channel={channel} onComplete={() => setShowOnboarding(false)} />
       )}

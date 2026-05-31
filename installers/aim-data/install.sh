@@ -60,7 +60,6 @@ if [[ ! -f .env ]]; then
 # AIM-Data configuration
 POSTGRES_PASSWORD=$(generate_secret)
 VECTORAIZ_SECRET_KEY=$(generate_secret)
-VECTORAIZ_VERSION=latest
 VECTORAIZ_CHANNEL=aim-data
 AIM_DATA_PORT=8080
 VECTORAIZ_MODE=connected
@@ -72,11 +71,14 @@ fi
 
 info "Pulling ${IMAGE}..."
 docker pull "$IMAGE" || die "Failed to pull ${IMAGE}"
+VERSION=$(docker inspect --format '{{ index .Config.Labels "version" }}' "$IMAGE" 2>/dev/null || true)
+VERSION="${VERSION:-unknown}"
 pass "Image pulled"
 
 info "Starting AIM-Data..."
 docker compose -f "$COMPOSE_FILE" up -d || die "docker compose up failed"
 pass "Containers started"
+pass "AIM Data ${VERSION} installed"
 
 PORT=$(grep '^AIM_DATA_PORT=' .env | cut -d= -f2)
 PORT="${PORT:-8080}"

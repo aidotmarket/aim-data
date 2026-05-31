@@ -74,7 +74,6 @@ if (-not (Test-Path $envFile)) {
 # AIM-Data configuration
 POSTGRES_PASSWORD=$(New-RandomSecret)
 VECTORAIZ_SECRET_KEY=$(New-RandomSecret)
-VECTORAIZ_VERSION=latest
 VECTORAIZ_CHANNEL=aim-data
 AIM_DATA_PORT=8080
 VECTORAIZ_MODE=connected
@@ -90,6 +89,10 @@ docker pull $Image
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "Failed to pull $Image"
 }
+$Version = docker inspect --format '{{ index .Config.Labels "version" }}' $Image 2>$null
+if (-not $Version) {
+    $Version = "unknown"
+}
 Write-Success "Image pulled"
 
 Write-Info "Starting AIM-Data..."
@@ -98,6 +101,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Fail "docker compose up failed"
 }
 Write-Success "Containers started"
+Write-Success "AIM Data $Version installed"
 
 $Port = 8080
 try {
