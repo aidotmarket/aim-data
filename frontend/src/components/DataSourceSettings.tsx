@@ -393,6 +393,9 @@ export default function DataSourceSettings() {
 
           {step === 1 && (
             <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                AIM Data and allAI will guide you through creating the IAM role in the next steps, including the trust policy, External ID, and Role ARN. No AWS keys are needed.
+              </p>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="s3-name">Name</Label>

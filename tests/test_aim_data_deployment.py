@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.core.channel_config import ChannelType
 from app.main import app
 
@@ -87,3 +88,35 @@ def test_system_info_reports_aim_data_channel(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["channel"] == "aim-data"
+
+
+def test_aim_data_connected_grants_allai_feature(monkeypatch):
+    """AIM Data connected mode exposes allAI even if the generic flag is unset."""
+    import app.core.channel_config as channel_config
+
+    monkeypatch.setattr(channel_config, "CHANNEL", ChannelType.aim_data)
+    monkeypatch.setattr(settings, "mode", "connected")
+    monkeypatch.setattr(settings, "allai_enabled", False)
+
+    client = TestClient(app)
+    response = client.get("/api/system/info")
+
+    assert response.status_code == 200
+    assert response.json()["features"]["allai"] is True
+
+
+def test_aim_data_connected_copilot_reports_allie_available(monkeypatch):
+    """The websocket signal used by CoPilotContext is true for connected AIM Data."""
+    import app.core.channel_config as channel_config
+
+    monkeypatch.setattr(channel_config, "CHANNEL", ChannelType.aim_data)
+    monkeypatch.setattr(settings, "mode", "connected")
+    monkeypatch.setattr(settings, "allai_enabled", False)
+
+    client = TestClient(app)
+    with client.websocket_connect("/ws/copilot") as ws:
+        connected = ws.receive_json()
+
+    assert connected["type"] == "CONNECTED"
+    assert connected["allie_available"] is True
+    assert connected["is_standalone"] is False
