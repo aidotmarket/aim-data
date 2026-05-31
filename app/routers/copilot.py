@@ -668,7 +668,9 @@ async def websocket_copilot(websocket: WebSocket):
         nudge_manager.set_quiet_mode(session_id, True)
 
     # BQ-128: Allie availability check
-    allie_available = settings.allai_enabled and not is_local_only()
+    from app.core.channel_config import CHANNEL, ChannelType
+
+    allie_available = not is_local_only() and (settings.allai_enabled or CHANNEL == ChannelType.aim_data)
     standalone = is_local_only()
 
     # Send CONNECTED message with balance info + allie flags (BQ-128 Task 1.6)

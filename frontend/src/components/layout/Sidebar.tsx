@@ -74,6 +74,10 @@ function getOrderedItems(channel: "direct" | "marketplace" | "aim-data"): { top:
   const itemMap = new Map(ALL_NAV_ITEMS.map((item) => [item.path, item]));
 
   const ordered = order.map((path) => itemMap.get(path)).filter(Boolean) as NavItem[];
+  if (channel === "aim-data") {
+    return { top: ordered, bottom: [] };
+  }
+
   return {
     top: ordered.slice(0, sepIdx),
     bottom: ordered.slice(sepIdx),
@@ -148,12 +152,13 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
 
       {/* Bottom Navigation + Mode Indicator + Collapse */}
       <div className="px-2 pb-2 space-y-1">
-        {/* Bottom nav items with separator */}
-        <div className="border-t border-sidebar-border pt-2 space-y-1">
-          <ul className="space-y-1">
-            {bottomItems.map(renderNavItem)}
-          </ul>
-        </div>
+        {bottomItems.length > 0 ? (
+          <div className="border-t border-sidebar-border pt-2 space-y-1">
+            <ul className="space-y-1">
+              {bottomItems.map(renderNavItem)}
+            </ul>
+          </div>
+        ) : null}
 
         {/* Mode Indicator + Collapse Toggle */}
         <div className="pt-1 border-t border-sidebar-border space-y-1">
