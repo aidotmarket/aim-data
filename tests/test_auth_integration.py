@@ -1,5 +1,7 @@
 import pytest
 import httpx
+from unittest.mock import AsyncMock
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 # NOTE: The client fixture will enable auth and import the app,
@@ -13,6 +15,17 @@ VALID_RESPONSE_PAYLOAD = {
     "key_id": "key_xyz789",
     "scopes": ["read", "write"]
 }
+VALID_AI_MARKET_USER = {
+    "id": "usr_bearer_123",
+    "email": "buyer@example.com",
+    "role": "buyer",
+    "status": "active",
+}
+
+
+class DummyWebSocket:
+    def __init__(self, token: str):
+        self.query_params = {"token": token}
 
 @pytest.fixture(scope="function")
 def auth_client(monkeypatch):
@@ -150,3 +163,66 @@ def test_api_key_caching(auth_client: TestClient, mock_httpx_client):
 
     # Assert that the external call was only made once
     mock_httpx_client.post.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_ws_connected_accepts_ai_market_access_token(monkeypatch):
+    from app.auth import api_key_auth
+    from app.config import settings
+
+    api_key_auth.api_key_cache.clear()
+    monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
+    monkeypatch.setattr(settings, "mode", "connected")
+    mock_fetch = AsyncMock(return_value=VALID_AI_MARKET_USER)
+    monkeypatch.setattr(api_key_auth, "_fetch_ai_market_me", mock_fetch)
+    monkeypatch.setattr(api_key_auth, "_upsert_ai_market_user", lambda *args, **kwargs: None)
+
+    user = await api_key_auth.get_current_user_ws(DummyWebSocket("jwt.account.access.token"))
+
+    assert user is not None
+    assert user.user_id == "usr_bearer_123"
+    assert user.key_id == "ai_market_bearer"
+    assert user.scopes == ["read", "write"]
+    mock_fetch.assert_awaited_once_with("jwt.account.access.token")
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_ws_connected_still_accepts_local_key(monkeypatch):
+    from app.auth import api_key_auth
+    from app.config import settings
+
+    api_key_auth.api_key_cache.clear()
+    monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
+    monkeypatch.setattr(settings, "mode", "connected")
+    expected_user = api_key_auth.AuthenticatedUser(
+        user_id="local_user",
+        key_id="local_key",
+        scopes=["read", "write"],
+        valid=True,
+    )
+    mock_validate = AsyncMock(return_value=expected_user)
+    monkeypatch.setattr(api_key_auth, "_validate_local_key", mock_validate)
+
+    user = await api_key_auth.get_current_user_ws(DummyWebSocket("vz_local_secret"))
+
+    assert user == expected_user
+    mock_validate.assert_awaited_once_with("vz_local_secret")
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_ws_connected_rejects_invalid_access_token(monkeypatch):
+    from app.auth import api_key_auth
+    from app.config import settings
+
+    api_key_auth.api_key_cache.clear()
+    monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
+    monkeypatch.setattr(settings, "mode", "connected")
+    mock_fetch = AsyncMock(
+        side_effect=HTTPException(status_code=401, detail="Invalid or expired ai.market token")
+    )
+    monkeypatch.setattr(api_key_auth, "_fetch_ai_market_me", mock_fetch)
+
+    user = await api_key_auth.get_current_user_ws(DummyWebSocket("garbage.invalid.token"))
+
+    assert user is None
+    mock_fetch.assert_awaited_once_with("garbage.invalid.token")
