@@ -14,6 +14,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import MainLayout from "./components/layout/MainLayout";
 import ChatPanel from "./components/copilot/ChatPanel";
 import CoPilotFab from "./components/copilot/CoPilotFab";
+import VersionBadge from "./components/VersionBadge";
 import Dashboard from "./pages/Dashboard";
 import Datasets from "./pages/Datasets";
 import DatasetDetail from "./pages/DatasetDetail";
@@ -153,6 +154,7 @@ const App = () => (
 
                   <Route path="*" element={<NotFound />} />
                   </Routes>
+                  <VersionBadge />
                 </CoPilotProvider>
               </ModeProvider>
             </AuthProvider>
