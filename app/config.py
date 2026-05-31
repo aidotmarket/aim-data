@@ -15,6 +15,7 @@ UPDATED:
 
 import logging
 import os
+import re
 from pydantic_settings import BaseSettings
 from pydantic import AliasChoices, Field, field_validator
 from typing import List, Optional, Literal
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 # BQ-127: Default ai.market URL used for mode inference
 _DEFAULT_AI_MARKET_URL = "https://ai-market-backend-production.up.railway.app"
+_IAM_PRINCIPAL_ARN_RE = re.compile(r"^arn:aws:iam::\d{12}:(role|user)/.+$")
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +127,11 @@ class Settings(BaseSettings):
         default="000000000000",
         validation_alias=AliasChoices("AI_MARKET_AWS_ACCOUNT_ID", "AIM_DATA_AWS_ACCOUNT_ID", "VECTORAIZ_AI_MARKET_AWS_ACCOUNT_ID"),
         description="12-digit AWS account ID allowed to assume seller S3 roles.",
+    )
+    ai_market_assume_role_principal_arn: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("AI_MARKET_ASSUME_ROLE_PRINCIPAL_ARN", "AIM_DATA_AWS_PRINCIPAL_ARN"),
+        description="Optional IAM role/user ARN allowed to assume seller S3 roles.",
     )
     
     # Encryption key for API keys at rest (BQ-066)
@@ -249,6 +256,20 @@ class Settings(BaseSettings):
     def _validate_ai_market_aws_account_id(cls, value: str) -> str:
         if not value.isdigit() or len(value) != 12:
             raise ValueError("AI_MARKET_AWS_ACCOUNT_ID must be a 12-digit string")
+        return value
+
+    @field_validator("ai_market_assume_role_principal_arn", mode="before")
+    @classmethod
+    def _validate_ai_market_assume_role_principal_arn(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("AI_MARKET_ASSUME_ROLE_PRINCIPAL_ARN must be an IAM role or user ARN")
+        value = value.strip()
+        if not value:
+            return None
+        if not _IAM_PRINCIPAL_ARN_RE.match(value):
+            raise ValueError("AI_MARKET_ASSUME_ROLE_PRINCIPAL_ARN must be an IAM role or user ARN")
         return value
 
     @field_validator("ai_market_url", mode="before")

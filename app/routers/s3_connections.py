@@ -124,17 +124,19 @@ class S3ObjectRegisterResponse(BaseModel):
 
 
 def _policy_prefix(prefix: Optional[str]) -> str:
-    return prefix or ""
+    return (prefix or "").rstrip("/")
 
 
 def _trust_policy(connection: S3Connection) -> Dict[str, Any]:
+    principal_arn = (settings.ai_market_assume_role_principal_arn or "").strip()
+    trusted_principal = principal_arn or f"arn:aws:iam::{settings.ai_market_aws_account_id}:root"
     return {
         "Version": "2012-10-17",
         "Statement": [
             {
                 "Effect": "Allow",
                 "Principal": {
-                    "AWS": f"arn:aws:iam::{settings.ai_market_aws_account_id}:root",
+                    "AWS": trusted_principal,
                 },
                 "Action": "sts:AssumeRole",
                 "Condition": {
@@ -158,10 +160,10 @@ def _permission_policy(connection: S3Connection) -> Dict[str, Any]:
     if prefix:
         list_statement["Condition"] = {
             "StringLike": {
-                "s3:prefix": [f"{prefix}*"],
+                "s3:prefix": [f"{prefix}/*"],
             },
         }
-        get_resource = f"arn:aws:s3:::{connection.bucket}/{prefix}*"
+        get_resource = f"arn:aws:s3:::{connection.bucket}/{prefix}/*"
 
     return {
         "Version": "2012-10-17",
