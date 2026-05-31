@@ -74,6 +74,7 @@ fi
 # Run database migrations
 echo "[INFO] Running database migrations..."
 cd /app && python -m alembic upgrade head
+export AIM_SKIP_STARTUP_MIGRATION=1
 echo "[INFO] Migrations complete"
 
 # Co-Pilot requires single-worker mode (file lock enforced).
