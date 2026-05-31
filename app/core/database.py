@@ -305,6 +305,10 @@ def _ensure_default_preferences(engine: Engine) -> None:
 
 def _run_alembic_upgrade() -> None:
     """Run ``alembic upgrade head`` programmatically."""
+    if os.environ.get("AIM_SKIP_STARTUP_MIGRATION", "").lower() in {"1", "true", "yes"}:
+        logger.info("Skipping startup Alembic migration because entrypoint already ran it")
+        return
+
     try:
         from alembic.config import Config
         from alembic import command
