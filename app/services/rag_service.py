@@ -2,7 +2,7 @@
 RAG Service
 ===========
 
-Core orchestrator for Retrieval-Augmented Generation in vectorAIz.
+Core orchestrator for Retrieval-Augmented Generation in AIM Data.
 Coordinates Search, Prompting, Generation, and Parsing.
 
 Flow (Stateless):
@@ -489,7 +489,7 @@ class RAGService:
 
     @staticmethod
     def _is_setup_question(question: str) -> bool:
-        """Detect if the question is about connecting LLM clients to vectorAIz."""
+        """Detect if the question is about connecting LLM clients to AIM Data."""
         return bool(RAGService._SETUP_PATTERNS.search(question))
 
     @staticmethod
@@ -500,20 +500,20 @@ class RAGService:
         spec_url = f"{base_url}/api/allai/openapi-action-spec"
 
         return f"""
-vectorAIz Connection Guide
+AIM Data Connection Guide
 ===========================
 
-This vectorAIz instance is available at: {base_url}
+This AIM Data instance is available at: {base_url}
 
 OPTION 1: ChatGPT Custom GPT with Actions
 ------------------------------------------
 1. Go to https://chatgpt.com → Profile → My GPTs → Create a GPT.
 2. Name it something like "My Data Assistant".
-3. In Instructions, write: "You help the user search and ask questions about their data stored in vectorAIz. Use the askVectoraiz action to answer questions and searchVectoraiz to find information."
+3. In Instructions, write: "You help the user search and ask questions about their data stored in AIM Data. Use the askVectoraiz action to answer questions and searchVectoraiz to find information."
 4. Under Actions, click "Create new action".
 5. Import the OpenAPI spec from: {spec_url}
    (Or copy the JSON from that URL and paste into the schema editor.)
-6. Under Authentication, choose "API Key", set Auth Type to "Custom", Header Name to "X-API-Key", and paste your vectorAIz API key.
+6. Under Authentication, choose "API Key", set Auth Type to "Custom", Header Name to "X-API-Key", and paste your AIM Data API key.
 7. Save and test!
 
 OPTION 2: Claude Desktop via MCP
@@ -528,7 +528,7 @@ OPTION 2: Claude Desktop via MCP
      "env": {{ "API_KEY": "YOUR_VECTORAIZ_API_KEY_HERE" }}
    }}
 3. Replace YOUR_VECTORAIZ_API_KEY_HERE with your real API key.
-4. Restart Claude Desktop — vectorAIz tools will appear automatically.
+4. Restart Claude Desktop — AIM Data tools will appear automatically.
 Note: MCP requires the Connectivity feature to be enabled in Settings → Connectivity.
 
 OPTION 3: Direct REST API
@@ -544,7 +544,7 @@ Search your data:
 
 Where to Find Your API Key
 ----------------------------
-Go to the vectorAIz dashboard → Settings → API Keys → Create New Key.
+Go to the AIM Data dashboard → Settings → API Keys → Create New Key.
 Your key looks like: vz_xxxxxxxx_xxxxxxxxxxxxxxxx...
 Keep it secret — treat it like a password.
 

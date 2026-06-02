@@ -1,5 +1,5 @@
 """
-Compliance Service for vectorAIz
+Compliance Service for AIM Data
 =================================
 BQ-086: GDPR/CCPA/HIPAA compliance flag generation from PII scan results.
 Runs locally, produces a compliance report per dataset.

@@ -22,7 +22,7 @@ class SessionService:
     """
     Service for managing Chat Sessions and Messages.
     
-    All operations are local to the customer's vectorAIz instance.
+    All operations are local to the customer's AIM Data instance.
     Data never leaves to ai.market.
     """
 

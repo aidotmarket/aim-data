@@ -3,7 +3,7 @@ Stripe Connect Proxy Service
 ==============================
 
 PURPOSE:
-    Proxies Stripe Connect operations from vectorAIz to ai.market.
+    Proxies Stripe Connect operations from AIM Data to ai.market.
     Keeps ai.market API communication server-side, supporting both
     current Railway deployment and future customer-hosted instances.
 

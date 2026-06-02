@@ -5,10 +5,10 @@ Trust Channel WebSocket Client
 Maintains a persistent WebSocket connection to ai.market's Trust Channel.
 Dispatches incoming actions to registered handler functions.
 
-BQ-D1: Fulfillment Listener (vectorAIz side)
+BQ-D1: Fulfillment Listener (AIM Data side)
 
 The Trust Channel is the encrypted bidirectional communication channel
-between vectorAIz instances and the ai.market platform. Messages are
+between AIM Data instances and the ai.market platform. Messages are
 JSON-encoded actions identified by an "action" field.
 
 Connection lifecycle:

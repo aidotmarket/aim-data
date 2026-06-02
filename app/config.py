@@ -1,9 +1,9 @@
 """
-vectorAIz Application Configuration
+AIM Data Application Configuration
 =====================================
 
 PURPOSE:
-    Pydantic-Settings based configuration for the vectorAIz backend.
+    Pydantic-Settings based configuration for the AIM Data backend.
     All settings can be overridden via environment variables (VECTORAIZ_ prefix).
 
 UPDATED:
@@ -82,7 +82,7 @@ def _generate_fernet_key() -> str:
 class Settings(BaseSettings):
     """BQ-127: Settings now include operating mode and local auth configuration."""
 
-    app_name: str = "vectorAIz"
+    app_name: str = "AIM Data"
     debug: bool = False  # S100: Default OFF for production safety
 
     # BQ-127: Operating mode — standalone (air-gapped) or connected (ai.market)
@@ -189,7 +189,7 @@ class Settings(BaseSettings):
     stripe_webhook_secret: Optional[str] = None
     billing_markup_rate: float = 2.0
     
-    # Public URL for this vectorAIz instance (used in OpenAPI specs for Custom GPT Actions)
+    # Public URL for this AIM Data instance (used in OpenAPI specs for Custom GPT Actions)
     public_url: str = "https://vectoraiz-backend-production.up.railway.app"
 
     # BQ-MCP-RAG: External LLM Connectivity (§4.5)
@@ -347,4 +347,4 @@ if not _os.environ.get("VECTORAIZ_MODE") and _os.environ.get("VECTORAIZ_AI_MARKE
             "Set VECTORAIZ_MODE=connected explicitly. This inference will be removed in v2.0."
         )
 
-logger.info("vectorAIz operating mode: %s", settings.mode)
+logger.info("AIM Data operating mode: %s", settings.mode)

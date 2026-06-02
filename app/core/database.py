@@ -2,7 +2,7 @@
 Database Configuration
 ======================
 
-Persistent SQL database for vectorAIz state.
+Persistent SQL database for AIM Data state.
 
 Supports two backends via DATABASE_URL env var:
   - SQLite (default): sqlite:///data/vectoraiz.db

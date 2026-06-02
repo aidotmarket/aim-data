@@ -1,8 +1,8 @@
 """
-Marketplace Push Service for vectorAIz
+Marketplace Push Service for AIM Data
 =======================================
 BQ-090: Push listing metadata, compliance report, and quality attestation
-from local vectorAIz instance to ai.market backend API.
+from local AIM Data instance to ai.market backend API.
 
 Non-custodial: Only metadata is sent — never actual data rows.
 Auth: Uses VECTORAIZ_INTERNAL_API_KEY (X-API-Key header) which maps

@@ -1,7 +1,7 @@
 """
 Pydantic Schemas for Listing Metadata Generation
 =================================================
-BQ-085: Transform vectorAIz processing results into marketplace-ready metadata.
+BQ-085: Transform AIM Data processing results into marketplace-ready metadata.
 """
 from pydantic import BaseModel, Field
 from typing import Optional, List

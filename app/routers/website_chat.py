@@ -2,7 +2,7 @@
 Website Chat Router
 ===================
 
-Public endpoint for the vectorAIz website chat widget.
+Public endpoint for the AIM Data website chat widget.
 No API key required — rate-limited by IP instead.
 
 Created: 2026-02-19
@@ -117,7 +117,7 @@ MAX_HISTORY_TURNS = 10  # Keep last N exchanges to avoid token bloat
     "",
     response_model=WebsiteChatResponse,
     summary="Website chat with allAI",
-    description="Public chat endpoint for the vectorAIz website. No API key required.",
+    description="Public chat endpoint for the AIM Data website. No API key required.",
 )
 async def website_chat(request: WebsiteChatRequest, http_request: Request):
     # Rate limit by client IP

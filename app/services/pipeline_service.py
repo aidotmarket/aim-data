@@ -1,5 +1,5 @@
 """
-Pipeline Orchestration Service for vectorAIz
+Pipeline Orchestration Service for AIM Data
 =============================================
 BQ-088: Orchestrates the full data processing pipeline.
 BQ-117: Pipeline robustness — validate steps, atomic status, canonical status field.

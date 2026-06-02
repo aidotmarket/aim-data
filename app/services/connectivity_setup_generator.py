@@ -42,7 +42,7 @@ class ConnectivitySetupGenerator:
         Args:
             platform: Target platform identifier.
             token: Full connectivity token (vzmcp_...).
-            base_url: Base URL of the vectorAIz instance.
+            base_url: Base URL of the AIM Data instance.
             datasets: Optional list of dataset info dicts for generic_llm prompts.
 
         Returns:
@@ -98,7 +98,7 @@ class ConnectivitySetupGenerator:
                 },
                 {
                     "step": 2,
-                    "instruction": "Add the vectorAIz MCP server config",
+                    "instruction": "Add the AIM Data MCP server config",
                     "detail": (
                         "Copy the config block below and paste it into your "
                         "claude_desktop_config.json file."
@@ -115,10 +115,10 @@ class ConnectivitySetupGenerator:
                     "step": 4,
                     "instruction": "Test the connection",
                     "detail": (
-                        "In Claude Desktop, try asking: 'What datasets are available in vectorAIz?' "
+                        "In Claude Desktop, try asking: 'What datasets are available in AIM Data?' "
                         "Claude should use the vectoraiz MCP tools to answer."
                     ),
-                    "validation": "You should see dataset names from your vectorAIz instance.",
+                    "validation": "You should see dataset names from your AIM Data instance.",
                 },
             ],
             "config": config,
@@ -164,7 +164,7 @@ class ConnectivitySetupGenerator:
                 },
                 {
                     "step": 2,
-                    "instruction": "Add the vectorAIz MCP server",
+                    "instruction": "Add the AIM Data MCP server",
                     "detail": (
                         "In the MCP Servers section, add a new server with the config below. "
                         "ChatGPT Desktop uses the same MCP format as Claude Desktop."
@@ -180,7 +180,7 @@ class ConnectivitySetupGenerator:
                 {
                     "step": 4,
                     "instruction": "Test the connection",
-                    "detail": "Ask ChatGPT: 'List my vectorAIz datasets.' It should use the MCP tools.",
+                    "detail": "Ask ChatGPT: 'List my AIM Data datasets.' It should use the MCP tools.",
                     "validation": "You should see your dataset names in the response.",
                 },
             ],
@@ -246,7 +246,7 @@ class ConnectivitySetupGenerator:
                         "In Cursor chat, ask: 'Use the vectoraiz MCP to list my datasets.' "
                         "Cursor should invoke the MCP tools."
                     ),
-                    "validation": "You should see dataset info from your vectorAIz instance.",
+                    "validation": "You should see dataset info from your AIM Data instance.",
                 },
             ],
             "config": config,
@@ -276,14 +276,14 @@ class ConnectivitySetupGenerator:
             "steps": [
                 {
                     "step": 1,
-                    "instruction": "Note the vectorAIz REST API endpoint",
+                    "instruction": "Note the AIM Data REST API endpoint",
                     "detail": f"Base URL: {api_url}",
                 },
                 {
                     "step": 2,
-                    "instruction": "Configure Gemini to use vectorAIz as a data source",
+                    "instruction": "Configure Gemini to use AIM Data as a data source",
                     "detail": (
-                        "In Gemini's extensions or function calling setup, add the vectorAIz "
+                        "In Gemini's extensions or function calling setup, add the AIM Data "
                         "REST API endpoints. Use Bearer token authentication with the token below."
                     ),
                     "validation": "Gemini should recognize the API endpoints.",
@@ -291,8 +291,8 @@ class ConnectivitySetupGenerator:
                 {
                     "step": 3,
                     "instruction": "Test with a query",
-                    "detail": "Ask Gemini to query your vectorAIz data to confirm the integration.",
-                    "validation": "You should get data from your vectorAIz datasets.",
+                    "detail": "Ask Gemini to query your AIM Data to confirm the integration.",
+                    "validation": "You should get data from your AIM Data datasets.",
                 },
             ],
             "config": {
@@ -307,7 +307,7 @@ class ConnectivitySetupGenerator:
             },
             "troubleshooting": [
                 "Gemini MCP support is evolving — check Google's latest docs.",
-                "For REST-based integration, ensure the vectorAIz instance is accessible from Gemini.",
+                "For REST-based integration, ensure the AIM Data instance is accessible from Gemini.",
                 "Use the generic_rest setup as a fallback if direct integration isn't available.",
             ],
             "notes": [
@@ -345,7 +345,7 @@ class ConnectivitySetupGenerator:
                 },
                 {
                     "step": 2,
-                    "instruction": "Add the vectorAIz MCP server config",
+                    "instruction": "Add the AIM Data MCP server config",
                     "detail": "Paste the config below into your MCP settings.",
                     "validation": "The MCP server should appear in the GitHub Copilot agent list.",
                 },
@@ -356,7 +356,7 @@ class ConnectivitySetupGenerator:
                         "In the Copilot chat panel, use @vectoraiz to query your data: "
                         "'@vectoraiz list my datasets'."
                     ),
-                    "validation": "You should see your vectorAIz datasets in the response.",
+                    "validation": "You should see your AIM Data datasets in the response.",
                 },
             ],
             "config": config,
@@ -411,7 +411,7 @@ class ConnectivitySetupGenerator:
                     "step": 4,
                     "instruction": "Test the GPT",
                     "detail": "Save the GPT and try asking it to list your datasets.",
-                    "validation": "The GPT should call the vectorAIz API and return dataset info.",
+                    "validation": "The GPT should call the AIM Data API and return dataset info.",
                 },
             ],
             "config": {
@@ -422,16 +422,16 @@ class ConnectivitySetupGenerator:
                 "auth_value": f"Bearer {token}",
             },
             "troubleshooting": [
-                "Ensure the vectorAIz instance is accessible from the internet (not just localhost).",
+                "Ensure the AIM Data instance is accessible from the internet (not just localhost).",
                 "If using localhost, set up a tunnel (e.g., ngrok) to expose the API.",
                 "Verify the token is valid with connectivity_test.",
                 "Check that the OpenAPI schema loads correctly in the GPT editor.",
             ],
             "notes": [
                 "This token is a secret — do not share the GPT publicly with the token embedded.",
-                "Custom GPTs require the vectorAIz instance to be internet-accessible.",
+                "Custom GPTs require the AIM Data instance to be internet-accessible.",
                 (
-                    "If you're running vectorAIz locally (Docker/localhost), ChatGPT cannot reach it. "
+                    "If you're running AIM Data locally (Docker/localhost), ChatGPT cannot reach it. "
                     "Claude Desktop via MCP is the easiest local option — it connects directly to "
                     "your Docker container with no tunneling needed."
                 ),
@@ -501,7 +501,7 @@ class ConnectivitySetupGenerator:
                 "If you get 401, check that the token is correct and not revoked.",
                 "If you get 429, you're being rate-limited — wait and retry.",
                 "If you get 503, external connectivity may be disabled.",
-                "Ensure the vectorAIz instance is accessible from your client.",
+                "Ensure the AIM Data instance is accessible from your client.",
             ],
             "notes": [
                 "This token is a secret — treat it like a password.",
@@ -527,7 +527,7 @@ class ConnectivitySetupGenerator:
                     "instruction": "Copy the system prompt below",
                     "detail": (
                         "This system prompt contains everything an LLM needs to query your "
-                        "vectorAIz data: API endpoints, authentication, available datasets, "
+                        "AIM Data: API endpoints, authentication, available datasets, "
                         "and usage instructions."
                     ),
                 },
@@ -584,7 +584,7 @@ class ConnectivitySetupGenerator:
                 lines.append(f"  - {name} (table: dataset_{ds_id}, {rows} rows, {cols} cols){desc_str}")
             datasets_section = "\n".join(lines)
 
-        return f"""You have access to a vectorAIz data instance via REST API.
+        return f"""You have access to an AIM Data instance via REST API.
 
 ## API Configuration
 - Base URL: {api_url}

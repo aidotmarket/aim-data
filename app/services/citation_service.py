@@ -1,5 +1,5 @@
 """
-Citation Service for vectorAIz RAG.
+Citation Service for AIM Data RAG.
 Parses, validates, and extracts citations from LLM responses.
 
 PHASE: 3.V.4
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class CitationService:
     """
     Service to parse, validate, and extract citations from LLM responses.
-    Handles the [source_N] notation used in vectorAIz RAG.
+    Handles the [source_N] notation used in AIM Data RAG.
     
     Usage:
         service = get_citation_service()

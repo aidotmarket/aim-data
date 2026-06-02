@@ -2,7 +2,7 @@
 Tunnel Service — Cloudflare Quick Tunnel Management
 
 Manages a cloudflared quick tunnel subprocess that exposes the local
-vectorAIz instance via a free *.trycloudflare.com public URL.
+AIM Data instance via a free *.trycloudflare.com public URL.
 
 No Cloudflare account required. URLs are random and temporary (change on restart).
 Only started when explicitly requested by the user (not at container startup).

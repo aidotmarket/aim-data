@@ -216,7 +216,7 @@ class NudgeDismissal(SQLModel, table=True):
     Per-user permanent nudge dismissals ("Don't show again").
     Unique on (user_id, trigger_type).
 
-    Tenant boundary: vectorAIz is single-tenant per instance.
+    Tenant boundary: AIM Data is single-tenant per instance.
     user_id is unique within the instance — no cross-tenant risk.
     If multi-tenant is ever added, add tenant_id column and
     update unique constraint to (tenant_id, user_id, trigger_type).

@@ -1,5 +1,5 @@
 """
-Listing Metadata Service for vectorAIz
+Listing Metadata Service for AIM Data
 =======================================
 BQ-085: Transform DuckDB enhanced_metadata + PII scan results into
 structured listing metadata that ai.market can ingest.
@@ -83,7 +83,7 @@ NAME_TAG_PATTERNS = {
 
 class ListingMetadataService:
     """
-    Generates marketplace-ready listing metadata from vectorAIz processing results.
+    Generates marketplace-ready listing metadata from AIM Data processing results.
     """
 
     def __init__(self):
