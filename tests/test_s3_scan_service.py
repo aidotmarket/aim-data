@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Optional
 from uuid import uuid4
@@ -16,10 +16,10 @@ from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
 from app.routers import s3_connections
+from app.services.s3_broker_client import S3BrokerError
 from app.services import fulfillment_service, s3_scan_service
 from app.services.fulfillment_service import FulfillmentService
 from app.services.s3_scan_service import S3ScanService
-from app.services.sts_broker import AssumedCredentials, STSAssumeError
 
 
 @pytest.fixture
@@ -62,28 +62,13 @@ class FakeBroker:
     def __init__(self, error: Optional[Exception] = None):
         self.error = error
         self.calls = []
+        self.pages = []
 
-    def assume_role(self, connection, purpose: str):
-        self.calls.append((connection.id, purpose))
+    def list_objects(self, **kwargs):
+        self.calls.append(kwargs)
         if self.error:
             raise self.error
-        return AssumedCredentials(
-            access_key_id="access-key",
-            secret_access_key="secret-key",
-            session_token="session-token",
-            expiration=datetime.now(timezone.utc) + timedelta(hours=1),
-            region=connection.region,
-        )
-
-
-class FakeS3Client:
-    def __init__(self, pages):
-        self.pages = pages
-        self.calls = []
-
-    def list_objects_v2(self, **kwargs):
-        self.calls.append(kwargs)
-        if "ContinuationToken" in kwargs:
+        if kwargs.get("continuation_token"):
             return self.pages[1]
         return self.pages[0]
 
@@ -116,40 +101,40 @@ def _add_connection(session_context, **overrides) -> S3Connection:
 
 def _page(*objects, truncated=False, token=None):
     response = {
-        "IsTruncated": truncated,
-        "Contents": list(objects),
+        "status": "listed",
+        "is_truncated": truncated,
+        "objects": list(objects),
     }
     if token:
-        response["NextContinuationToken"] = token
+        response["next_continuation_token"] = token
     return response
 
 
 def _object(key: str, size: int = 123):
     return {
-        "Key": key,
-        "Size": size,
-        "ETag": '"etag"',
-        "LastModified": datetime(2026, 5, 29, tzinfo=timezone.utc),
+        "key": key,
+        "size": size,
+        "etag": '"etag"',
+        "last_modified": datetime(2026, 5, 29, tzinfo=timezone.utc).isoformat(),
     }
 
 
 def test_scan_persists_one_row_per_object(session_context, monkeypatch):
     connection = _add_connection(session_context)
-    s3_client = FakeS3Client(
-        [
-            _page(_object("exports/a.csv"), truncated=True, token="next"),
-            _page(_object("exports/b.json", 456)),
-        ]
-    )
-    monkeypatch.setattr(s3_scan_service, "_boto3_client", lambda *_args, **_kwargs: s3_client)
+    broker = FakeBroker()
+    broker.pages = [
+        _page(_object("exports/a.csv"), truncated=True, token="next"),
+        _page(_object("exports/b.json", 456)),
+    ]
+    monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: pytest.fail("boto3 must not be used"))
 
-    scan_job = S3ScanService(FakeBroker()).scan_connection(connection.id)
+    scan_job = S3ScanService(broker).scan_connection(connection.id)
 
     assert scan_job.status == "completed"
     assert scan_job.objects_enumerated == 2
-    assert s3_client.calls[0]["Bucket"] == "seller-bucket"
-    assert s3_client.calls[0]["Prefix"] == "exports/"
-    assert s3_client.calls[1]["ContinuationToken"] == "next"
+    assert broker.calls[0]["bucket"] == "seller-bucket"
+    assert broker.calls[0]["prefix"] == "exports/"
+    assert broker.calls[1]["continuation_token"] == "next"
     with session_context() as session:
         objects = session.exec(select(S3ObjectMetadata).order_by(S3ObjectMetadata.object_key)).all()
         stored_connection = session.get(S3Connection, connection.id)
@@ -190,10 +175,10 @@ def test_rescan_is_idempotent_and_preserves_dataset_id(session_context, monkeypa
         )
         session.commit()
 
-    s3_client = FakeS3Client([_page(_object("exports/a.csv", 999))])
-    monkeypatch.setattr(s3_scan_service, "_boto3_client", lambda *_args, **_kwargs: s3_client)
+    broker = FakeBroker()
+    broker.pages = [_page(_object("exports/a.csv", 999))]
 
-    S3ScanService(FakeBroker()).scan_connection(connection.id)
+    S3ScanService(broker).scan_connection(connection.id)
 
     with session_context() as session:
         objects = session.exec(select(S3ObjectMetadata)).all()
@@ -203,10 +188,10 @@ def test_rescan_is_idempotent_and_preserves_dataset_id(session_context, monkeypa
     assert objects[0].size_bytes == 999
 
 
-def test_scan_sts_error_marks_failed_without_raw_aws_internals(session_context):
+def test_scan_broker_error_marks_failed_without_raw_aws_internals(session_context):
     connection = _add_connection(session_context)
     raw = "An error occurred (AccessDenied) when calling the AssumeRole operation"
-    broker = FakeBroker(STSAssumeError("Confirm the trust policy and ExternalId.", "AccessDenied"))
+    broker = FakeBroker(S3BrokerError("Confirm the trust policy and ExternalId."))
 
     scan_job = S3ScanService(broker).scan_connection(connection.id)
 

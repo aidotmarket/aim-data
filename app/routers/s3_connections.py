@@ -22,6 +22,7 @@ from app.models.dataset import DatasetRecord
 from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
+from app.services.s3_broker_client import S3BrokerClient, S3BrokerError
 from app.services.s3_scan_service import S3ScanService
 
 router = APIRouter()
@@ -281,12 +282,6 @@ def _create_dataset_for_object(metadata: S3ObjectMetadata, body: S3ObjectRegiste
     )
 
 
-def _boto3_client(service_name: str, **kwargs):
-    import boto3
-
-    return boto3.client(service_name, **kwargs)
-
-
 @router.get("/config", summary="Get S3 connection setup config")
 async def get_config(
     user: AuthenticatedUser = Depends(get_current_user),
@@ -299,6 +294,11 @@ async def create_connection(
     body: S3ConnectionCreate,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> S3ConnectionResponse:
+    try:
+        external_id = S3BrokerClient().get_external_id()
+    except S3BrokerError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     connection = S3Connection(
         id=str(uuid.uuid4()),
         owner_id=user.user_id,
@@ -306,7 +306,7 @@ async def create_connection(
         bucket=body.bucket,
         region=body.region,
         prefix=body.prefix or None,
-        external_id=str(uuid.uuid4()),
+        external_id=external_id,
         status="onboarding",
     )
     with get_session_context() as session:
@@ -366,26 +366,15 @@ async def verify_connection(
             raise HTTPException(status_code=400, detail="S3 connection role ARN is not configured")
 
         try:
-            sts_client = _boto3_client("sts", region_name=connection.region)
-            assumed = sts_client.assume_role(
-                RoleArn=connection.role_arn,
-                RoleSessionName="aim-data-verify",
-                ExternalId=connection.external_id,
+            result = S3BrokerClient().verify(
+                role_arn=connection.role_arn,
+                region=connection.region,
+                bucket=connection.bucket,
+                prefix=connection.prefix,
             )
-            credentials = assumed["Credentials"]
-            s3_client = _boto3_client(
-                "s3",
-                region_name=connection.region,
-                aws_access_key_id=credentials["AccessKeyId"],
-                aws_secret_access_key=credentials["SecretAccessKey"],
-                aws_session_token=credentials["SessionToken"],
-            )
-            s3_client.list_objects_v2(
-                Bucket=connection.bucket,
-                Prefix=connection.prefix or "",
-                MaxKeys=1,
-            )
-        except Exception as exc:
+            if result.get("status") != "verified":
+                raise S3BrokerError(str(result.get("error_message") or "S3 broker verification failed."))
+        except S3BrokerError as exc:
             connection.status = "error"
             connection.error_message = str(exc)
             connection.updated_at = datetime.now(timezone.utc)

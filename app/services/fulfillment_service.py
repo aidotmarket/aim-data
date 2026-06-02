@@ -42,8 +42,7 @@ from app.models.dataset import DatasetRecord
 from app.models.fulfillment import FulfillmentLog
 from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
-from app.services.s3_presign import generate_presigned_get
-from app.services.sts_broker import STSAssumeError, STSBroker, STSConnectionNotReady
+from app.services.s3_broker_client import S3BrokerClient, S3BrokerError, S3BrokerNotActivatedError
 from app.services.trust_channel_client import TrustChannelClient, get_trust_channel_client
 
 logger = logging.getLogger(__name__)
@@ -267,10 +266,7 @@ class FulfillmentService:
         log_entry.file_size_bytes = metadata.size_bytes
         self._save_log(log_entry)
 
-        purpose = transfer_id or f"order-{order_id}"
-        try:
-            creds = STSBroker().assume_role(connection, purpose=purpose)
-        except STSConnectionNotReady:
+        if connection.status not in {"configured", "verified"} or not connection.role_arn:
             await self._send_error(
                 transfer_id,
                 order_id,
@@ -284,29 +280,31 @@ class FulfillmentService:
                 error_message=f"S3 connection not ready: connection_id={connection.id}",
             )
             return
-        except STSAssumeError as e:
+
+        try:
+            presign = S3BrokerClient().presign_object(
+                role_arn=connection.role_arn,
+                region=connection.region,
+                bucket=connection.bucket,
+                object_key=metadata.object_key,
+            )
+            url = str(presign["url"])
+            expires_in = int(presign.get("expires_in") or PRESIGNED_URL_EXPIRES_IN)
+        except S3BrokerNotActivatedError as e:
             await self._send_error(
                 transfer_id,
                 order_id,
-                "S3_ASSUME_FAILED",
+                "S3_CONNECTION_NOT_READY",
                 "Unable to prepare S3 delivery",
             )
             self._update_log(
                 log_entry,
                 "failed",
-                error_code="S3_ASSUME_FAILED",
-                error_message=f"AWS error code: {e.aws_error_code or 'unknown'}",
+                error_code="S3_CONNECTION_NOT_READY",
+                error_message=str(e),
             )
             return
-
-        try:
-            url = generate_presigned_get(
-                creds,
-                connection.bucket,
-                metadata.object_key,
-                expires_in=PRESIGNED_URL_EXPIRES_IN,
-            )
-        except Exception as e:
+        except S3BrokerError as e:
             await self._send_error(
                 transfer_id,
                 order_id,
@@ -323,7 +321,7 @@ class FulfillmentService:
 
         url_params = {
             "url": url,
-            "expires_in": PRESIGNED_URL_EXPIRES_IN,
+            "expires_in": expires_in,
             "object_key": metadata.object_key,
             "content_type": metadata.content_type,
             "size_bytes": metadata.size_bytes,

@@ -17,7 +17,7 @@ import base64
 import hashlib
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -34,7 +34,7 @@ from app.services.fulfillment_service import (
     CHUNK_SIZE,
     FulfillmentService,
 )
-from app.services.sts_broker import AssumedCredentials, STSConnectionNotReady
+from app.services.s3_broker_client import S3BrokerNotActivatedError
 from app.services.trust_channel_client import TrustChannelClient
 
 
@@ -114,16 +114,6 @@ def _make_deliver_message(listing_id: str = "listing-abc-123") -> dict:
             "request_id": str(uuid.uuid4()),
         },
     }
-
-
-def _assumed_credentials() -> AssumedCredentials:
-    return AssumedCredentials(
-        access_key_id="ASIAIOSFODNN7EXAMPLE",
-        secret_access_key="secret-access-key",
-        session_token="session-token",
-        expiration=datetime.now(timezone.utc) + timedelta(hours=1),
-        region="us-east-1",
-    )
 
 
 def _create_s3_backed_dataset(
@@ -639,11 +629,13 @@ class TestS3PresignedUrlFulfillment:
         _create_s3_backed_dataset(listing_id, dataset_id="s3-url")
         message = _make_deliver_message(listing_id)
 
-        with patch("app.services.fulfillment_service.STSBroker") as mock_broker_cls, \
-             patch("app.services.fulfillment_service.generate_presigned_get", return_value="https://seller-bucket.s3.amazonaws.com/exports/object.csv?sig=redacted"), \
+        with patch("app.services.fulfillment_service.S3BrokerClient") as mock_broker_cls, \
              patch.object(service, "_stream_chunks", new_callable=AsyncMock) as mock_stream:
             mock_broker = mock_broker_cls.return_value
-            mock_broker.assume_role.return_value = _assumed_credentials()
+            mock_broker.presign_object.return_value = {
+                "url": "https://seller-bucket.s3.amazonaws.com/exports/object.csv?sig=redacted",
+                "expires_in": 300,
+            }
 
             await service._handle_deliver(message)
 
@@ -656,7 +648,7 @@ class TestS3PresignedUrlFulfillment:
         transfer_id = url_msg["transfer_id"]
         assert url_msg["parameters"] == {
             "url": "https://seller-bucket.s3.amazonaws.com/exports/object.csv?sig=redacted",
-            "expires_in": 900,
+            "expires_in": 300,
             "object_key": "exports/object.csv",
             "content_type": "text/csv",
             "size_bytes": 12345,
@@ -668,8 +660,12 @@ class TestS3PresignedUrlFulfillment:
         complete_msg = calls[1][0][0]
         assert complete_msg["parameters"]["status"] == "fulfilled"
         assert complete_msg["parameters"]["delivery_mode"] == "presigned_url"
-        mock_broker.assume_role.assert_called_once()
-        assert mock_broker.assume_role.call_args.kwargs["purpose"] == transfer_id
+        mock_broker.presign_object.assert_called_once_with(
+            role_arn="arn:aws:iam::210987654321:role/aim-data",
+            region="us-east-1",
+            bucket="seller-bucket",
+            object_key="exports/object.csv",
+        )
 
         with get_session_context() as session:
             log = session.exec(
@@ -686,7 +682,7 @@ class TestS3PresignedUrlFulfillment:
         message = _make_deliver_message("listing-abc-123")
 
         with patch("app.services.fulfillment_service.settings") as mock_settings, \
-             patch("app.services.fulfillment_service.STSBroker") as mock_broker_cls:
+             patch("app.services.fulfillment_service.S3BrokerClient") as mock_broker_cls:
             mock_settings.upload_directory = str(tmp_data_dir / "uploads")
             mock_settings.processed_directory = str(tmp_data_dir / "processed")
 
@@ -707,9 +703,9 @@ class TestS3PresignedUrlFulfillment:
         _create_s3_backed_dataset(listing_id, dataset_id="s3-not-ready", status="onboarding")
         message = _make_deliver_message(listing_id)
 
-        with patch("app.services.fulfillment_service.STSBroker") as mock_broker_cls, \
+        with patch("app.services.fulfillment_service.S3BrokerClient") as mock_broker_cls, \
              patch.object(service, "_stream_chunks", new_callable=AsyncMock) as mock_stream:
-            mock_broker_cls.return_value.assume_role.side_effect = STSConnectionNotReady("not ready")
+            mock_broker_cls.return_value.presign_object.side_effect = S3BrokerNotActivatedError("not activated")
 
             await service._handle_deliver(message)
 
@@ -727,6 +723,36 @@ class TestS3PresignedUrlFulfillment:
             assert log is not None
             assert log.status == "failed"
             assert log.error_code == "S3_CONNECTION_NOT_READY"
+
+    @pytest.mark.asyncio
+    async def test_s3_presign_fails_closed_when_not_activated(
+        self, service, mock_client
+    ):
+        listing_id = "listing-s3-not-activated"
+        _create_s3_backed_dataset(listing_id, dataset_id="s3-not-activated")
+        message = _make_deliver_message(listing_id)
+
+        with patch("app.services.fulfillment_service.S3BrokerClient") as mock_broker_cls, \
+             patch.object(service, "_stream_chunks", new_callable=AsyncMock) as mock_stream:
+            mock_broker_cls.return_value.presign_object.side_effect = S3BrokerNotActivatedError("not activated")
+
+            await service._handle_deliver(message)
+
+        calls = mock_client.send_action.call_args_list
+        assert len(calls) == 1
+        error_msg = calls[0][0][0]
+        assert error_msg["action"] == "vai.fulfillment.error"
+        assert error_msg["parameters"]["error_code"] == "S3_CONNECTION_NOT_READY"
+        mock_stream.assert_not_called()
+
+        with get_session_context() as session:
+            log = session.exec(
+                select(FulfillmentLog).where(FulfillmentLog.order_id == message["parameters"]["order_id"])
+            ).first()
+            assert log is not None
+            assert log.status == "failed"
+            assert log.error_code == "S3_CONNECTION_NOT_READY"
+            assert "not activated" in log.error_message
 
 
 # ===========================================================================
