@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { useLocation } from "react-router-dom";
 import {
   HardDrive,
   Eye,
@@ -68,21 +67,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBrand } from "@/contexts/BrandContext";
 import { useMode } from "@/contexts/ModeContext";
 import ConnectivitySettings from "@/components/ConnectivitySettings";
-import DataSourceSettings from "@/components/DataSourceSettings";
 
 // Empty string = same-origin (relative URLs). Works on Railway, Docker, etc.
 const DEFAULT_API_URL = '';
 
 const SettingsPage = () => {
-  const location = useLocation();
-  useEffect(() => {
-    if (location.hash === "#data-sources") {
-      const t = setTimeout(() => {
-        document.getElementById("data-sources")?.scrollIntoView({ behavior: "smooth" });
-      }, 120);
-      return () => clearTimeout(t);
-    }
-  }, [location.hash]);
   const brand = useBrand();
   const defaultDataDirectory = `~/${brand.productName.toLowerCase().replace(/\s+/g, "-")}/data`;
   const manualUpdateCommands = `cd your-${brand.installDirectoryName}-directory
@@ -614,11 +603,6 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
           </AlertDialog>
         </CardContent>
       </Card>
-
-      {/* Section: Data Sources */}
-      <div id="data-sources">
-        <DataSourceSettings />
-      </div>
 
       {/* Section 6: Software Updates & About */}
       <Card className="bg-card border-border">
