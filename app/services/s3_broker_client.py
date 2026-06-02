@@ -40,7 +40,7 @@ class S3BrokerClient:
         self._timeout = timeout
 
     def get_external_id(self) -> str:
-        data = self._request("GET", "/api/v1/s3-connections/external-id")
+        data = self._request("GET", "external-id")
         external_id = data.get("external_id")
         if not external_id:
             raise S3BrokerError("S3 broker did not return an ExternalId.")
@@ -49,7 +49,7 @@ class S3BrokerClient:
     def verify(self, *, role_arn: str, region: str, bucket: str, prefix: Optional[str] = None) -> dict[str, Any]:
         return self._request(
             "POST",
-            "/api/v1/s3-connections/verify",
+            "verify",
             json={
                 "role_arn": role_arn,
                 "region": region,
@@ -70,7 +70,7 @@ class S3BrokerClient:
     ) -> dict[str, Any]:
         return self._request(
             "POST",
-            "/api/v1/s3-connections/list-objects",
+            "list-objects",
             json={
                 "role_arn": role_arn,
                 "region": region,
@@ -84,7 +84,7 @@ class S3BrokerClient:
     def presign_object(self, *, role_arn: str, region: str, bucket: str, object_key: str) -> dict[str, Any]:
         data = self._request(
             "POST",
-            "/api/v1/s3-connections/presign-object",
+            "presign-object",
             json={
                 "role_arn": role_arn,
                 "region": region,
@@ -109,7 +109,12 @@ class S3BrokerClient:
 
     def _request(self, method: str, path: str, *, json: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         credentials = self._credentials()
-        url = f"{self._base_url}{path}"
+        # Broker routes are mounted under /api/v1/serials/{serial}/s3-connections/<op>.
+        # `path` is the operation suffix (e.g. "verify"); serial goes in the URL path.
+        url = (
+            f"{self._base_url}/api/v1/serials/{credentials.serial}"
+            f"/s3-connections/{path.lstrip('/')}"
+        )
         params = {"serial": credentials.serial}
         headers = {"Authorization": f"Bearer {credentials.install_token}"}
         try:
