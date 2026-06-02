@@ -26,33 +26,6 @@ export type BrandConfig = {
   prodApiUrl: string;
 };
 
-export const VECTORAIZ_BRAND: BrandConfig = {
-  name: "vectorAIz",
-  productName: "vectorAIz",
-  shortName: "V",
-  tagline: "Your local data processing and listing management tool",
-  logoPath: "/vectoraiz-logo.jpg",
-  logoSmPath: "/vectoraiz-logo-sm.png",
-  metaTitle: "vectorAIz — Data Processing & Analysis",
-  metaDescription: "vectorAIz - Your local data processing and listing management tool",
-  metaAuthor: "vectorAIz",
-  ogTitle: "vectorAIz",
-  twitterSite: "@vectorAIz",
-  sidebarLogoAlt: "vectorAIz",
-  welcomeTitle: "Welcome to vectorAIz",
-  settingsTitle: "vectorAIz",
-  externalUrl: "https://vectoraiz.com",
-  installDirectoryName: "vectoraiz",
-  dockerComposeServiceName: "vectoraiz",
-  documentationUrl: "https://github.com/aidotmarket/vectoraiz",
-  githubUrl: "https://github.com/aidotmarket/vectoraiz",
-  issueTrackerUrl: "https://github.com/aidotmarket/vectoraiz/issues",
-  importDir: "~/vectoraiz-imports/",
-  importDirEnvVar: "VECTORAIZ_IMPORT_DIR",
-  docsConnectedModeUrl: "https://ai.market/docs/vectoraiz/connected-mode",
-  devApiUrl: "https://vectoraiz-backend-production.up.railway.app",
-  prodApiUrl: "",
-};
 
 export const AIM_DATA_BRAND: BrandConfig = {
   name: "AIM Data",
@@ -82,30 +55,8 @@ export const AIM_DATA_BRAND: BrandConfig = {
   prodApiUrl: "",
 };
 
-export const AIM_CHANNEL_BRAND: BrandConfig = AIM_DATA_BRAND;
-
-function getRuntimeBrandName(): string {
-  const envBrand = import.meta.env.VITE_BRAND?.toLowerCase();
-  if (
-    envBrand === "aim-data" ||
-    envBrand === "aim_data" ||
-    envBrand === "aim-channel" ||
-    envBrand === "aim_channel" ||
-    envBrand === "aim"
-  ) {
-    return "aim-data";
-  }
-  if (envBrand === "vectoraiz") {
-    return "vectoraiz";
-  }
-
-  if (typeof window !== "undefined" && window.location.hostname.includes("ai.market")) {
-    return "aim-data";
-  }
-
-  return "aim-data";
-}
 
 export function getActiveBrand(): BrandConfig {
-  return getRuntimeBrandName() === "aim-data" ? AIM_DATA_BRAND : VECTORAIZ_BRAND;
+  // AIM Data is its own product; no runtime brand switch (de-skinned S751)
+  return AIM_DATA_BRAND;
 }
