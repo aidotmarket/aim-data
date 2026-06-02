@@ -4,9 +4,7 @@ from fnmatch import fnmatchcase
 from typing import Optional
 from uuid import uuid4
 
-import boto3
 import pytest
-from botocore.stub import Stubber
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.pool import StaticPool
@@ -19,10 +17,33 @@ from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata  # noqa: F401
 from app.models.s3_scan_job import S3ScanJob  # noqa: F401
 from app.routers import s3_connections
+from app.services.s3_broker_client import S3BrokerError
 from app.services import s3_scan_service
 
 USER_A = AuthenticatedUser(user_id="user-a", key_id="key-a", scopes=["read", "write"], valid=True)
 USER_B = AuthenticatedUser(user_id="user-b", key_id="key-b", scopes=["read", "write"], valid=True)
+
+
+class FakeS3BrokerClient:
+    def __init__(self):
+        self.external_id = "broker-derived-external-id"
+        self.verify_result = {"status": "verified", "verified_at": datetime.now(timezone.utc).isoformat()}
+        self.verify_error: Optional[Exception] = None
+        self.external_id_error: Optional[Exception] = None
+        self.verify_calls = []
+        self.external_id_calls = 0
+
+    def get_external_id(self):
+        self.external_id_calls += 1
+        if self.external_id_error:
+            raise self.external_id_error
+        return self.external_id
+
+    def verify(self, **kwargs):
+        self.verify_calls.append(kwargs)
+        if self.verify_error:
+            raise self.verify_error
+        return self.verify_result
 
 
 @pytest.fixture
@@ -54,8 +75,12 @@ def client(s3_engine, monkeypatch):
     monkeypatch.setattr(s3_scan_service, "get_session_context", _session_context)
     monkeypatch.setattr(s3_connections.settings, "ai_market_aws_account_id", "123456789012")
     monkeypatch.setattr(s3_connections.settings, "ai_market_assume_role_principal_arn", None)
+    broker = FakeS3BrokerClient()
+    monkeypatch.setattr(s3_connections, "S3BrokerClient", lambda: broker)
     app.dependency_overrides[get_current_user] = lambda: USER_A
-    yield TestClient(app)
+    test_client = TestClient(app)
+    test_client.s3_broker = broker
+    yield test_client
     app.dependency_overrides.pop(get_current_user, None)
 
 
@@ -87,7 +112,7 @@ def _configured_row(
         region="us-east-1",
         prefix=prefix,
         role_arn="arn:aws:iam::210987654321:role/aim-data",
-        external_id=str(uuid4()),
+        external_id="broker-derived-external-id",
         status="configured",
     )
     with Session(s3_engine) as session:
@@ -98,74 +123,12 @@ def _configured_row(
     return connection
 
 
-def _stubbed_clients(connection: S3Connection, *, s3_error: bool = False):
-    sts_client = boto3.client(
-        "sts",
-        region_name=connection.region,
-        aws_access_key_id="test",
-        aws_secret_access_key="test",
-        aws_session_token="test",
-    )
-    s3_client = boto3.client(
-        "s3",
-        region_name=connection.region,
-        aws_access_key_id="test",
-        aws_secret_access_key="test",
-        aws_session_token="test",
-    )
-    sts_stubber = Stubber(sts_client)
-    s3_stubber = Stubber(s3_client)
-    sts_stubber.add_response(
-        "assume_role",
-        {
-            "Credentials": {
-                "AccessKeyId": "ASIAIOSFODNN7EXAMPLE",
-                "SecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-                "SessionToken": "session-token",
-                "Expiration": datetime.now(timezone.utc),
-            },
-            "AssumedRoleUser": {
-                "AssumedRoleId": "AROA123EXAMPLE:aim-data-verify",
-                "Arn": connection.role_arn,
-            },
-        },
-        {
-            "RoleArn": connection.role_arn,
-            "RoleSessionName": "aim-data-verify",
-            "ExternalId": connection.external_id,
-        },
-    )
-    if s3_error:
-        s3_stubber.add_client_error(
-            "list_objects_v2",
-            service_error_code="AccessDenied",
-            service_message="Access denied",
-            expected_params={
-                "Bucket": connection.bucket,
-                "Prefix": connection.prefix or "",
-                "MaxKeys": 1,
-            },
-        )
-    else:
-        s3_stubber.add_response(
-            "list_objects_v2",
-            {"IsTruncated": False, "KeyCount": 1, "Contents": [{"Key": "exports/file.csv"}]},
-            {
-                "Bucket": connection.bucket,
-                "Prefix": connection.prefix or "",
-                "MaxKeys": 1,
-            },
-        )
-    sts_stubber.activate()
-    s3_stubber.activate()
-    return sts_client, s3_client, sts_stubber, s3_stubber
-
-
 def test_post_creates_row_and_returns_substituted_policies(client):
     data = _create_connection(client)
 
-    assert data["external_id"]
+    assert data["external_id"] == "broker-derived-external-id"
     assert data["status"] == "onboarding"
+    assert client.s3_broker.external_id_calls == 1
     assert data["trust_policy"]["Statement"][0]["Principal"]["AWS"] == "arn:aws:iam::123456789012:root"
     assert data["trust_policy"]["Statement"][0]["Condition"]["StringEquals"]["sts:ExternalId"] == data["external_id"]
     assert data["permission_policy"]["Statement"][0]["Resource"] == "arn:aws:s3:::seller-bucket"
@@ -237,6 +200,23 @@ def test_post_stamps_owner_id(client, s3_engine):
     with Session(s3_engine) as session:
         stored = session.get(S3Connection, data["id"])
         assert stored.owner_id == "user-a"
+        assert stored.external_id == "broker-derived-external-id"
+
+
+def test_post_fails_closed_when_broker_external_id_unavailable(client):
+    client.s3_broker.external_id_error = S3BrokerError("AIM Data is not connected/activated.")
+
+    response = client.post(
+        "/api/s3-connections/",
+        json={
+            "name": "Seller bucket",
+            "bucket": "seller-bucket",
+            "region": "us-east-1",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "not connected/activated" in response.json()["detail"]
 
 
 def test_get_lists_only_caller_owned_rows(client, s3_engine):
@@ -283,74 +263,47 @@ def test_put_role_arn_rejects_malformed_and_accepts_valid(client):
 
 def test_verify_success_sets_verified_and_last_scanned_at(client, s3_engine, monkeypatch):
     connection = _configured_row(s3_engine)
-    sts_client, s3_client, sts_stubber, s3_stubber = _stubbed_clients(connection)
-
-    monkeypatch.setattr(
-        s3_connections,
-        "_boto3_client",
-        lambda service_name, **_kwargs: sts_client if service_name == "sts" else s3_client,
-    )
+    monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: pytest.fail("boto3 must not be used"))
 
     response = client.post(f"/api/s3-connections/{connection.id}/verify")
 
     assert response.status_code == 200
     assert response.json()["status"] == "verified"
     assert response.json()["verified_at"]
-    sts_stubber.assert_no_pending_responses()
-    s3_stubber.assert_no_pending_responses()
+    assert client.s3_broker.verify_calls == [
+        {
+            "role_arn": connection.role_arn,
+            "region": connection.region,
+            "bucket": connection.bucket,
+            "prefix": connection.prefix,
+        }
+    ]
     with Session(s3_engine) as session:
         stored = session.get(S3Connection, connection.id)
         assert stored.status == "verified"
         assert stored.last_scanned_at is not None
 
 
-def test_verify_sts_failure_sets_error(client, s3_engine, monkeypatch):
+def test_verify_broker_failure_sets_error(client, s3_engine):
     connection = _configured_row(s3_engine)
-    sts_client = boto3.client(
-        "sts",
-        region_name=connection.region,
-        aws_access_key_id="test",
-        aws_secret_access_key="test",
-        aws_session_token="test",
-    )
-    sts_stubber = Stubber(sts_client)
-    sts_stubber.add_client_error(
-        "assume_role",
-        service_error_code="AccessDenied",
-        service_message="Cannot assume role",
-        expected_params={
-            "RoleArn": connection.role_arn,
-            "RoleSessionName": "aim-data-verify",
-            "ExternalId": connection.external_id,
-        },
-    )
-    sts_stubber.activate()
-    monkeypatch.setattr(s3_connections, "_boto3_client", lambda *_args, **_kwargs: sts_client)
+    client.s3_broker.verify_error = S3BrokerError("S3 broker authentication failed.")
 
     response = client.post(f"/api/s3-connections/{connection.id}/verify")
 
     assert response.status_code == 200
     assert response.json()["status"] == "error"
-    assert "Cannot assume role" in response.json()["error_message"]
-    sts_stubber.assert_no_pending_responses()
+    assert "S3 broker authentication failed" in response.json()["error_message"]
 
 
-def test_verify_s3_failure_after_sts_success_sets_error(client, s3_engine, monkeypatch):
+def test_verify_broker_error_result_sets_error(client, s3_engine):
     connection = _configured_row(s3_engine)
-    sts_client, s3_client, sts_stubber, s3_stubber = _stubbed_clients(connection, s3_error=True)
-    monkeypatch.setattr(
-        s3_connections,
-        "_boto3_client",
-        lambda service_name, **_kwargs: sts_client if service_name == "sts" else s3_client,
-    )
+    client.s3_broker.verify_result = {"status": "error", "error_message": "s3:AccessDenied"}
 
     response = client.post(f"/api/s3-connections/{connection.id}/verify")
 
     assert response.status_code == 200
     assert response.json()["status"] == "error"
-    assert "Access denied" in response.json()["error_message"]
-    sts_stubber.assert_no_pending_responses()
-    s3_stubber.assert_no_pending_responses()
+    assert "s3:AccessDenied" in response.json()["error_message"]
 
 
 def test_user_cannot_get_scan_or_list_objects_on_foreign_connection(client, s3_engine, monkeypatch):
