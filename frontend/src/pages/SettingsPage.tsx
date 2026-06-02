@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import {
   HardDrive,
   Eye,
@@ -73,6 +74,15 @@ import DataSourceSettings from "@/components/DataSourceSettings";
 const DEFAULT_API_URL = '';
 
 const SettingsPage = () => {
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === "#data-sources") {
+      const t = setTimeout(() => {
+        document.getElementById("data-sources")?.scrollIntoView({ behavior: "smooth" });
+      }, 120);
+      return () => clearTimeout(t);
+    }
+  }, [location.hash]);
   const brand = useBrand();
   const defaultDataDirectory = `~/${brand.productName.toLowerCase().replace(/\s+/g, "-")}/data`;
   const manualUpdateCommands = `cd your-${brand.installDirectoryName}-directory

@@ -8,6 +8,7 @@ import {
   Loader2,
   AlertCircle,
   Tag,
+  Cloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,6 +27,13 @@ import { useBrand } from "@/contexts/BrandContext";
 import { useToast } from "@/hooks/use-toast";
 import { rawFilesApi, type RawFile } from "@/lib/api";
 import RawPublishModal from "@/components/RawPublishModal";
+import { useNavigate } from "react-router-dom";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const formatBytes = (bytes: number): string => {
   if (!bytes) return "0 B";
@@ -72,6 +80,7 @@ const RawListingsPage = () => {
   const brand = useBrand();
   const { openModal, setOnSuccess } = useUpload();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [rawFiles, setRawFiles] = useState<RawFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,10 +131,24 @@ const RawListingsPage = () => {
             <RefreshCw className="w-4 h-4" />
             Refresh
           </Button>
-          <Button className="gap-2" onClick={() => openModal()}>
-            <Upload className="w-4 h-4" />
-            Upload file
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="gap-2">
+                <Upload className="w-4 h-4" />
+                Upload file
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => openModal()}>
+                <Upload className="w-4 h-4 mr-2" />
+                From your computer
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/settings#data-sources")}>
+                <Cloud className="w-4 h-4 mr-2" />
+                From cloud storage (S3)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -163,10 +186,24 @@ const RawListingsPage = () => {
                   your data, your format.
                 </p>
               </div>
-              <Button variant="secondary" className="gap-2 mt-2" onClick={() => openModal()}>
-                <Upload className="w-4 h-4" />
-                Upload your first file
-              </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="secondary" className="gap-2 mt-2">
+                  <Upload className="w-4 h-4" />
+                  Upload your first file
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => openModal()}>
+                <Upload className="w-4 h-4 mr-2" />
+                From your computer
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/settings#data-sources")}>
+                <Cloud className="w-4 h-4 mr-2" />
+                From cloud storage (S3)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
             </div>
           </CardContent>
         </Card>
