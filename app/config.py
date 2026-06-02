@@ -17,7 +17,7 @@ import os
 import re
 from pydantic_settings import BaseSettings
 from pydantic import AliasChoices, Field, field_validator
-from typing import List, Optional, Literal
+from typing import List, Optional
 from cryptography.fernet import Fernet
 import psutil
 
@@ -87,6 +87,7 @@ class Settings(BaseSettings):
 
     app_name: str = Field(default="AIM Data", validation_alias=_env_alias("app_name"))
     debug: bool = Field(default=False, validation_alias=_env_alias("debug"))  # S100: Default OFF for production safety
+    mode: str = Field(default="connected", validation_alias=_env_alias("mode"))
 
     # BQ-127: Local auth secrets (C1 — separate from SECRET_KEY)
     apikey_hmac_secret: Optional[str] = Field(
@@ -178,10 +179,6 @@ class Settings(BaseSettings):
     raw_file_import_directory: str = Field(default="/data/import", validation_alias=_env_alias("raw_file_import_directory"))
     raw_file_upload_max_size_mb: int = Field(default=500, validation_alias=_env_alias("raw_file_upload_max_size_mb"))
     
-    # Qdrant settings
-    qdrant_host: str = Field(default="qdrant", validation_alias=_env_alias("qdrant_host"))
-    qdrant_port: int = Field(default=6333, validation_alias=_env_alias("qdrant_port"))
-    
     # Document processing (optional premium)
     unstructured_api_key: Optional[str] = Field(default=None, validation_alias=_env_alias("unstructured_api_key"))
 
@@ -216,7 +213,7 @@ class Settings(BaseSettings):
     large_file_threshold_mb: int = Field(default=50, validation_alias=_env_alias("large_file_threshold_mb"))             # Files above this use streaming path
     fallback_max_size_mb: int = Field(default=200, validation_alias=_env_alias("fallback_max_size_mb"))              # Max file size (MB) for in-memory fallback on streaming failure
     process_worker_memory_limit_mb: int = Field(default=_DETECTED_WORKER_MEM, validation_alias=_env_alias("process_worker_memory_limit_mb"))  # Per-worker memory cap (auto-detected)
-    process_worker_timeout_s: int = Field(default=300, validation_alias=_env_alias("process_worker_timeout_s"))          # 5 min per file (indexing path doubles to 10 min)
+    process_worker_timeout_s: int = Field(default=300, validation_alias=_env_alias("process_worker_timeout_s"))          # 5 min per file
     process_worker_grace_period_s: int = Field(default=60, validation_alias=_env_alias("process_worker_grace_period_s"))      # Seconds for checkpoint flush after SIGTERM
     process_worker_max_concurrent: int = Field(default=_DETECTED_CPU_WORKERS, validation_alias=_env_alias("process_worker_max_concurrent"))  # Max parallel workers (auto-detected)
     duckdb_memory_limit_mb: int = Field(default=_DETECTED_DUCKDB_MEM, validation_alias=_env_alias("duckdb_memory_limit_mb"))  # DuckDB in-memory budget (auto-detected)
@@ -241,12 +238,6 @@ class Settings(BaseSettings):
     )
     serial_data_dir: str = Field(default="/data", validation_alias=_env_alias("serial_data_dir"))  # Directory for serial.json + pending_usage.jsonl
 
-    # BQ-VZ-HYBRID-SEARCH Phase 1A: Hybrid search pipeline config
-    hybrid_search_mode: Literal["hybrid", "dense_only"] = Field(default="hybrid", validation_alias=_env_alias("hybrid_search_mode"))
-    hybrid_rrf_k: int = Field(default=60, validation_alias=_env_alias("hybrid_rrf_k"))
-    reranker_enabled: bool = Field(default=True, validation_alias=_env_alias("reranker_enabled"))
-    reranker_top_k: int = Field(default=30, validation_alias=_env_alias("reranker_top_k"))
-    reranker_timeout_ms: int = Field(default=200, validation_alias=_env_alias("reranker_timeout_ms"))
     fts_enabled: bool = Field(default=True, validation_alias=_env_alias("fts_enabled"))
 
     # CORS

@@ -275,7 +275,7 @@ def _create_dataset_for_object(metadata: S3ObjectMetadata, body: S3ObjectRegiste
         storage_filename=metadata.object_key,
         file_type=_dataset_file_type(metadata.object_key),
         file_size_bytes=metadata.size_bytes,
-        status="s3_linked",
+        status="preview_ready",
         listing_id=body.listing_id,
         created_at=now,
         updated_at=now,

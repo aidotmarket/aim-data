@@ -191,7 +191,6 @@ class TestGenericRest:
         config = result["config"]
         endpoints = config["endpoints"]
         assert "list_datasets" in endpoints
-        assert "search" in endpoints
         assert "sql" in endpoints
         assert "schema" in endpoints
 
@@ -257,7 +256,6 @@ class TestGenericLLM:
         )
         prompt = result["config"]["system_prompt"]
         assert "/datasets" in prompt
-        assert "/search" in prompt
         assert "/sql" in prompt
         assert "/schema" in prompt
 

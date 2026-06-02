@@ -105,9 +105,7 @@ class TestDatasetsEndpoint:
         settings.connectivity_enabled = True
 
     def test_list_datasets_authenticated(self, client, valid_token_header):
-        with patch("app.services.qdrant_service.get_qdrant_service") as mock_qdrant:
-            mock_qdrant.return_value.list_collections.return_value = []
-            response = client.get("/api/v1/ext/datasets", headers=valid_token_header)
+        response = client.get("/api/v1/ext/datasets", headers=valid_token_header)
         assert response.status_code == 200
         data = response.json()
         assert "datasets" in data
@@ -181,12 +179,12 @@ class TestSQLEndpoint:
 # ---------------------------------------------------------------------------
 
 class TestSearchEndpoint:
-    def test_search_missing_auth(self, client):
+    def test_search_endpoint_removed(self, client):
         response = client.post(
             "/api/v1/ext/search",
             json={"query": "test query"},
         )
-        assert response.status_code == 401
+        assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------

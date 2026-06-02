@@ -66,14 +66,46 @@ interface VerifyResult {
 }
 
 const REGIONS = [
+  // US
   "us-east-1",
   "us-east-2",
   "us-west-1",
   "us-west-2",
+  // Canada
+  "ca-central-1",
+  "ca-west-1",
+  // South America
+  "sa-east-1",
+  // Europe
   "eu-west-1",
+  "eu-west-2",
+  "eu-west-3",
   "eu-central-1",
-  "ap-southeast-1",
+  "eu-central-2",
+  "eu-north-1",
+  "eu-south-1",
+  "eu-south-2",
+  // Middle East / Israel
+  "me-south-1",
+  "me-central-1",
+  "il-central-1",
+  // Africa
+  "af-south-1",
+  // Asia Pacific
+  "ap-east-1",
+  "ap-south-1",
+  "ap-south-2",
   "ap-northeast-1",
+  "ap-northeast-2",
+  "ap-northeast-3",
+  "ap-southeast-1",
+  "ap-southeast-2",
+  "ap-southeast-3",
+  "ap-southeast-4",
+  "ap-southeast-5",
+  "ap-southeast-7",
+  // Mexico
+  "mx-central-1",
 ];
 
 function apiHeaders(): Record<string, string> {
@@ -284,7 +316,6 @@ export default function DataSourceSettings() {
   };
 
   const accountBlock = awsAccountId || "000000000000";
-  const trustPolicy = current?.trust_policy ? JSON.stringify(current.trust_policy, null, 2) : "";
   const permissionPolicy = current?.permission_policy ? JSON.stringify(current.permission_policy, null, 2) : "";
 
   return (
@@ -436,13 +467,14 @@ export default function DataSourceSettings() {
           {step === 2 && current && (
             <div className="space-y-4">
               <ol className="list-decimal space-y-2 pl-5 text-sm text-foreground">
-                <li>In AWS Console &gt; IAM &gt; Roles &gt; Create role &gt; AWS account &gt; Another AWS account. Paste this account ID and the external ID below.</li>
-                <li>Copy this trust policy and paste it as the role&apos;s trust policy:</li>
-                <li>Attach this as an inline permission policy on the role:</li>
+                <li>In AWS Console &gt; IAM &gt; Roles &gt; Create role. Select &quot;AWS account&quot;, then &quot;Another AWS account&quot;, and paste the Account ID below.</li>
+                <li>Under Options, check &quot;Require external ID&quot;. The External ID field then appears; paste the External ID below into it. Leave &quot;Require MFA&quot; unchecked, then click Next. (Entering the account ID and external ID builds the trust relationship for you — there is no trust policy to paste.)</li>
+                <li>On the &quot;Add permissions&quot; step there is no box to paste a policy. Just click Next, give the role a name, and click Create role.</li>
+                <li>Open the role you just created, go to its Permissions tab, then Add permissions &gt; Create inline policy. Then select the JSON button. Clear the existing text and replace it with the Permission policy below. Give the policy a name, then save it.</li>
+                <li>Copy the new role&apos;s ARN from the top of the role page. You&apos;ll enter it on the next step.</li>
               </ol>
               <PolicyBlock label="Account ID" value={accountBlock} />
               <PolicyBlock label="External ID" value={current.external_id || ""} />
-              <PolicyBlock label="Trust policy" value={trustPolicy} />
               <PolicyBlock label="Permission policy" value={permissionPolicy} />
             </div>
           )}

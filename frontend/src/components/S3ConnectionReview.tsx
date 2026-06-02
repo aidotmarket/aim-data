@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle, ChevronLeft, ChevronRight, FileSearch, Loader2, Play, RefreshCw } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -80,17 +79,6 @@ function formatBytes(value: number) {
   return `${(value / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
-function registeredBadge(object: S3ObjectMetadata) {
-  if (object.dataset_id) {
-    return (
-      <Badge className="bg-[hsl(var(--haven-success))]/15 text-[hsl(var(--haven-success))] hover:bg-[hsl(var(--haven-success))]/20">
-        Registered
-      </Badge>
-    );
-  }
-  return <Badge variant="secondary">New</Badge>;
-}
-
 function scanFailed(status?: string) {
   return status === "failed" || status === "error" || status === "cancelled";
 }
@@ -115,7 +103,7 @@ export function S3ConnectionReview({
   const [registeringIds, setRegisteringIds] = useState<Set<string>>(new Set());
 
   const scanInProgress = Boolean(scanJob && !TERMINAL_SCAN_STATUSES.has(scanJob.status));
-  const selectableObjects = useMemo(() => objects.filter((object) => !object.dataset_id), [objects]);
+  const selectableObjects = useMemo(() => objects, [objects]);
   const allPageSelectableSelected =
     selectableObjects.length > 0 && selectableObjects.every((object) => selectedIds.has(object.id));
 
@@ -267,7 +255,7 @@ export function S3ConnectionReview({
   const listSingleObject = async (object: S3ObjectMetadata) => {
     const datasetId = await listObject(object);
     if (datasetId) {
-      navigate(`/datasets/${datasetId}`);
+      navigate(`/datasets/${datasetId}`, { state: { from: "/list-data" } });
     }
   };
 
@@ -386,26 +374,24 @@ export function S3ConnectionReview({
               <TableHead>Object</TableHead>
               <TableHead className="w-28">Size</TableHead>
               <TableHead className="w-48">Content type</TableHead>
-              <TableHead className="w-32">Status</TableHead>
               <TableHead className="w-36 text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {objectsLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-20 text-center">
+                <TableCell colSpan={5} className="h-20 text-center">
                   <Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" />
                 </TableCell>
               </TableRow>
             ) : objects.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-20 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={5} className="h-20 text-center text-sm text-muted-foreground">
                   {scanInProgress ? "Waiting for scanned objects." : "No scanned objects found."}
                 </TableCell>
               </TableRow>
             ) : (
               objects.map((object) => {
-                const registered = Boolean(object.dataset_id);
                 const registering = registeringIds.has(object.id);
                 return (
                   <TableRow key={object.id} className="border-border">
@@ -413,7 +399,7 @@ export function S3ConnectionReview({
                       <Checkbox
                         aria-label={`Select ${object.object_key}`}
                         checked={selectedIds.has(object.id)}
-                        disabled={registered || registering}
+                        disabled={registering}
                         onCheckedChange={() => toggleObject(object.id)}
                       />
                     </TableCell>
@@ -424,7 +410,6 @@ export function S3ConnectionReview({
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{formatBytes(object.size_bytes)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{object.content_type}</TableCell>
-                    <TableCell>{registeredBadge(object)}</TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="outline"

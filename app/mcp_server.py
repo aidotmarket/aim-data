@@ -2,7 +2,7 @@
 MCP Server — Standalone stdio server for external LLM connectivity.
 
 Invocation:
-    docker exec -i aim-data-app python -m app.mcp_server --token vzmcp_...
+    docker exec -i vectoraiz python -m app.mcp_server --token vzmcp_...
 
 Uses FastMCP from the `mcp` SDK. 6 tools delegate to QueryOrchestrator.
 
@@ -28,7 +28,6 @@ except ImportError:
 
 from app.models.connectivity import (
     DatasetIdInput,
-    VectorSearchRequest,
     SQLQueryRequest,
 )
 from app.services.connectivity_token_service import ConnectivityTokenError
@@ -43,7 +42,7 @@ _orchestrator: Optional[QueryOrchestrator] = None
 # Create MCP server only if SDK available
 mcp_server = None
 if MCP_AVAILABLE:
-    mcp_server = FastMCP(name="aim-data", json_response=True)
+    mcp_server = FastMCP(name="vectoraiz", json_response=True)
 
 
 def _noop_decorator(*args, **kwargs):
@@ -99,8 +98,11 @@ def _validate_dataset_id(dataset_id: str) -> str:
 
 
 def _try_meter(tool_name: str, bucket: str = "setup") -> None:
-    """Best-effort metering for MCP tool calls."""
+    """Best-effort metering for MCP tool calls (connected mode only)."""
     try:
+        from app.config import settings
+        if settings.mode == "standalone":
+            return
         from app.services.serial_store import get_serial_store, ACTIVE, MIGRATED
         store = get_serial_store()
         state = store.state
@@ -129,7 +131,7 @@ def _try_meter(tool_name: str, bucket: str = "setup") -> None:
 
 @_tool()
 async def vectoraiz_list_datasets() -> str:
-    """List all externally-queryable datasets in AIM Data with metadata including name, type, row count, and whether vectors are available."""
+    """List all externally-queryable datasets in AIM Data with metadata including name, type, and row count."""
     try:
         _try_meter("list_datasets")
         token = _validate_token()
@@ -157,31 +159,6 @@ async def vectoraiz_get_schema(dataset_id: str) -> str:
         raise ValueError(_format_error(e.code, e.message, e.details))
     except Exception:
         logger.exception("Unexpected error in vectoraiz_get_schema")
-        raise ValueError(_format_error("internal_error", "An internal error occurred. Check AIM Data logs for details."))
-
-
-@_tool()
-async def vectoraiz_search(query: str, dataset_id: str = "", top_k: int = 5) -> str:
-    """Semantic vector search across indexed documents and data chunks. Use natural language queries. Optionally limit to a specific dataset."""
-    try:
-        _try_meter("search_vectors", bucket="data")
-        token = _validate_token()
-        # Validate dataset_id if provided
-        validated_id = None
-        if dataset_id:
-            validated_id = _validate_dataset_id(dataset_id)
-        orch = _get_orchestrator()
-        req = VectorSearchRequest(
-            query=query,
-            dataset_id=validated_id,
-            top_k=max(1, min(top_k, 20)),
-        )
-        result = await orch.search_vectors(token, req)
-        return result.model_dump_json()
-    except ConnectivityError as e:
-        raise ValueError(_format_error(e.code, e.message, e.details))
-    except Exception:
-        logger.exception("Unexpected error in vectoraiz_search")
         raise ValueError(_format_error("internal_error", "An internal error occurred. Check AIM Data logs for details."))
 
 

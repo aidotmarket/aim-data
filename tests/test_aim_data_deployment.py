@@ -49,7 +49,7 @@ def test_aim_data_compose_uses_aim_data_image_and_env():
         "${HOST_IMPORT_DIR:-./import}:/data/import:ro",
         "/var/run/docker.sock:/var/run/docker.sock",
     ]
-    assert set(service["depends_on"]) == {"postgres", "qdrant"}
+    assert set(service["depends_on"]) == {"postgres"}
 
     postgres_env = set(data["services"]["postgres"]["environment"])
     assert "POSTGRES_USER=aim_data" in postgres_env

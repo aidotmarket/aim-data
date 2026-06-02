@@ -58,11 +58,11 @@ class TestAuthEnforcement:
 
 class TestScopeEnforcement:
     def test_enforce_scope_success(self, orchestrator):
-        _, token = create_token(label="Scope OK", scopes=["ext:search", "ext:sql"], max_tokens=100)
-        orchestrator._enforce_scope(token, "ext:search")  # should not raise
+        _, token = create_token(label="Scope OK", scopes=["ext:sql", "ext:schema"], max_tokens=100)
+        orchestrator._enforce_scope(token, "ext:sql")  # should not raise
 
     def test_enforce_scope_denied(self, orchestrator):
-        _, token = create_token(label="Scope Denied", scopes=["ext:search"], max_tokens=100)
+        _, token = create_token(label="Scope Denied", scopes=["ext:schema"], max_tokens=100)
         with pytest.raises(ConnectivityError) as exc_info:
             orchestrator._enforce_scope(token, "ext:sql")
         assert exc_info.value.code == "scope_denied"

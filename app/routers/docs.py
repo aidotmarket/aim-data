@@ -21,16 +21,16 @@ async def api_guide():
             {
                 "title": "1. Getting Started",
                 "content": """
-                    AIM Data processes your data files and enables semantic search.
+                    AIM Data processes and profiles your data files.
                     
                     Basic workflow:
                     1. Upload a file (CSV, JSON, Parquet, PDF, Word, Excel)
                     2. Wait for processing (automatic)
-                    3. Search using natural language or SQL
+                    3. Query using SQL or publish listing metadata
                 """,
                 "example": {
                     "upload": "curl -X POST http://localhost:8000/api/datasets/upload -F 'file=@data.csv'",
-                    "search": "curl 'http://localhost:8000/api/search?q=technology%20companies'",
+                    "query": """curl -X POST http://localhost:8000/api/sql/query -H 'Content-Type: application/json' -d '{"query": "SELECT * FROM dataset_abc123 LIMIT 10"}'""",
                 }
             },
             {
@@ -47,24 +47,7 @@ async def api_guide():
                 ],
             },
             {
-                "title": "3. Semantic Search",
-                "content": """
-                    Search uses natural language understanding to find relevant data.
-                    Results are ranked by semantic similarity to your query.
-                """,
-                "endpoints": [
-                    {"method": "GET", "path": "/api/search?q={query}", "description": "Search across all datasets"},
-                    {"method": "GET", "path": "/api/search/dataset/{id}?q={query}", "description": "Search within a dataset"},
-                    {"method": "GET", "path": "/api/search/suggest?q={partial}", "description": "Get search suggestions"},
-                    {"method": "GET", "path": "/api/search/stats", "description": "Get search statistics"},
-                ],
-                "example": {
-                    "basic": "curl 'http://localhost:8000/api/search?q=revenue%20growth'",
-                    "filtered": "curl 'http://localhost:8000/api/search?q=technology&limit=5&min_score=0.5'",
-                }
-            },
-            {
-                "title": "4. SQL Queries",
+                "title": "3. SQL Queries",
                 "content": """
                     Execute SQL SELECT queries directly against your datasets.
                     Datasets are exposed as tables named 'dataset_{id}'.
@@ -81,7 +64,7 @@ async def api_guide():
                 }
             },
             {
-                "title": "5. PII Detection",
+                "title": "4. PII Detection",
                 "content": """
                     Automatically scans datasets for personally identifiable information.
                     Detects emails, phone numbers, SSNs, credit cards, and more.
@@ -93,20 +76,6 @@ async def api_guide():
                     {"method": "POST", "path": "/api/pii/analyze-text", "description": "Analyze text for PII"},
                 ],
             },
-            {
-                "title": "6. Vector Management",
-                "content": """
-                    Manage the underlying vector database collections.
-                    Each dataset creates a collection named 'dataset_{id}'.
-                """,
-                "endpoints": [
-                    {"method": "GET", "path": "/api/vectors/health", "description": "Check Qdrant health"},
-                    {"method": "GET", "path": "/api/vectors/collections", "description": "List all collections"},
-                    {"method": "GET", "path": "/api/vectors/collections/{name}", "description": "Get collection info"},
-                    {"method": "POST", "path": "/api/vectors/collections/{name}", "description": "Create collection"},
-                    {"method": "DELETE", "path": "/api/vectors/collections/{name}", "description": "Delete collection"},
-                ],
-            },
         ],
         "supported_formats": {
             "tabular": ["CSV", "JSON", "Parquet"],
@@ -116,7 +85,6 @@ async def api_guide():
         "limits": {
             "max_file_size": "100GB",
             "max_sql_rows": 10000,
-            "default_search_limit": 10,
             "pii_sample_size": 1000,
         },
     }
@@ -132,7 +100,7 @@ async def postman_collection(request: Request):
     collection = {
         "info": {
             "name": "AIM Data API",
-            "description": "Data processing and semantic search API",
+            "description": "Data processing and SQL API",
             "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         },
         "variable": [
@@ -208,39 +176,6 @@ async def postman_collection(request: Request):
                         "request": {
                             "method": "DELETE",
                             "url": "{{base_url}}/api/datasets/{{dataset_id}}",
-                        },
-                    },
-                ],
-            },
-            {
-                "name": "Search",
-                "item": [
-                    {
-                        "name": "Search All",
-                        "request": {
-                            "method": "GET",
-                            "url": "{{base_url}}/api/search?q=technology",
-                        },
-                    },
-                    {
-                        "name": "Search Dataset",
-                        "request": {
-                            "method": "GET",
-                            "url": "{{base_url}}/api/search/dataset/{{dataset_id}}?q=revenue",
-                        },
-                    },
-                    {
-                        "name": "Search Stats",
-                        "request": {
-                            "method": "GET",
-                            "url": "{{base_url}}/api/search/stats",
-                        },
-                    },
-                    {
-                        "name": "Search Suggestions",
-                        "request": {
-                            "method": "GET",
-                            "url": "{{base_url}}/api/search/suggest?q=tech",
                         },
                     },
                 ],
@@ -332,39 +267,6 @@ async def postman_collection(request: Request):
                     },
                 ],
             },
-            {
-                "name": "Vectors",
-                "item": [
-                    {
-                        "name": "Vector Health",
-                        "request": {
-                            "method": "GET",
-                            "url": "{{base_url}}/api/vectors/health",
-                        },
-                    },
-                    {
-                        "name": "List Collections",
-                        "request": {
-                            "method": "GET",
-                            "url": "{{base_url}}/api/vectors/collections",
-                        },
-                    },
-                    {
-                        "name": "Embedding Info",
-                        "request": {
-                            "method": "GET",
-                            "url": "{{base_url}}/api/vectors/embedding/info",
-                        },
-                    },
-                    {
-                        "name": "Test Embedding",
-                        "request": {
-                            "method": "POST",
-                            "url": "{{base_url}}/api/vectors/embedding/test?text=Hello%20world",
-                        },
-                    },
-                ],
-            },
         ],
     }
     
@@ -392,26 +294,6 @@ async def api_examples():
                     "dataset_id": "abc12345",
                     "status": "uploading",
                     "filename": "companies.csv"
-                }
-            },
-            {
-                "name": "Semantic Search",
-                "endpoint": "GET /api/search?q=technology",
-                "curl": "curl 'http://localhost:8000/api/search?q=technology%20companies&limit=5'",
-                "response": {
-                    "query": "technology companies",
-                    "results": [
-                        {
-                            "dataset_id": "abc12345",
-                            "dataset_name": "companies.csv",
-                            "score": 0.8542,
-                            "row_index": 3,
-                            "text_content": "company_name: TechCorp | industry: Technology",
-                            "row_data": {"id": 4, "company_name": "TechCorp", "industry": "Technology"}
-                        }
-                    ],
-                    "total": 1,
-                    "duration_ms": 45.2
                 }
             },
             {

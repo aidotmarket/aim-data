@@ -252,7 +252,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         return "ok";
       }
 
-      // AIM Data flow: dataset upload with vectorization + processing pipeline.
+      // AIM Data flow: dataset upload with extraction/profile pipeline.
       const { promise, abort } = datasetsApi.uploadWithProgress(item.file, {
         allowDuplicate,
         batchId: batchIdRef.current ?? undefined,
@@ -332,7 +332,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         if (!item.datasetId) continue;
         try {
           const data = await datasetsApi.getStatus(item.datasetId);
-          if (data.status === "ready" || data.status === "preview_ready") {
+          if (data.status === "preview_ready") {
             handleStatusChange(item.id, "complete");
           } else if (data.status === "error") {
             handleStatusChange(item.id, "error", data.error || "Processing failed");

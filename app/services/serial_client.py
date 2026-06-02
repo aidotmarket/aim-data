@@ -247,6 +247,107 @@ class SerialClient:
         error = data.get("detail", str(data)) if data else f"HTTP {status_code}"
         return {"success": False, "error": error, "status_code": status_code}
 
+    async def verify_s3_connection(
+        self,
+        serial: str,
+        install_token: str,
+        role_arn: str,
+        external_id: str,
+        bucket: str,
+        region: str,
+        prefix: Optional[str] = None,
+    ) -> dict:
+        """POST /api/v1/serials/{serial}/s3-connections/verify"""
+        status_code, data = await self._request(
+            "POST",
+            f"/api/v1/serials/{serial}/s3-connections/verify",
+            json={
+                "role_arn": role_arn,
+                "external_id": external_id,
+                "bucket": bucket,
+                "region": region,
+                "prefix": prefix,
+            },
+            headers={"Authorization": f"Bearer {install_token}"},
+        )
+        if status_code == 200 and data:
+            return {"success": True, **data}
+        error = data.get("detail", str(data)) if data else f"HTTP {status_code}"
+        return {"success": False, "error": error, "status_code": status_code}
+
+    async def list_s3_objects(
+        self,
+        serial: str,
+        install_token: str,
+        role_arn: str,
+        bucket: str,
+        region: str,
+        prefix: Optional[str] = None,
+        continuation_token: Optional[str] = None,
+        max_keys: Optional[int] = None,
+    ) -> dict:
+        """POST /api/v1/serials/{serial}/s3-connections/list-objects"""
+        body: dict = {
+            "role_arn": role_arn,
+            "bucket": bucket,
+            "region": region,
+        }
+        if prefix is not None:
+            body["prefix"] = prefix
+        if continuation_token is not None:
+            body["continuation_token"] = continuation_token
+        if max_keys is not None:
+            body["max_keys"] = max_keys
+
+        status_code, data = await self._request(
+            "POST",
+            f"/api/v1/serials/{serial}/s3-connections/list-objects",
+            json=body,
+            headers={"Authorization": f"Bearer {install_token}"},
+        )
+        if status_code == 200 and data:
+            return {"success": True, **data}
+        error = data.get("detail", str(data)) if data else f"HTTP {status_code}"
+        return {"success": False, "error": error, "status_code": status_code}
+
+    async def presign_object(
+        self,
+        serial: str,
+        install_token: str,
+        role_arn: str,
+        bucket: str,
+        region: str,
+        object_key: str,
+    ) -> dict:
+        """POST /api/v1/serials/{serial}/s3-connections/presign-object"""
+        status_code, data = await self._request(
+            "POST",
+            f"/api/v1/serials/{serial}/s3-connections/presign-object",
+            json={
+                "role_arn": role_arn,
+                "bucket": bucket,
+                "region": region,
+                "object_key": object_key,
+            },
+            headers={"Authorization": f"Bearer {install_token}"},
+        )
+        if status_code == 200 and data:
+            return {"success": True, **data}
+        error = data.get("detail", str(data)) if data else f"HTTP {status_code}"
+        return {"success": False, "error": error, "status_code": status_code}
+
+    async def get_s3_external_id(self, serial: str, install_token: str) -> dict:
+        """GET /api/v1/serials/{serial}/s3-connections/external-id"""
+        status_code, data = await self._request(
+            "GET",
+            f"/api/v1/serials/{serial}/s3-connections/external-id",
+            headers={"Authorization": f"Bearer {install_token}"},
+        )
+        if status_code == 200 and data:
+            return {"success": True, **data}
+        error = data.get("detail", str(data)) if data else f"HTTP {status_code}"
+        return {"success": False, "error": error, "status_code": status_code}
+
     async def send_magic_link(self, serial: str, install_token: str, email: str) -> dict:
         """POST /api/v1/auth/magic-link"""
         import os

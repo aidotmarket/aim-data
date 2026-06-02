@@ -55,7 +55,7 @@ API_TITLE = "AIM Data API"
 API_VERSION = os.environ.get("AIM_DATA_VERSION") or os.environ.get("VECTORAIZ_VERSION", "dev")
 
 API_DESCRIPTION_CONNECTED = """
-## AIM Data - Data Processing & Semantic Search (Connected)
+## AIM Data - Data Processing (Connected)
 
 Full-featured mode with ai.market integration for premium features,
 billing, and marketplace access.
@@ -99,7 +99,7 @@ TAGS_METADATA = [
     },
     {
         "name": "External Connectivity",
-        "description": "External LLM connectivity endpoints (MCP + REST). Authenticated via Bearer token (vzmcp_...). Allows external AI tools to search, query, and explore your datasets.",
+        "description": "External LLM connectivity endpoints (MCP + REST). Authenticated via Bearer token (vzmcp_...). Allows external AI tools to query and explore your datasets.",
     },
     {
         "name": "Connectivity Management",
@@ -288,39 +288,6 @@ async def lifespan(app: FastAPI):
         _safe_background_task("activation_manager", _activation_mgr.startup())
     )
 
-    # BQ-VZ-LARGE-FILES: Recover records stuck in processing states (OOM crash recovery)
-    try:
-        from app.services.processing_service import get_processing_service
-        _ps = get_processing_service()
-        _recovered = _ps.recover_stuck_records()
-        if _recovered:
-            logger.info("Recovered %d stuck processing records on startup", _recovered)
-    except Exception as e:
-        logger.error("Failed to recover stuck records: %s", e)
-
-    # BQ-VZ-QUEUE: File processing queue (concurrency=2)
-    from app.services.processing_queue import get_processing_queue
-    _processing_queue = get_processing_queue()
-    _processing_queue.start(wrapper=_safe_background_task)
-
-    # RC#22-F3: Re-queue files with status='uploaded' so crash-recovered records get processed
-    try:
-        from app.models.dataset import DatasetRecord as DBDatasetRecord
-        from sqlmodel import select
-        from app.core.database import get_engine
-        from sqlmodel import Session
-
-        with Session(get_engine()) as _session:
-            _uploaded = _session.exec(
-                select(DBDatasetRecord).where(DBDatasetRecord.status == "uploaded")
-            ).all()
-            for _rec in _uploaded:
-                await _processing_queue.submit(_rec.id)
-            if _uploaded:
-                logger.info("Re-queued %d uploaded records for processing", len(_uploaded))
-    except Exception as e:
-        logger.error("Failed to re-queue uploaded records: %s", e)
-
     logger.info("API ready — all background tasks launched")
 
     yield
@@ -359,9 +326,6 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await _activation_mgr.shutdown()
-
-    # BQ-VZ-QUEUE: Stop processing queue workers
-    await _processing_queue.shutdown()
 
     # BQ-110: Cancel queue processor gracefully
     queue_task.cancel()
@@ -595,14 +559,6 @@ def create_app() -> FastAPI:
         dependencies=admin_route_dependency,
     )
     logger.info("Connected routers mounted (billing, integrations, webhooks)")
-
-    # PUBLIC — website chat widget (no auth)
-    from app.routers.website_chat import router as website_chat_router
-    app.include_router(
-        website_chat_router,
-        prefix="/api/website-chat",
-        tags=["website-chat"],
-    )
 
     # ADMIN ONLY — connectivity management (Settings UI)
     from app.routers.connectivity_mgmt import router as connectivity_mgmt_router

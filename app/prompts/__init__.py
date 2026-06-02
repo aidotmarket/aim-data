@@ -1,4 +1,1 @@
-"""
-Prompt templates for AIM Data RAG.
-Templates are stored in templates/ subdirectory.
-"""
+"""Prompt helpers for AIM Data."""

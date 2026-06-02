@@ -91,6 +91,12 @@ def pipeline_service(pipeline_dir, sample_csv):
             "overall_risk": "none",
             "total_pii_findings": 0,
         }
+        svc.pii_service.scan_structured.return_value = {
+            "columns": {},
+            "column_results": [],
+            "overall_risk": "none",
+            "total_pii_findings": 0,
+        }
         svc.compliance_service.generate_compliance_report = AsyncMock(
             return_value={"flags": [], "compliance_score": 100}
         )
@@ -168,7 +174,7 @@ class TestCSVPipeline:
                 "size_bytes": sample_csv.stat().st_size,
                 "created_at": "2024-01-01T00:00:00",
                 "modified_at": "2024-01-01T00:00:00",
-                "status": "ready",
+                "status": "preview_ready",
             }
         )
 
@@ -268,7 +274,7 @@ class TestCanonicalStatusField:
                 "size_bytes": sample_csv.stat().st_size,
                 "created_at": "2024-01-01T00:00:00",
                 "modified_at": "2024-01-01T00:00:00",
-                "status": "ready",
+                "status": "preview_ready",
             }
         )
 

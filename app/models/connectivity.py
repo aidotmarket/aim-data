@@ -35,8 +35,8 @@ class ConnectivityTokenRecord(SQLModel, table=True):
     hmac_hash: str = SQLField(max_length=255)
     secret_last4: str = SQLField(max_length=4)
     scopes: str = SQLField(
-        default='["ext:search","ext:sql","ext:schema","ext:datasets","ext:profile","ext:pii"]',
-        sa_column=Column(Text, default='["ext:search","ext:sql","ext:schema","ext:datasets","ext:profile","ext:pii"]'),
+        default='["ext:sql","ext:schema","ext:datasets","ext:profile","ext:pii"]',
+        sa_column=Column(Text, default='["ext:sql","ext:schema","ext:datasets","ext:profile","ext:pii"]'),
     )
     created_at: datetime = SQLField(default_factory=lambda: datetime.utcnow())
     expires_at: Optional[datetime] = SQLField(default=None, nullable=True)
@@ -87,21 +87,6 @@ class DatasetIdInput(BaseModel):
         return validate_dataset_id(v)
 
 
-class VectorSearchRequest(BaseModel):
-    """Input for vectoraiz_search tool (§5.2)."""
-
-    query: str = Field(..., max_length=1000, description="Natural language search query")
-    dataset_id: Optional[str] = Field(None, description="Optional: limit to specific dataset")
-    top_k: int = Field(5, ge=1, le=20, description="Number of results (default 5)")
-
-    @field_validator("dataset_id")
-    @classmethod
-    def check_dataset_id(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and v != "":
-            return validate_dataset_id(v)
-        return v
-
-
 class SQLQueryRequest(BaseModel):
     """Input for vectoraiz_sql tool (§5.2)."""
 
@@ -130,8 +115,6 @@ class DatasetInfo(BaseModel):
     row_count: int
     column_count: int
     created_at: str
-    has_vectors: bool
-
 
 class DatasetListResponse(BaseModel):
     """Response for vectoraiz_list_datasets."""
@@ -186,24 +169,6 @@ class PIIReportResponse(BaseModel):
     status: str = "available"
     message: Optional[str] = None
     report: Optional[Dict[str, Any]] = None
-
-
-class SearchMatch(BaseModel):
-    """Single match in search response."""
-
-    id: str
-    score: float
-    text: str = Field(default="", max_length=2000)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-
-
-class SearchResponse(BaseModel):
-    """Response for vectoraiz_search."""
-
-    matches: List[SearchMatch]
-    count: int
-    truncated: bool = False
-    request_id: str
 
 
 class SQLLimits(BaseModel):
@@ -274,4 +239,4 @@ ERROR_HTTP_STATUS: Dict[str, int] = {
 
 
 # All valid scopes
-VALID_SCOPES = {"ext:search", "ext:sql", "ext:schema", "ext:datasets", "ext:profile", "ext:pii"}
+VALID_SCOPES = {"ext:sql", "ext:schema", "ext:datasets", "ext:profile", "ext:pii"}

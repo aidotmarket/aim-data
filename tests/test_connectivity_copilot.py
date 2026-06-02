@@ -87,7 +87,7 @@ class TestConnectivityToolDefinitions:
         """Original 8 tools must still exist."""
         original = [
             "list_datasets", "get_dataset_detail", "preview_rows",
-            "run_sql_query", "search_vectors", "get_system_status",
+            "run_sql_query", "get_system_status",
             "get_dataset_statistics", "delete_dataset",
         ]
         tool_names = _get_tool_names()
@@ -181,7 +181,7 @@ class TestConnectivityStatusHandler:
         """Tokens in status should have secret_last4 but NEVER full secret."""
         from app.services.connectivity_token_service import create_token
 
-        raw_token, token_info = create_token(label="test-mask", scopes=["ext:search"])
+        raw_token, token_info = create_token(label="test-mask", scopes=["ext:sql"])
         secret = raw_token.split("_")[2]  # full 32-char secret
 
         executor = _make_executor()
@@ -207,7 +207,7 @@ class TestConnectivityStatusHandler:
         """LLM summary must not contain full token secret."""
         from app.services.connectivity_token_service import create_token
 
-        raw_token, token_info = create_token(label="test-llm-mask", scopes=["ext:search"])
+        raw_token, token_info = create_token(label="test-llm-mask", scopes=["ext:sql"])
         secret = raw_token.split("_")[2]
 
         executor = _make_executor()
@@ -263,11 +263,11 @@ class TestConnectivityCreateTokenHandler:
         executor = _make_executor()
         result = await executor._handle_connectivity_create_token({
             "label": "Meta Test",
-            "scopes": ["ext:search", "ext:sql"],
+            "scopes": ["ext:sql", "ext:schema"],
         })
 
         assert result.frontend_data["label"] == "Meta Test"
-        assert "ext:search" in result.frontend_data["scopes"]
+        assert "ext:sql" in result.frontend_data["scopes"]
         assert "ext:sql" in result.frontend_data["scopes"]
         assert "token_id" in result.frontend_data
         assert "secret_last4" in result.frontend_data
@@ -425,7 +425,7 @@ class TestConnectivityGenerateSetupHandler:
             mock_record = MagicMock()
             mock_record.id = "ds001"
             mock_record.original_filename = "sales_data.csv"
-            mock_record.status.value = "ready"
+            mock_record.status.value = "preview_ready"
             mock_record.metadata = {
                 "row_count": 1000,
                 "column_count": 10,
@@ -495,7 +495,7 @@ class TestConnectivityTestHandler:
             assert "token_valid" in data
             assert "mcp_responding" in data
             assert "datasets_accessible" in data
-            assert "sample_query_ok" in data
+        assert "sample_sql_ok" in data
 
 
 # =====================================================================

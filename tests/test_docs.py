@@ -88,7 +88,7 @@ def test_openapi_has_tags():
     data = response.json()
     
     tag_names = [t["name"] for t in data["tags"]]
-    expected_tags = ["health", "datasets", "search", "sql", "vectors", "pii"]
+    expected_tags = ["health", "datasets", "sql", "pii"]
     
     for tag in expected_tags:
         assert tag in tag_names
@@ -105,5 +105,5 @@ def test_openapi_has_descriptions():
     # Health endpoint
     assert "/api/health" in paths
     
-    # Search endpoint
-    assert "/api/search/" in paths
+    # SQL endpoint
+    assert "/api/sql/query" in paths

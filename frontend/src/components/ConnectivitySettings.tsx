@@ -95,7 +95,7 @@ interface SetupResult {
   notes?: string[];
 }
 
-const ALL_SCOPES = ["ext:search", "ext:sql", "ext:schema", "ext:datasets"];
+const ALL_SCOPES = ["ext:sql", "ext:schema", "ext:datasets", "ext:profile", "ext:pii"];
 
 const PLATFORMS = [
   { value: "claude_desktop", label: "Claude Desktop" },

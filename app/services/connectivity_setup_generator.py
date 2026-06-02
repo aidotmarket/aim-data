@@ -300,7 +300,6 @@ class ConnectivitySetupGenerator:
                 "auth_header": f"Bearer {token}",
                 "endpoints": {
                     "list_datasets": f"{api_url}/datasets",
-                    "search": f"{api_url}/search",
                     "sql": f"{api_url}/sql",
                     "schema": f"{api_url}/schema/{{dataset_id}}",
                 },
@@ -466,17 +465,6 @@ class ConnectivitySetupGenerator:
                 },
                 {
                     "step": 3,
-                    "instruction": "Search vectors",
-                    "detail": (
-                        f"curl -X POST -H 'Authorization: Bearer {token}' "
-                        f"-H 'Content-Type: application/json' "
-                        f"-d '{{\"query\": \"your search text\", \"top_k\": 5}}' "
-                        f"{api_url}/search"
-                    ),
-                    "validation": "You should see search results with scores.",
-                },
-                {
-                    "step": 4,
                     "instruction": "Execute SQL",
                     "detail": (
                         f"curl -X POST -H 'Authorization: Bearer {token}' "
@@ -492,7 +480,6 @@ class ConnectivitySetupGenerator:
                 "auth_header": f"Bearer {token}",
                 "endpoints": {
                     "list_datasets": {"method": "GET", "path": "/datasets"},
-                    "search": {"method": "POST", "path": "/search"},
                     "sql": {"method": "POST", "path": "/sql"},
                     "schema": {"method": "GET", "path": "/schema/{dataset_id}"},
                 },
@@ -598,10 +585,6 @@ class ConnectivitySetupGenerator:
 ### GET {api_url}/datasets
 List all available datasets with metadata.
 
-### POST {api_url}/search
-Semantic vector search across datasets.
-Body: {{"query": "natural language search", "top_k": 5, "dataset_id": "optional"}}
-
 ### POST {api_url}/sql
 Execute read-only SQL queries. Tables are named dataset_<id>.
 Body: {{"sql": "SELECT * FROM dataset_<id> LIMIT 10", "dataset_id": "optional"}}
@@ -610,7 +593,6 @@ Body: {{"sql": "SELECT * FROM dataset_<id> LIMIT 10", "dataset_id": "optional"}}
 Get column definitions for a specific dataset.
 
 ## When to Use Each Endpoint
-- **Search** (POST /search): Use for fuzzy, meaning-based queries like "find records about renewable energy" or "customers in California".
 - **SQL** (POST /sql): Use for exact queries with filters, aggregations, joins, or counts like "how many rows have price > 100" or "average revenue by region".
 - **List datasets** (GET /datasets): Use to discover what data is available.
 - **Schema** (GET /schema/{{id}}): Use to understand column names and types before writing SQL.

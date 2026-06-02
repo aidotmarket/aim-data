@@ -152,7 +152,7 @@ def test_rescan_is_idempotent_and_preserves_dataset_id(session_context, monkeypa
         storage_filename="exports/a.csv",
         file_type="csv",
         file_size_bytes=123,
-        status="s3_linked",
+        status="preview_ready",
     )
     dataset_id = dataset.id
     scan_job = S3ScanJob(id=str(uuid4()), connection_id=connection.id, status="completed")
@@ -232,7 +232,7 @@ def test_register_endpoint_links_object_and_creates_dataset(client, session_cont
     assert body["dataset"]["original_filename"] == "report.csv"
     assert body["dataset"]["file_type"] == "csv"
     assert body["dataset"]["file_size_bytes"] == 789
-    assert body["dataset"]["status"] == "s3_linked"
+    assert body["dataset"]["status"] == "preview_ready"
     assert body["dataset"]["storage_filename"] == "exports/report.csv"
     assert body["dataset"]["listing_id"] == "lst_123"
     assert body["object"]["dataset_id"] == body["dataset"]["id"]
@@ -253,7 +253,7 @@ def test_objects_endpoint_paginates_and_filters(client, session_context):
         storage_filename="exports/linked.csv",
         file_type="csv",
         file_size_bytes=1,
-        status="s3_linked",
+        status="preview_ready",
     )
     scan_job = S3ScanJob(id=str(uuid4()), connection_id=connection.id, status="completed")
     with session_context() as session:
@@ -301,7 +301,7 @@ def test_fulfillment_resolves_registered_s3_dataset(session_context):
         storage_filename="exports/listing.csv",
         file_type="csv",
         file_size_bytes=321,
-        status="s3_linked",
+        status="preview_ready",
         listing_id="listing-123",
     )
     dataset_id = dataset.id
@@ -345,7 +345,7 @@ def test_register_rejects_unowned_existing_dataset(client, session_context):
         storage_filename="foreign.csv",
         file_type="csv",
         file_size_bytes=1,
-        status="s3_linked",
+        status="preview_ready",
         listing_id="foreign-listing",
     )
     scan_job = S3ScanJob(id=str(uuid4()), connection_id=connection.id, status="completed")

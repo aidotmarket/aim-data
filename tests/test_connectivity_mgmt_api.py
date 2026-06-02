@@ -181,10 +181,10 @@ class TestTokenCRUD:
         resp = client.post(
             "/api/connectivity/tokens",
             headers=_auth_headers(key),
-            json={"label": "Limited", "scopes": ["ext:search"]},
+            json={"label": "Limited", "scopes": ["ext:sql"]},
         )
         assert resp.status_code == 201
-        assert resp.json()["scopes"] == ["ext:search"]
+        assert resp.json()["scopes"] == ["ext:sql"]
 
     def test_create_token_invalid_scope(self):
         key = _setup_and_get_key()
