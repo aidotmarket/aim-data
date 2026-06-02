@@ -58,7 +58,7 @@ API_VERSION = os.environ.get("VECTORAIZ_VERSION", "dev")
 
 # BQ-127 (§7): Mode-aware API descriptions
 API_DESCRIPTION_STANDALONE = """
-## vectorAIz - Data Processing & Semantic Search
+## AIM Data - Data Processing & Semantic Search
 
 Upload, process, vectorize, and search your data using your own LLM.
 Runs entirely on your infrastructure with no internet required.
@@ -83,7 +83,7 @@ Set VECTORAIZ_MODE=connected to enable ai.market integration:
 """
 
 API_DESCRIPTION_CONNECTED = """
-## vectorAIz - Data Processing & Semantic Search (Connected)
+## AIM Data - Data Processing & Semantic Search (Connected)
 
 Full-featured mode with ai.market integration for premium features,
 billing, and marketplace access.
@@ -170,7 +170,7 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info(
-        "Starting vectorAIz API v%s in %s mode...",
+        "Starting AIM Data API v%s in %s mode...",
         API_VERSION, settings.mode.upper(),
     )
 
@@ -361,7 +361,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    logger.info("Shutting down vectorAIz API...")
+    logger.info("Shutting down AIM Data API...")
 
     # BQ-123A: Persist issue tracker state
     issue_tracker.persist()

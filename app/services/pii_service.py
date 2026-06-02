@@ -278,7 +278,7 @@ class PIIService:
         Calculate privacy score on a 0-10 scale.
         
         AUTHORITATIVE SCORE: This is the source of truth for privacy scoring.
-        ai.market central service validates this score but vectorAIz calculates it.
+        ai.market central service validates this score but AIM Data calculates it.
         
         Scoring logic:
         - Start at 10.0 (perfect privacy)

@@ -6,7 +6,7 @@ Handles `vai.fulfillment.deliver` actions from ai.market's Trust Channel.
 Looks up the dataset, streams it back in 64KB chunks with windowed ACK
 backpressure, and tracks fulfillment state in the local fulfillment_log table.
 
-BQ-D1: Fulfillment Listener (vectorAIz side)
+BQ-D1: Fulfillment Listener (AIM Data side)
 
 Transfer protocol (§4):
   1. Receive vai.fulfillment.deliver → generate transfer_id

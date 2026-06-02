@@ -80,7 +80,7 @@ class ConnectivityStatusResponse(BaseModel):
 class SetupRequest(BaseModel):
     platform: str = Field(..., description="Target platform identifier")
     token: str = Field("", description="Token to embed in config (optional)")
-    base_url: str = Field("http://localhost:8100", description="Base URL of vectorAIz instance")
+    base_url: str = Field("http://localhost:8100", description="Base URL of AIM Data instance")
 
 
 class TestRequest(BaseModel):

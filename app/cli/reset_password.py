@@ -26,7 +26,7 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Reset a vectorAIz user's password",
+        description="Reset an AIM Data user's password",
     )
     parser.add_argument(
         "--username",

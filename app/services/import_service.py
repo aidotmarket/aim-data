@@ -1,4 +1,4 @@
-"""Local directory import service for vectorAIz."""
+"""Local directory import service for AIM Data."""
 import os
 import shutil
 import uuid
@@ -73,7 +73,7 @@ class ImportJob:
 class ImportService:
     """Manages local file import jobs.
 
-    Note: Job state is in-memory. This is safe because vectorAIz runs
+    Note: Job state is in-memory. This is safe because AIM Data runs
     uvicorn workers as threads in the same process. If deployment changes
     to multi-process workers, migrate to Redis/DB-backed job state.
     """

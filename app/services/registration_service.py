@@ -1,9 +1,9 @@
 """
-vectorAIz Device Registration Service
+AIM Data Device Registration Service
 ======================================
 
 PURPOSE:
-    Registers this vectorAIz instance with ai.market by sending
+    Registers this AIM Data instance with ai.market by sending
     Ed25519 + X25519 public keys, and stores the returned platform
     public keys + certificate locally for Trust Channel handshake.
 

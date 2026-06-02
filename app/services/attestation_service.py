@@ -1,5 +1,5 @@
 """
-Attestation Service for vectorAIz (BQ-061)
+Attestation Service for AIM Data (BQ-061)
 ============================================
 Generates data quality attestation reports for datasets.
 """

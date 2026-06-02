@@ -28,19 +28,19 @@ CHANNEL_GREETINGS: dict[ChannelType, str] = {
 
 CHANNEL_SYSTEM_CONTEXTS: dict[ChannelType, str] = {
     ChannelType.direct: (
-        "The user is using vectorAIz primarily as a data processing tool. "
+        "The user is using AIM Data primarily as a data processing tool. "
         "Focus on helping with data ingestion, vectorization, chunking strategies, "
         "and RAG queries. Mention marketplace publishing as a secondary option "
         "when relevant."
     ),
     ChannelType.marketplace: (
-        "The user downloaded vectorAIz from ai.market and is primarily interested "
+        "The user downloaded AIM Data from ai.market and is primarily interested "
         "in listing their data for sale. Focus on helping with listing creation, "
         "metadata enrichment, pricing strategy, compliance checks, and publishing. "
         "Data processing features support the goal of creating high-quality listings."
     ),
     ChannelType.aim_data: (
-        "The user is using vectorAIz as AIM Data — focused on uploading "
+        "The user is using AIM Data — focused on uploading "
         "data files, managing metadata, and publishing listings to ai.market. "
         "Vectorization and RAG are optional enhancements, not required. "
         "Help with file upload, metadata editing, listing creation, and "

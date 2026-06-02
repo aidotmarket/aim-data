@@ -1,7 +1,7 @@
 """VZ-PERF-P1: Local directory import from host-mounted /data/import (read-only).
 
 Provides browse, process, and status endpoints for importing files from
-a host-mounted directory into the vectorAIz processing pipeline.
+a host-mounted directory into the AIM Data processing pipeline.
 """
 import os
 

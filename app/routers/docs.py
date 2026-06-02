@@ -9,19 +9,19 @@ from fastapi.responses import JSONResponse
 router = APIRouter()
 
 
-@router.get("/guide", summary="API Usage Guide", description="Comprehensive guide for using the vectorAIz API.")
+@router.get("/guide", summary="API Usage Guide", description="Comprehensive guide for using the AIM Data API.")
 async def api_guide():
     """
-    Returns a comprehensive guide for using the vectorAIz API.
+    Returns a comprehensive guide for using the AIM Data API.
     """
     return {
-        "title": "vectorAIz API Usage Guide",
+        "title": "AIM Data API Usage Guide",
         "version": "1.0.0",
         "sections": [
             {
                 "title": "1. Getting Started",
                 "content": """
-                    vectorAIz processes your data files and enables semantic search.
+                    AIM Data processes your data files and enables semantic search.
                     
                     Basic workflow:
                     1. Upload a file (CSV, JSON, Parquet, PDF, Word, Excel)
@@ -131,7 +131,7 @@ async def postman_collection(request: Request):
     
     collection = {
         "info": {
-            "name": "vectorAIz API",
+            "name": "AIM Data API",
             "description": "Data processing and semantic search API",
             "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         },

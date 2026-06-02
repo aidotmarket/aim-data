@@ -5,7 +5,7 @@ BQ-VZ-SHARED-SEARCH Phase 2: OIDC Service — Discovery, Token Exchange, ID Toke
 Implements standard OIDC Authorization Code flow for portal SSO tier.
 Uses httpx for async HTTP, PyJWT for RS256 ID token verification with JWKS.
 
-All OIDC state is in-memory (local VZ instance, not cloud).
+All OIDC state is in-memory (local AIM Data installation, not cloud).
 """
 
 import logging

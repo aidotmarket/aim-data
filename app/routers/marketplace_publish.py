@@ -121,7 +121,7 @@ async def publish_to_marketplace(
     if not seller_id:
         raise HTTPException(
             status_code=409,
-            detail="Seller identity not available — ensure this VZ instance has completed activation and status sync with ai.market",
+            detail="Seller identity not available — ensure this AIM Data installation has completed activation and status sync with ai.market",
         )
 
     # 3. Build payload for ai.market
@@ -174,7 +174,7 @@ async def publish_to_marketplace(
 
 @router.get("/marketplace/publish-status")
 async def publish_status(user=Depends(get_current_user)):
-    """Check if this VZ instance is ready to publish to ai.market."""
+    """Check if this AIM Data installation is ready to publish to ai.market."""
     # Must be in connected mode
     if settings.mode != "connected":
         return {"can_publish": False, "reason": "VZ is in standalone mode — connect to ai.market to publish"}

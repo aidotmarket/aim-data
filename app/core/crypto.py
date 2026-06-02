@@ -1,5 +1,5 @@
 """
-vectorAIz Device Cryptography Module
+AIM Data Device Cryptography Module
 =====================================
 
 PURPOSE:

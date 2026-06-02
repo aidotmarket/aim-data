@@ -132,7 +132,7 @@ def _try_meter(tool_name: str, bucket: str = "setup") -> None:
 
 @_tool()
 async def vectoraiz_list_datasets() -> str:
-    """List all externally-queryable datasets in vectorAIz with metadata including name, type, row count, and whether vectors are available."""
+    """List all externally-queryable datasets in AIM Data with metadata including name, type, row count, and whether vectors are available."""
     try:
         _try_meter("list_datasets")
         token = _validate_token()
@@ -143,7 +143,7 @@ async def vectoraiz_list_datasets() -> str:
         raise ValueError(_format_error(e.code, e.message, e.details))
     except Exception:
         logger.exception("Unexpected error in vectoraiz_list_datasets")
-        raise ValueError(_format_error("internal_error", "An internal error occurred. Check vectorAIz logs for details."))
+        raise ValueError(_format_error("internal_error", "An internal error occurred. Check AIM Data logs for details."))
 
 
 @_tool()
@@ -160,7 +160,7 @@ async def vectoraiz_get_schema(dataset_id: str) -> str:
         raise ValueError(_format_error(e.code, e.message, e.details))
     except Exception:
         logger.exception("Unexpected error in vectoraiz_get_schema")
-        raise ValueError(_format_error("internal_error", "An internal error occurred. Check vectorAIz logs for details."))
+        raise ValueError(_format_error("internal_error", "An internal error occurred. Check AIM Data logs for details."))
 
 
 @_tool()
@@ -185,7 +185,7 @@ async def vectoraiz_search(query: str, dataset_id: str = "", top_k: int = 5) -> 
         raise ValueError(_format_error(e.code, e.message, e.details))
     except Exception:
         logger.exception("Unexpected error in vectoraiz_search")
-        raise ValueError(_format_error("internal_error", "An internal error occurred. Check vectorAIz logs for details."))
+        raise ValueError(_format_error("internal_error", "An internal error occurred. Check AIM Data logs for details."))
 
 
 @_tool()
@@ -209,7 +209,7 @@ async def vectoraiz_sql(sql: str, dataset_id: str = "") -> str:
         raise ValueError(_format_error(e.code, e.message, e.details))
     except Exception:
         logger.exception("Unexpected error in vectoraiz_sql")
-        raise ValueError(_format_error("internal_error", "An internal error occurred. Check vectorAIz logs for details."))
+        raise ValueError(_format_error("internal_error", "An internal error occurred. Check AIM Data logs for details."))
 
 
 @_tool()
@@ -226,7 +226,7 @@ async def vectoraiz_profile_dataset(dataset_id: str) -> str:
         raise ValueError(_format_error(e.code, e.message, e.details))
     except Exception:
         logger.exception("Unexpected error in vectoraiz_profile_dataset")
-        raise ValueError(_format_error("internal_error", "An internal error occurred. Check vectorAIz logs for details."))
+        raise ValueError(_format_error("internal_error", "An internal error occurred. Check AIM Data logs for details."))
 
 
 @_tool()
@@ -243,7 +243,7 @@ async def vectoraiz_get_pii_report(dataset_id: str) -> str:
         raise ValueError(_format_error(e.code, e.message, e.details))
     except Exception:
         logger.exception("Unexpected error in vectoraiz_get_pii_report")
-        raise ValueError(_format_error("internal_error", "An internal error occurred. Check vectorAIz logs for details."))
+        raise ValueError(_format_error("internal_error", "An internal error occurred. Check AIM Data logs for details."))
 
 
 def main():
@@ -255,7 +255,7 @@ def main():
         print("Error: MCP SDK not installed. Run: pip install 'mcp>=1.8.0,<1.9'", file=sys.stderr)
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(description="vectorAIz MCP Server")
+    parser = argparse.ArgumentParser(description="AIM Data MCP Server")
     parser.add_argument("--token", required=True, help="Connectivity token (vzmcp_...)")
     args = parser.parse_args()
 

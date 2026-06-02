@@ -1248,7 +1248,7 @@ class AllAIToolExecutor:
             },
             llm_summary=(
                 f"Feedback submitted (ID: {fb.id}, category: {category}). "
-                + ("Forwarded to the vectorAIz team. " if forwarded else "Saved locally. ")
+                + ("Forwarded to the AIM Data team. " if forwarded else "Saved locally. ")
                 + "Let the user know their feedback has been received and the team will review it."
             ),
         )
