@@ -54,10 +54,6 @@ def auth_client(monkeypatch):
 
     api_key_cache.clear()
 
-    # Tests use aim_ keys which require connected mode
-    from app.config import settings
-    monkeypatch.setattr(settings, "mode", "connected")
-
     # Reset shared httpx client so mock is used
     import app.auth.api_key_auth as _auth_mod
     _auth_mod._http_client = None
@@ -168,11 +164,9 @@ def test_api_key_caching(auth_client: TestClient, mock_httpx_client):
 @pytest.mark.asyncio
 async def test_get_current_user_ws_connected_accepts_ai_market_access_token(monkeypatch):
     from app.auth import api_key_auth
-    from app.config import settings
 
     api_key_auth.api_key_cache.clear()
     monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
-    monkeypatch.setattr(settings, "mode", "connected")
     mock_fetch = AsyncMock(return_value=VALID_AI_MARKET_USER)
     monkeypatch.setattr(api_key_auth, "_fetch_ai_market_me", mock_fetch)
     monkeypatch.setattr(api_key_auth, "_upsert_ai_market_user", lambda *args, **kwargs: None)
@@ -189,11 +183,9 @@ async def test_get_current_user_ws_connected_accepts_ai_market_access_token(monk
 @pytest.mark.asyncio
 async def test_get_current_user_ws_connected_still_accepts_local_key(monkeypatch):
     from app.auth import api_key_auth
-    from app.config import settings
 
     api_key_auth.api_key_cache.clear()
     monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
-    monkeypatch.setattr(settings, "mode", "connected")
     expected_user = api_key_auth.AuthenticatedUser(
         user_id="local_user",
         key_id="local_key",
@@ -212,11 +204,9 @@ async def test_get_current_user_ws_connected_still_accepts_local_key(monkeypatch
 @pytest.mark.asyncio
 async def test_get_current_user_ws_connected_rejects_invalid_access_token(monkeypatch):
     from app.auth import api_key_auth
-    from app.config import settings
 
     api_key_auth.api_key_cache.clear()
     monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
-    monkeypatch.setattr(settings, "mode", "connected")
     mock_fetch = AsyncMock(
         side_effect=HTTPException(status_code=401, detail="Invalid or expired ai.market token")
     )

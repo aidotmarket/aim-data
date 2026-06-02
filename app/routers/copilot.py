@@ -45,7 +45,6 @@ from sqlmodel import Session as DBSession, select
 
 from app.core.errors import AIMDataError
 from app.config import settings
-from app.core.local_only_guard import is_local_only
 from app.auth.api_key_auth import AuthenticatedUser, get_current_user, get_current_user_ws
 from app.models.copilot import SCICommand, CommandResult, StateSnapshot
 from app.models.state import (
@@ -670,8 +669,7 @@ async def websocket_copilot(websocket: WebSocket):
     # BQ-128: Allie availability check
     from app.core.channel_config import CHANNEL, ChannelType
 
-    allie_available = not is_local_only() and (settings.allai_enabled or CHANNEL == ChannelType.aim_data)
-    standalone = is_local_only()
+    allie_available = settings.allai_enabled or CHANNEL == ChannelType.aim_data
 
     # Send CONNECTED message with balance info + allie flags (BQ-128 Task 1.6)
     total_balance = (user.balance_cents or 0) + (user.free_trial_remaining_cents or 0)
@@ -681,7 +679,7 @@ async def websocket_copilot(websocket: WebSocket):
             "session_id": session_id,
             "balance_cents": total_balance,
             "allie_available": allie_available,
-            "is_standalone": standalone,
+            "is_standalone": False,
             "rate_limit": {
                 "remaining_tokens_today": 100000 if allie_available else 0,
                 "daily_limit": 100000,
@@ -689,8 +687,7 @@ async def websocket_copilot(websocket: WebSocket):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
-        # Balance gating: In standalone mode allAI is off (no credits apply).
-        # In connected mode ai.market proxy handles billing — no local gate needed.
+        # Balance gating: ai.market proxy handles billing — no local gate needed.
     except WebSocketSendError:
         logger.error(f"Failed to send CONNECTED message: session={session_id}")
         manager.disconnect(session_id)
@@ -847,42 +844,28 @@ async def websocket_copilot(websocket: WebSocket):
                     manager.set_intro_seen(sid, True)
             is_first = not manager.get_intro_seen(sid)
 
-            # BQ-ALLAI-B: Use agentic loop (tools via ai.market proxy) in connected mode
-            if not is_local_only():
-                try:
-                    full_text, usage = await copilot_service.process_message_agentic(
-                        user=session_user,
-                        message=user_message,
-                        session_id=sid,
-                        message_id=msg_id,
-                        send_chunk=send_chunk,
-                        send_ws=send_ws_json,
-                        send_heartbeat=send_heartbeat,
-                        state_snapshot=state_snapshot,
-                        user_preferences=user_prefs,
-                        attachments=attachments,
-                        chat_history=chat_history,
-                    )
-                except (AllieDisabledError, AllieTimeoutError, asyncio.CancelledError):
-                    raise
-                except Exception as agentic_err:
-                    logger.warning(
-                        "Agentic loop failed, falling back to streaming: session=%s err=%s",
-                        sid, agentic_err,
-                    )
-                    full_text, usage = await copilot_service.process_message_streaming(
-                        user=session_user,
-                        message=user_message,
-                        session_id=sid,
-                        message_id=msg_id,
-                        send_chunk=send_chunk,
-                        state_snapshot=state_snapshot,
-                        user_preferences=user_prefs,
-                        attachments=attachments,
-                        chat_history=chat_history,
-                    )
-            else:
-                # Standalone mode — no tools, use classic streaming path
+            # BQ-ALLAI-B: Use agentic loop (tools via ai.market proxy).
+            try:
+                full_text, usage = await copilot_service.process_message_agentic(
+                    user=session_user,
+                    message=user_message,
+                    session_id=sid,
+                    message_id=msg_id,
+                    send_chunk=send_chunk,
+                    send_ws=send_ws_json,
+                    send_heartbeat=send_heartbeat,
+                    state_snapshot=state_snapshot,
+                    user_preferences=user_prefs,
+                    attachments=attachments,
+                    chat_history=chat_history,
+                )
+            except (AllieDisabledError, AllieTimeoutError, asyncio.CancelledError):
+                raise
+            except Exception as agentic_err:
+                logger.warning(
+                    "Agentic loop failed, falling back to streaming: session=%s err=%s",
+                    sid, agentic_err,
+                )
                 full_text, usage = await copilot_service.process_message_streaming(
                     user=session_user,
                     message=user_message,
@@ -997,7 +980,7 @@ async def websocket_copilot(websocket: WebSocket):
 
         finally:
             # BQ-128 Phase 4: Report usage in finally block — fires even on cancellation
-            if usage and not is_local_only():
+            if usage:
                 try:
                     report = await metering_service.report_usage(
                         user_id=session_user.user_id,
@@ -1216,8 +1199,7 @@ async def websocket_copilot(websocket: WebSocket):
                 cached_balance = manager.get_balance(session_id)
 
                 # Pre-flight balance check
-                # In connected mode, ai.market proxy handles billing — skip local check
-                # In standalone mode, Allie is disabled anyway
+                # ai.market proxy handles billing — skip local check
                 # Balance gate only applies if running with local LLM keys + local billing
                 pass  # BQ-128: balance enforcement moved to ai.market proxy layer
 

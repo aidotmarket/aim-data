@@ -16,7 +16,6 @@ CREATED: 2026-02-14
 """
 
 import pytest
-from unittest.mock import patch
 
 from app.models.copilot import StateSnapshot
 from app.services.context_manager_copilot import CoPilotContextManager
@@ -59,19 +58,10 @@ class TestContextBuilding:
         assert ctx.dataset_summary["dataset_id"] == "ds_abc"
 
     @pytest.mark.asyncio
-    @patch("app.services.context_manager_copilot.is_local_only", return_value=False)
-    async def test_context_includes_system_state(self, _mock, ctx_manager):
+    async def test_context_includes_system_state(self, ctx_manager):
         ctx = await ctx_manager.build_context()
         assert ctx.connected_mode is True
         assert ctx.qdrant_status == "healthy"
-        assert ctx.local_only is False
-
-    @pytest.mark.asyncio
-    @patch("app.services.context_manager_copilot.is_local_only", return_value=True)
-    async def test_context_local_only_mode(self, _mock, ctx_manager):
-        ctx = await ctx_manager.build_context()
-        assert ctx.connected_mode is False
-        assert ctx.local_only is True
 
     @pytest.mark.asyncio
     async def test_context_includes_user_preferences(self, ctx_manager):
@@ -134,18 +124,9 @@ class TestCapabilities:
     """Tests for capability resolution based on deployment mode."""
 
     def test_connected_mode_capabilities(self, ctx_manager):
-        caps = ctx_manager._resolve_capabilities(connected_mode=True, local_only=False)
+        caps = ctx_manager._resolve_capabilities()
         assert caps["can_preview_rows"] is True
         assert caps["can_push_to_marketplace"] is True
-
-    def test_local_only_capabilities(self, ctx_manager):
-        caps = ctx_manager._resolve_capabilities(connected_mode=False, local_only=True)
-        assert caps["can_preview_rows"] is True
-        assert caps["can_push_to_marketplace"] is False
-
-    def test_disconnected_capabilities(self, ctx_manager):
-        caps = ctx_manager._resolve_capabilities(connected_mode=False, local_only=False)
-        assert caps["can_push_to_marketplace"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -179,18 +160,10 @@ class TestEdgeCases:
         assert isinstance(ctx, AllieContext)
 
     @pytest.mark.asyncio
-    @patch("app.services.context_manager_copilot.is_local_only", return_value=False)
-    async def test_rate_limits_in_connected_mode(self, _mock, ctx_manager):
+    async def test_rate_limits_in_connected_mode(self, ctx_manager):
         ctx = await ctx_manager.build_context()
         assert ctx.remaining_tokens_today is not None
         assert ctx.daily_token_limit is not None
-
-    @pytest.mark.asyncio
-    @patch("app.services.context_manager_copilot.is_local_only", return_value=True)
-    async def test_no_rate_limits_in_local_mode(self, _mock, ctx_manager):
-        ctx = await ctx_manager.build_context()
-        assert ctx.remaining_tokens_today is None
-        assert ctx.daily_token_limit is None
 
     @pytest.mark.asyncio
     async def test_quiet_mode_from_env(self, ctx_manager, monkeypatch):

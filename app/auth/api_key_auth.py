@@ -1,11 +1,10 @@
 """
-BQ-127: Dual-Mode API Key Authentication
-==========================================
+API Key Authentication
+======================
 
-Dispatches authentication by VECTORAIZ_MODE:
-    standalone — validate against local key store (HMAC-SHA256 by key_id)
-    connected  — if key starts with ``vz_``, validate locally;
-                 if key starts with ``aim_``, validate against ai.market.
+Connected authentication dispatch:
+    if key starts with ``vz_``, validate locally;
+    if key starts with ``aim_``, validate against ai.market.
 
 Local key format (C2): ``vz_<key_id>_<secret>``
     - key_id: 8-char alphanumeric, indexed for O(1) lookup
@@ -15,7 +14,7 @@ Local key format (C2): ``vz_<key_id>_<secret>``
 HMAC secret auto-generation: if VECTORAIZ_APIKEY_HMAC_SECRET is not set,
 generate one, persist to /data/.vectoraiz_hmac_secret, and log WARNING.
 
-Updated: S130 (2026-02-13) — BQ-127 Air-Gap Architecture
+Updated: S130 (2026-02-13) — BQ-127 local operator auth
 """
 
 import hashlib
@@ -136,7 +135,7 @@ def hmac_hash_secret(secret: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# BQ-127: Local key validation (standalone mode)
+# Local key validation for operator ``vz_`` API keys.
 # ---------------------------------------------------------------------------
 
 def _parse_local_key(api_key: str) -> Optional[tuple]:
@@ -206,7 +205,7 @@ async def _validate_local_key(api_key: str) -> Optional[AuthenticatedUser]:
 
 
 # ---------------------------------------------------------------------------
-# ai.market validation (connected mode — existing flow)
+# ai.market validation.
 # ---------------------------------------------------------------------------
 
 _http_client: Optional[httpx.AsyncClient] = None
@@ -408,7 +407,7 @@ async def _validate_key_against_aimarket(api_key: str) -> Optional[Authenticated
 
 
 # ---------------------------------------------------------------------------
-# BQ-127: Unified get_current_user — dispatches by mode + key prefix
+# Unified get_current_user — dispatches by key prefix.
 # ---------------------------------------------------------------------------
 
 async def get_current_user(request: Request) -> AuthenticatedUser:
@@ -416,10 +415,9 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
 
     Auth priority:
         1. vz_session httpOnly cookie (JWT) — BQ-VZ-MULTI-USER
-        2. X-API-Key header — BQ-127 (standalone/connected)
-    Dispatches by mode for X-API-Key:
-        standalone: validate against local key store only
-        connected:  vz_ prefix → local; aim_ prefix → ai.market
+        2. X-API-Key header
+    X-API-Key dispatch:
+        vz_ prefix → local operator key; aim_ prefix → ai.market
     """
     if not _is_auth_enabled():
         mock_user = AuthenticatedUser(
@@ -477,20 +475,15 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
 
     validated_user: Optional[AuthenticatedUser] = None
 
-    if settings.mode == "standalone":
-        # Standalone: local keys only
+    if api_key.startswith("vz_"):
         validated_user = await _validate_local_key(api_key)
+    elif api_key.startswith("aim_"):
+        validated_user = await _validate_key_against_aimarket(api_key)
     else:
-        # Connected: dispatch by prefix — only vz_ (local) and aim_ (ai.market) accepted
-        if api_key.startswith("vz_"):
-            validated_user = await _validate_local_key(api_key)
-        elif api_key.startswith("aim_"):
-            validated_user = await _validate_key_against_aimarket(api_key)
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid API key prefix. Keys must start with 'vz_' (local) or 'aim_' (ai.market).",
-            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key prefix. Keys must start with 'vz_' (local) or 'aim_' (ai.market).",
+        )
 
     if not validated_user:
         raise HTTPException(
@@ -532,21 +525,18 @@ async def get_current_user_ws(websocket: WebSocket) -> Optional[AuthenticatedUse
 
     validated_user: Optional[AuthenticatedUser] = None
 
-    if settings.mode == "standalone":
+    if api_key.startswith("vz_"):
         validated_user = await _validate_local_key(api_key)
+    elif api_key.startswith("aim_"):
+        try:
+            validated_user = await _validate_key_against_aimarket(api_key)
+        except HTTPException:
+            return None
     else:
-        if api_key.startswith("vz_"):
-            validated_user = await _validate_local_key(api_key)
-        elif api_key.startswith("aim_"):
-            try:
-                validated_user = await _validate_key_against_aimarket(api_key)
-            except HTTPException:
-                return None
-        else:
-            try:
-                validated_user = await _validate_ai_market_bearer_token(api_key)
-            except HTTPException:
-                return None
+        try:
+            validated_user = await _validate_ai_market_bearer_token(api_key)
+        except HTTPException:
+            return None
 
     if not validated_user:
         return None

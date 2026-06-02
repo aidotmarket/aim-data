@@ -15,7 +15,7 @@ Runs against a live VZ instance and exercises every user-facing feature:
 Stress Test #2 adds 25 NEW format files (md, xml, odt, ods, pptx, odp, vcf,
 ics, eml, docx, rtf, html, txt, epub, xlsx, xls, large pdf/parquet/csv).
 
-Usage (standalone):
+Usage:
     python tests/test_beta_readiness.py                              # localhost
     python tests/test_beta_readiness.py --base-url http://10.0.0.5   # custom host
     python tests/test_beta_readiness.py --xl                         # include XL files (>1GB)

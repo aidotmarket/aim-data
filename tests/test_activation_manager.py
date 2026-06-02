@@ -36,23 +36,8 @@ def mock_client():
 
 class TestStartupUnprovisioned:
     @pytest.mark.asyncio
-    async def test_unprovisioned_standalone_does_nothing(self, mock_store, mock_client):
-        """In standalone mode, auto-provision is skipped."""
-        mock_store.state.state = UNPROVISIONED
-        mgr = ActivationManager(store=mock_store, client=mock_client)
-
-        with patch("app.services.activation_manager.settings") as mock_settings:
-            mock_settings.mode = "standalone"
-            mock_settings.app_version = "dev"
-            await mgr.startup()
-        await mgr.shutdown()
-
-        mock_client.activate.assert_not_called()
-        mock_client.refresh.assert_not_called()
-
-    @pytest.mark.asyncio
     async def test_unprovisioned_connected_auto_provisions(self, mock_store, mock_client):
-        """In connected mode, auto-provision is attempted."""
+        """Auto-provision is attempted."""
         mock_store.state.state = UNPROVISIONED
         mgr = ActivationManager(store=mock_store, client=mock_client)
 
@@ -74,7 +59,6 @@ class TestStartupUnprovisioned:
 
         with patch("app.services.activation_manager.settings") as mock_settings, \
              patch("httpx.AsyncClient", return_value=mock_http_client):
-            mock_settings.mode = "connected"
             mock_settings.aimarket_url = "https://ai-market-backend-production.up.railway.app"
             mock_settings.app_version = "dev"
             await mgr.startup()

@@ -240,11 +240,11 @@ async def system_info():
     recommended_concurrent = min(max(cores // 4, 2), 6)
 
     return {
-        "mode": settings.mode,
+        "mode": "connected",
         "version": APP_VERSION,
         "channel": CHANNEL.value,
         "features": {
-            "allai": settings.mode != "standalone" and (settings.allai_enabled or CHANNEL == ChannelType.aim_data),
+            "allai": settings.allai_enabled or CHANNEL == ChannelType.aim_data,
             "marketplace": settings.marketplace_enabled,
             "earnings": settings.marketplace_enabled,
             "local_auth": True,
@@ -254,7 +254,7 @@ async def system_info():
             "memory_gb": mem_gb,
             "recommended_concurrent_uploads": recommended_concurrent,
         },
-        "marketplace_api_url": settings.ai_market_url if settings.mode != "standalone" else None,
+        "marketplace_api_url": settings.ai_market_url,
     }
 
 
@@ -265,10 +265,10 @@ async def system_mode():
     Alias for /system/info with the shape requested by the frontend.
     """
     return {
-        "mode": settings.mode,
+        "mode": "connected",
         "features": {
             "marketplace": settings.marketplace_enabled,
-            "allai": settings.mode != "standalone" and (settings.allai_enabled or CHANNEL == ChannelType.aim_data),
+            "allai": settings.allai_enabled or CHANNEL == ChannelType.aim_data,
             "earnings": settings.marketplace_enabled,
         },
     }

@@ -33,10 +33,6 @@ def _sample_env_value(field_name: str, annotation) -> tuple[str, object]:
         return '["https://aim.example"]', ["https://aim.example"]
     if field_name == "allowed_raw_file_dirs":
         return '["/tmp/aim-data-raw"]', ["/tmp/aim-data-raw"]
-    if field_name == "mode":
-        return "connected", "connected"
-    if field_name == "connected_fallback":
-        return "refuse", "refuse"
     if field_name == "hybrid_search_mode":
         return "dense_only", "dense_only"
 
