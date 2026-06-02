@@ -1,16 +1,16 @@
-# BQ-VZ-SERIAL-CLIENT — vectorAIz Serial System Client Integration
+# BQ-VZ-SERIAL-CLIENT — AIM Data Serial System Client Integration
 
 **Version:** 1.0
 **Gate 1:** APPROVED (3/3 — AG, MP, Vulcan; XAI unavailable)
 **Session:** S178
 **Estimated Hours:** 10-14h
-**Repo:** vectoraiz-backend
+**Repo:** aim-data-backend
 
 ---
 
 ## 1. Summary
 
-Integrate vectorAIz backend with ai-market's serial authority (BQ-SERIAL). vectorAIz instances will activate serials on first boot, meter allAI usage against setup ($10) and data ($4) credit pools, gracefully wall users at the $4 data cap, refresh tokens on upgrade, and bridge to the BQ-073 credit ledger after user registration.
+Integrate AIM Data backend with ai-market's serial authority (BQ-SERIAL). AIM Data instances will activate serials on first boot, meter allAI usage against setup ($10) and data ($4) credit pools, gracefully wall users at the $4 data cap, refresh tokens on upgrade, and bridge to the BQ-073 credit ledger after user registration.
 
 ---
 
@@ -341,7 +341,7 @@ This is a one-way transition. Once migrated, the serial is consumed.
 
 ## 11. Files to Create/Modify
 
-### New files (vectoraiz-backend):
+### New files (aim-data-backend):
 - `app/services/serial_store.py` — SerialState dataclass, atomic JSON persistence
 - `app/services/serial_client.py` — HTTP client for ai-market serial endpoints
 - `app/services/activation_manager.py` — Startup lifecycle, refresh, background probes

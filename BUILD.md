@@ -1,4 +1,4 @@
-# vectorAIz — Build Guide
+# AIM Data — Build Guide
 
 ## Docker Images
 

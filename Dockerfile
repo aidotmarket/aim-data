@@ -1,10 +1,10 @@
 # =============================================================================
-# vectorAIz Backend — Production Dockerfile
+# AIM Data Backend — Production Dockerfile
 # =============================================================================
 # BQ-089: Hardened for self-hosting
 # S123: Updated for Railway PostgreSQL deployment
 # - Multi-stage build (builder + runtime)
-# - Non-root user (vectoraiz:1001)
+# - Non-root user (aim_data:1001)
 # - Pinned base image
 # - No dev dependencies in final image
 # - Alembic migrations run on startup via app.core.database.init_db()
@@ -33,7 +33,7 @@ RUN PYTHONPATH=/install/lib/python3.11/site-packages \
 FROM python:3.11.11-slim-bookworm AS runtime
 
 LABEL maintainer="ai.market <ops@ai.market>"
-LABEL description="vectorAIz Backend — Self-hosted data processing engine"
+LABEL description="AIM Data Backend — Self-hosted data processing engine"
 
 WORKDIR /app
 
@@ -53,28 +53,28 @@ COPY --from=builder /install /usr/local
 COPY --from=builder /install/nltk_data /usr/share/nltk_data
 
 # Create non-root user
-RUN groupadd -g 1001 vectoraiz && \
-    useradd -u 1001 -g vectoraiz -m -s /bin/bash vectoraiz
+RUN groupadd -g 1001 aim_data && \
+    useradd -u 1001 -g aim_data -m -s /bin/bash aim_data
 
 # Create data directories with correct ownership
 RUN mkdir -p /data/uploads /data/processed /data/temp /data/keystore && \
-    chown -R vectoraiz:vectoraiz /data
+    chown -R aim_data:aim_data /data
 
 # Copy application code
-COPY --chown=vectoraiz:vectoraiz app/ ./app/
+COPY --chown=aim_data:aim_data app/ ./app/
 
 # Copy Alembic migration files (BQ-111+)
-COPY --chown=vectoraiz:vectoraiz alembic.ini ./alembic.ini
-COPY --chown=vectoraiz:vectoraiz alembic/ ./alembic/
+COPY --chown=aim_data:aim_data alembic.ini ./alembic.ini
+COPY --chown=aim_data:aim_data alembic/ ./alembic/
 
 # Copy entrypoint script
 COPY --chown=root:root entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Ensure non-root user owns the app directory
-RUN chown -R vectoraiz:vectoraiz /app
+RUN chown -R aim_data:aim_data /app
 
-USER vectoraiz
+USER aim_data
 
 EXPOSE 8000
 

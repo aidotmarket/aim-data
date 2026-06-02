@@ -2,7 +2,7 @@
 MCP Server — Standalone stdio server for external LLM connectivity.
 
 Invocation:
-    docker exec -i vectoraiz python -m app.mcp_server --token vzmcp_...
+    docker exec -i aim-data-app python -m app.mcp_server --token vzmcp_...
 
 Uses FastMCP from the `mcp` SDK. 6 tools delegate to QueryOrchestrator.
 
@@ -43,7 +43,7 @@ _orchestrator: Optional[QueryOrchestrator] = None
 # Create MCP server only if SDK available
 mcp_server = None
 if MCP_AVAILABLE:
-    mcp_server = FastMCP(name="vectoraiz", json_response=True)
+    mcp_server = FastMCP(name="aim-data", json_response=True)
 
 
 def _noop_decorator(*args, **kwargs):

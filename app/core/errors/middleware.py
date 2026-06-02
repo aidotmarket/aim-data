@@ -1,7 +1,7 @@
 """
-BQ-123A: FastAPI exception handler for VectorAIzError.
+BQ-123A: FastAPI exception handler for AIMDataError.
 
-Catches VectorAIzError, looks up the registry, and returns a structured
+Catches AIMDataError, looks up the registry, and returns a structured
 JSON error response. Unknown codes get a safe fallback.
 """
 
@@ -10,14 +10,14 @@ import logging
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from app.core.errors import VectorAIzError
+from app.core.errors import AIMDataError
 from app.core.errors.registry import error_registry
 
 logger = logging.getLogger(__name__)
 
 
-async def vectoraiz_error_handler(request: Request, exc: VectorAIzError) -> JSONResponse:
-    """Convert VectorAIzError into a structured JSON response."""
+async def aim_data_error_handler(request: Request, exc: AIMDataError) -> JSONResponse:
+    """Convert AIMDataError into a structured JSON response."""
     entry = error_registry.get(exc.code)
 
     if entry is None:

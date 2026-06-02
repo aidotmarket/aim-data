@@ -38,7 +38,7 @@ import pytest
 
 @pytest.fixture
 def tmp_data(tmp_path):
-    """Create temp directories mimicking vectorAIz layout."""
+    """Create temp directories mimicking AIM Data layout."""
     uploads = tmp_path / "uploads"
     processed = tmp_path / "processed"
     temp = tmp_path / "temp"

@@ -29,7 +29,7 @@ _cache: dict = {
 
 CACHE_TTL_S = 6 * 60 * 60  # 6 hours
 
-GHCR_IMAGE = "aidotmarket/vectoraiz"
+GHCR_IMAGE = "aidotmarket/aim-data"
 GHCR_REGISTRY = "ghcr.io"
 
 # Semver-like tag pattern: optional v prefix, digits.digits.digits, optional -rc.N
@@ -168,9 +168,9 @@ async def trigger_update() -> dict:
             "status": "docker_not_available",
             "message": (
                 "Docker socket not mounted. To update manually:\n"
-                "1. cd to your vectoraiz directory\n"
-                "2. docker compose -f docker-compose.customer.yml pull vectoraiz\n"
-                "3. docker compose -f docker-compose.customer.yml up -d vectoraiz"
+                "1. cd to your aim-data directory\n"
+                "2. docker compose -f docker-compose.aim-data.yml pull app\n"
+                "3. docker compose -f docker-compose.aim-data.yml up -d app"
             ),
         }
 
@@ -220,7 +220,7 @@ def _docker_pull_and_signal(tag: str) -> dict:
         logger.warning(
             "Could not restart container by hostname (%s): %s. "
             "The update marker has been written — restart the container manually or "
-            "run: docker compose -f docker-compose.customer.yml up -d vectoraiz",
+            "run: docker compose -f docker-compose.aim-data.yml up -d app",
             hostname, e,
         )
 

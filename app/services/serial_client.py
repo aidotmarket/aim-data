@@ -219,8 +219,8 @@ class SerialClient:
         """POST /api/v1/serials/{serial}/credits/checkout"""
         import os
         # Return URL must point to the FRONTEND (8080), not the backend (8100)
-        frontend_port = os.environ.get("VECTORAIZ_FRONTEND_PORT", "8080")
-        return_url = os.environ.get("VECTORAIZ_RETURN_URL", f"http://localhost:{frontend_port}")
+        frontend_port = os.environ.get("AIM_DATA_FRONTEND_PORT") or os.environ.get("VECTORAIZ_FRONTEND_PORT", "8080")
+        return_url = os.environ.get("AIM_DATA_RETURN_URL") or os.environ.get("VECTORAIZ_RETURN_URL", f"http://localhost:{frontend_port}")
         status_code, data = await self._request(
             "POST",
             f"/api/v1/serials/{serial}/credits/checkout",
@@ -250,8 +250,8 @@ class SerialClient:
     async def send_magic_link(self, serial: str, install_token: str, email: str) -> dict:
         """POST /api/v1/auth/magic-link"""
         import os
-        frontend_port = os.environ.get("VECTORAIZ_FRONTEND_PORT", "8080")
-        return_url = os.environ.get("VECTORAIZ_RETURN_URL", f"http://localhost:{frontend_port}")
+        frontend_port = os.environ.get("AIM_DATA_FRONTEND_PORT") or os.environ.get("VECTORAIZ_FRONTEND_PORT", "8080")
+        return_url = os.environ.get("AIM_DATA_RETURN_URL") or os.environ.get("VECTORAIZ_RETURN_URL", f"http://localhost:{frontend_port}")
         status_code, data = await self._request(
             "POST",
             "/api/v1/auth/magic-link",

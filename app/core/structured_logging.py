@@ -21,8 +21,8 @@ request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 session_id_var: ContextVar[str | None] = ContextVar("session_id", default=None)
 
-APP_VERSION = os.environ.get("VECTORAIZ_VERSION", "dev")
-SERVICE_NAME = "vectoraiz-backend"
+APP_VERSION = os.environ.get("AIM_DATA_VERSION") or os.environ.get("VECTORAIZ_VERSION", "dev")
+SERVICE_NAME = "aim-data-backend"
 
 _startup_time: float = time.time()
 
@@ -66,7 +66,7 @@ def _add_log_level_upper(logger_name: str, method_name: str, event_dict: dict) -
 
 def setup_logging(
     log_dir: str = "logs",
-    log_file: str = "vectoraiz.jsonl",
+    log_file: str = "aim_data.jsonl",
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,
     log_level: int = logging.INFO,

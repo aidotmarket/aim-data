@@ -36,11 +36,11 @@ class TestConfigRedaction:
             "gemini_api_key": "sk-proj-abc123def456ghi789",
             "stripe_secret_key": "sk_live_abcdef1234567890",
             "internal_api_key": "aim_test_key_12345678",
-            "app_name": "vectorAIz",
+            "app_name": "AIM Data",
         }
         redacted = redact_config(config)
 
-        assert redacted["app_name"] == "vectorAIz"
+        assert redacted["app_name"] == "AIM Data"
         assert "****" in redacted["gemini_api_key"]
         assert "****" in redacted["stripe_secret_key"]
         assert "****" in redacted["internal_api_key"]
@@ -50,7 +50,7 @@ class TestConfigRedaction:
     def test_non_secrets_preserved(self):
         """Non-sensitive values are passed through unchanged."""
         config = {
-            "app_name": "vectorAIz",
+            "app_name": "AIM Data",
             "debug": False,
             "qdrant_host": "qdrant",
             "qdrant_port": 6333,

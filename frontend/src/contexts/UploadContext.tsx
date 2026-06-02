@@ -252,7 +252,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         return "ok";
       }
 
-      // VectorAIz flow: dataset upload with vectorization + processing pipeline.
+      // AIM Data flow: dataset upload with vectorization + processing pipeline.
       const { promise, abort } = datasetsApi.uploadWithProgress(item.file, {
         allowDuplicate,
         batchId: batchIdRef.current ?? undefined,

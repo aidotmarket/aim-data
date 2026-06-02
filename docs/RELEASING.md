@@ -1,4 +1,4 @@
-# Releasing vectorAIz
+# Releasing AIM Data
 
 ## Overview
 

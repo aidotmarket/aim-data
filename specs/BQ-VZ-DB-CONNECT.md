@@ -5,14 +5,14 @@
 **Status:** Ready for Gate 1
 **Estimated Hours:** 20
 **Priority:** P1
-**Track:** D (vectorAIz Integration)
+**Track:** D (AIM Data Integration)
 **Triggered by:** Beta tester Daniel Weselius (oalta.io)
 
 ---
 
 ## 1. Problem Statement
 
-vectorAIz only ingests files today — CSV, JSON, Parquet, XLSX, PDF, DOCX, etc. But most enterprise data lives in databases. A customer with 50 tables in Postgres or MySQL has no way to get that data into vectorAIz without manually exporting CSVs.
+AIM Data only ingests files today — CSV, JSON, Parquet, XLSX, PDF, DOCX, etc. But most enterprise data lives in databases. A customer with 50 tables in Postgres or MySQL has no way to get that data into AIM Data without manually exporting CSVs.
 
 Daniel Weselius (oalta.io) needs this for a demo. It's the #1 beta blocker for enterprise adoption.
 
@@ -28,8 +28,8 @@ The Council consultation in S151 produced a 3-phase roadmap:
 1. **Read-only always.** The connection to the customer's database is strictly read-only. Enforced at 3 levels: SQLAlchemy `execution_options(postgresql_readonly=True)`, SQL statement validation (SELECT only), and credential-level (recommend `pg_read_all_data` role).
 2. **Extract, don't bridge.** We pull data out of the external DB into local Parquet files, then process them through the existing pipeline (DuckDB → chunking → embedding → Qdrant). We do NOT query the external DB at runtime for RAG.
 3. **Encrypted credentials.** Connection strings are encrypted at rest using the same Fernet key infrastructure as LLM API keys (BQ-125).
-4. **One dataset per table/query.** Each extracted table becomes a dataset in vectorAIz, going through the standard pipeline.
-5. **Local only.** The external DB connection is made from the customer's vectorAIz instance on their LAN. No data leaves their network (unless they later publish to ai.market).
+4. **One dataset per table/query.** Each extracted table becomes a dataset in AIM Data, going through the standard pipeline.
+5. **Local only.** The external DB connection is made from the customer's AIM Data instance on their LAN. No data leaves their network (unless they later publish to ai.market).
 
 ### 2.2 Data Flow
 
@@ -49,7 +49,7 @@ Customer DB (Postgres/MySQL)
     ▼ Standard pipeline: DatasetRecord created → PipelineService.run_full_pipeline()
     │     (chunking → embedding → Qdrant indexing)
     │
-    ▼ Dataset appears in vectorAIz like any uploaded file
+    ▼ Dataset appears in AIM Data like any uploaded file
 ```
 
 ### 2.3 Credential Storage
@@ -205,7 +205,7 @@ When extracting from a database, we create a DatasetRecord with a new source typ
 
 ### 2.6 API Endpoints
 
-All under `/api/v1/db/` prefix. Auth: existing session auth (vectorAIz is single-user).
+All under `/api/v1/db/` prefix. Auth: existing session auth (AIM Data is single-user).
 
 ```
 POST   /api/v1/db/connections              — Create connection (encrypted storage)
@@ -231,7 +231,7 @@ POST   /api/v1/db/connections/{id}/extract — Extract table(s) → create datas
 
 ### 2.7 Frontend UI
 
-New "Database" tab in the vectorAIz sidebar (alongside Files, Search, etc.):
+New "Database" tab in the AIM Data sidebar (alongside Files, Search, etc.):
 
 **Connection Setup View:**
 - Form: name, type (dropdown: PostgreSQL / MySQL), host, port, database, username, password
@@ -278,7 +278,7 @@ New "Database" tab in the vectorAIz sidebar (alongside Files, Search, etc.):
 
 ### 4.3 Network Security
 
-- vectorAIz runs on the customer's LAN — connections are local/internal
+- AIM Data runs on the customer's LAN — connections are local/internal
 - SSL mode configurable (default: prefer)
 - No credentials leave the customer's network
 - Connection timeout: 10s (prevents hanging on unreachable hosts)
@@ -362,7 +362,7 @@ def upgrade():
 
 ### Phase 1C: Integration Testing + Hardening (3-4h)
 - End-to-end: create connection → introspect → extract → pipeline → query via RAG
-- Test with real Postgres (vectorAIz's own DB as test target)
+- Test with real Postgres (AIM Data's own DB as test target)
 - Test with MySQL via Docker testcontainer (if CI available) or mock
 - Edge cases: empty tables, huge tables (streaming), special characters, binary columns
 - Connection cleanup on delete (engine disposal, dataset cleanup policy)
@@ -398,6 +398,6 @@ def upgrade():
 ## 9. Test Strategy
 
 - **Unit:** SQL validation (20+ attack patterns), credential encryption round-trip, connection URL building, schema parsing
-- **Integration:** Extract from vectorAIz's own Postgres (self-referential test), pipeline completion, dataset queryable via RAG after extract
+- **Integration:** Extract from AIM Data's own Postgres (self-referential test), pipeline completion, dataset queryable via RAG after extract
 - **Edge cases:** Empty tables, NULL-heavy columns, JSONB/array columns, timestamp timezone handling, very wide tables (100+ columns)
 - **Security:** Injection attempts in custom SQL, connection string injection, password never in logs/responses

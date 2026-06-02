@@ -26,8 +26,8 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.errors import VectorAIzError
-from app.core.errors.middleware import vectoraiz_error_handler
+from app.core.errors import AIMDataError
+from app.core.errors.middleware import aim_data_error_handler
 from app.core.errors.registry import error_registry
 from app.routers.copilot import router as copilot_rest_router, ws_router, manager, ConnectionManager
 from app.models.copilot import SCICommand, SCICommandType, RiskLevel, UIHints
@@ -72,7 +72,7 @@ def _clean_manager():
 def _create_test_app(auth_enabled: bool = False) -> FastAPI:
     """Create a minimal FastAPI app with copilot routers mounted."""
     app = FastAPI()
-    app.add_exception_handler(VectorAIzError, vectoraiz_error_handler)
+    app.add_exception_handler(AIMDataError, aim_data_error_handler)
     app.include_router(copilot_rest_router, prefix="/api/copilot")
     app.include_router(ws_router)
     return app

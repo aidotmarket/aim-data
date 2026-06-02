@@ -1,13 +1,13 @@
 """
 BQ-123A: Error code system.
 
-VectorAIzError is the base exception for all structured errors.
+AIMDataError is the base exception for all structured errors.
 Raise it with an error code from the registry, and the error middleware
 will produce a structured JSON response.
 
 Usage:
-    from app.core.errors import VectorAIzError
-    raise VectorAIzError("VAI-QDR-001", detail="connection refused to localhost:6333")
+    from app.core.errors import AIMDataError
+    raise AIMDataError("VAI-QDR-001", detail="connection refused to localhost:6333")
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import re
 CODE_PATTERN = re.compile(r"^VAI-[A-Z]{2,6}-\d{3}$")
 
 
-class VectorAIzError(Exception):
+class AIMDataError(Exception):
     """Structured application error tied to the error registry.
 
     Args:

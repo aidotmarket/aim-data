@@ -5,7 +5,7 @@
 **Estimated:** 16h (Phase 1: 10h, Phase 2: 6h)
 **Dependencies:** None
 **Created:** S243
-**Triggered by:** Real user feedback — "How do I let other users in my office use vectorAIz to search out files?"
+**Triggered by:** Real user feedback — "How do I let other users in my office use AIM Data to search out files?"
 
 ---
 
@@ -51,7 +51,7 @@ The portal is a **separate route** (`/portal`) with its own layout — no sideba
 2. **Results table** — matching rows with relevance scores, column highlighting
 3. **Dataset selector** — only datasets the admin has marked as portal-visible
 4. **allAI chat** (optional) — if VZ has allAI configured, portal users can ask questions. Uses buyer-role persona with read-only tool access.
-5. **Footer** — "Powered by vectorAIz" with link to vectoraiz.com
+5. **Footer** — "Powered by AIM Data" with link to vectoraiz.com
 
 ### What portal users CANNOT do
 - Upload or delete files

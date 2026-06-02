@@ -36,7 +36,7 @@ async def health_check():
     data = {
         "status": "ok",
         "version": APP_VERSION,
-        "service": "vectoraiz-backend",
+        "service": "aim-data-backend",
         "uptime_s": round(get_uptime_s(), 1),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

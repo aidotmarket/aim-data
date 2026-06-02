@@ -1,5 +1,5 @@
 """
-Pytest configuration for vectorAIz tests.
+Pytest configuration for AIM Data tests.
 Sets environment variables to disable auth during testing.
 """
 
@@ -51,7 +51,7 @@ SQLModel.metadata.create_all(get_engine())
 from app.core.database import get_legacy_engine
 SQLModel.metadata.create_all(get_legacy_engine())
 
-# Load error registry so VectorAIzError returns correct HTTP status codes
+# Load error registry so AIMDataError returns correct HTTP status codes
 from app.core.errors.registry import error_registry
 error_registry.load()
 

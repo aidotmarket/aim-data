@@ -1,6 +1,6 @@
 """
 Tests for the Database Router — API endpoint tests (CRUD, test connection,
-introspect, extract). Includes self-referential extraction against vectorAIz's
+introspect, extract). Includes self-referential extraction against AIM Data's
 own Postgres when DATABASE_URL is a postgresql:// URL.
 
 Phase: BQ-VZ-DB-CONNECT
@@ -285,7 +285,7 @@ class TestExtract:
 # =====================================================================
 
 class TestSelfReferentialExtraction:
-    """When DATABASE_URL points to Postgres, test extracting from vectorAIz's own DB."""
+    """When DATABASE_URL points to Postgres, test extracting from AIM Data's own DB."""
 
     @pytest.fixture(autouse=True)
     def _check_postgres(self):
@@ -306,7 +306,7 @@ class TestSelfReferentialExtraction:
         }
 
     def test_self_connect_and_introspect(self):
-        """Connect to vectorAIz's own Postgres and introspect schema."""
+        """Connect to AIM Data's own Postgres and introspect schema."""
         params = self._parse_db_url()
         resp = client.post("/api/v1/db/connections", json={
             "name": "Self-Referential Test",

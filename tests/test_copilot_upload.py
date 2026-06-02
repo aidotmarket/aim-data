@@ -427,8 +427,8 @@ class TestUploadEndpoint:
     def app(self, tmp_path, monkeypatch):
         """FastAPI app with copilot routers and temp upload dir."""
         from fastapi import FastAPI
-        from app.core.errors import VectorAIzError
-        from app.core.errors.middleware import vectoraiz_error_handler
+        from app.core.errors import AIMDataError
+        from app.core.errors.middleware import aim_data_error_handler
         from app.core.errors.registry import error_registry
         from app.routers.copilot import router as copilot_rest_router
 
@@ -447,7 +447,7 @@ class TestUploadEndpoint:
         copilot_mod._upload_session_count.clear()
 
         app = FastAPI()
-        app.add_exception_handler(VectorAIzError, vectoraiz_error_handler)
+        app.add_exception_handler(AIMDataError, aim_data_error_handler)
         app.include_router(copilot_rest_router, prefix="/api/copilot")
         # Override auth dependency so upload endpoint doesn't 401
         app.dependency_overrides[get_current_user] = lambda: MOCK_USER
@@ -564,8 +564,8 @@ class TestBrainMessageAttachments:
     @pytest.fixture
     def app(self, tmp_path, monkeypatch):
         from fastapi import FastAPI
-        from app.core.errors import VectorAIzError
-        from app.core.errors.middleware import vectoraiz_error_handler
+        from app.core.errors import AIMDataError
+        from app.core.errors.middleware import aim_data_error_handler
         from app.core.errors.registry import error_registry
         from app.routers.copilot import router as copilot_rest_router, ws_router, manager
 
@@ -590,7 +590,7 @@ class TestBrainMessageAttachments:
         manager._lock = None
 
         app = FastAPI()
-        app.add_exception_handler(VectorAIzError, vectoraiz_error_handler)
+        app.add_exception_handler(AIMDataError, aim_data_error_handler)
         app.include_router(copilot_rest_router, prefix="/api/copilot")
         app.include_router(ws_router)
         # Override auth dependency so endpoints don't 401

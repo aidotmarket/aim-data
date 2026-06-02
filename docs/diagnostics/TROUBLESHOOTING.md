@@ -1,4 +1,4 @@
-# VectorAIz — Active Diagnostic Reference
+# AIM Data — Active Diagnostic Reference
 
 **Last updated:** S209 (3 March 2026)
 **Platform:** Mac Studio M3 Ultra (Titan-1) — ARM64 native Docker
@@ -128,25 +128,25 @@ curl -s http://localhost:8080/api/health | python3 -m json.tool
 docker stats --no-stream
 
 # Processing state (inside postgres container)
-docker exec vectoraiz-postgres-1 psql -U vectoraiz -d vectoraiz -c \
+docker exec aim-data-postgres-1 psql -U aim_data -d aim_data -c \
   "SELECT count(*), status FROM dataset_records GROUP BY status ORDER BY count DESC;"
 
-# Qdrant collections (from inside vectoraiz container)
-docker exec vectoraiz-vectoraiz-1 curl -s http://qdrant:6333/collections
+# Qdrant collections (from inside app container)
+docker exec aim-data-app-1 curl -s http://qdrant:6333/collections
 
 # Application logs (JSON)
-docker exec vectoraiz-vectoraiz-1 cat /app/logs/vectoraiz.jsonl | tail -50
+docker exec aim-data-app-1 cat /app/logs/aim_data.jsonl | tail -50
 
 # Check for zombie subprocesses
-docker top vectoraiz-vectoraiz-1
+docker top aim-data-app-1
 
 # Filtered container logs
-docker logs vectoraiz-vectoraiz-1 2>&1 | grep -E "error|failed|worker|timeout|MemoryError|SIGKILL"
+docker logs aim-data-app-1 2>&1 | grep -E "error|failed|worker|timeout|MemoryError|SIGKILL"
 
 # Nuclear reset stuck records + restart
-docker exec vectoraiz-postgres-1 psql -U vectoraiz -d vectoraiz -c \
+docker exec aim-data-postgres-1 psql -U aim_data -d aim_data -c \
   "UPDATE dataset_records SET status = 'error' WHERE status IN ('extracting', 'indexing');"
-docker restart vectoraiz-vectoraiz-1
+docker restart aim-data-app-1
 ```
 
 ---

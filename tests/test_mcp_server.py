@@ -260,7 +260,7 @@ class TestErrorHardening:
                 # Must NOT contain the raw exception message
                 assert "/internal/path" not in error_data["error"]["message"]
                 assert "connection refused" not in error_data["error"]["message"]
-                assert "Check vectorAIz logs" in error_data["error"]["message"]
+                assert "Check AIM Data logs" in error_data["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_get_schema_hides_internal_error(self, mock_token):

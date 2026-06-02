@@ -1,5 +1,5 @@
 #!/bin/sh
-# vectorAIz Backend — Railway Entrypoint
+# AIM Data Backend — Railway Entrypoint
 # Ensures /data directories exist and are writable before starting the app.
 
 set -e

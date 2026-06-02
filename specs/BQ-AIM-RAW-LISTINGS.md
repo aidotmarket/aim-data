@@ -1,4 +1,4 @@
-# BQ-VZ-RAW-LISTINGS — Raw File Listings on ai.market via vectorAIz
+# BQ-VZ-RAW-LISTINGS — Raw File Listings on ai.market via AIM Data
 
 **Version:** 1.0
 **Gate 1:** APPROVED_WITH_MANDATES (3/3 — Vulcan, MP, XAI)

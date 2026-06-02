@@ -23,7 +23,7 @@ says "what are my current files?" and allAI should:
 1. KNOW she's on the Datasets page (not hallucinate "home screen")
 2. KNOW the 5 datasets with names, sizes, row counts, status
 3. BE ABLE TO act — preview rows, run queries, trigger processing
-4. EVENTUALLY reach outside vectorAIz — grab files from a directory
+4. EVENTUALLY reach outside AIM Data — grab files from a directory
 
 This is the core product differentiator. This is how we win.
 
@@ -411,7 +411,7 @@ ALLAI_TOOLS = [
     {
         "name": "list_datasets",
         "description": (
-            "List all datasets in the user's vectorAIz instance with metadata "
+            "List all datasets in the user's AIM Data instance with metadata "
             "(filename, type, status, row count, column count, size). "
             "Use when the user asks about their data, files, or uploads."
         ),
@@ -1164,16 +1164,16 @@ class AllieChatRequest(BaseModel):
 
 # The proxy passes tools directly to Anthropic Messages API.
 # When the response contains tool_use blocks, they are forwarded to the
-# vectorAIz backend via SSE events:
+# AIM Data backend via SSE events:
 #   event: tool_use
 #   data: {"id": "...", "name": "...", "input": {...}}
 #
-# The vectorAIz backend executes the tool, then sends a follow-up
+# The AIM Data backend executes the tool, then sends a follow-up
 # request with tool_result in messages.
 ```
 
 **Temporary fallback (max 2 weeks):**
-If proxy changes take longer, vectorAIz backend calls Anthropic directly
+If proxy changes take longer, AIM Data backend calls Anthropic directly
 using a service API key. Metering via usage-report endpoint after each call.
 This is NOT permanent architecture — just an unblocking escape hatch.
 
@@ -1185,7 +1185,7 @@ Add to Layer 2 (Role & Domain):
 
 ```
 **Tool Use:**
-You have tools that let you take actions in the user's vectorAIz instance.
+You have tools that let you take actions in the user's AIM Data instance.
 When the user asks you to do something (show data, run a query, check status),
 USE THE TOOLS rather than describing what they should do manually.
 
@@ -1260,7 +1260,7 @@ Tools run in a **sandboxed execution context** (separate process with restricted
     "description": (
         "List files in a directory on the user's system. "
         "Only works in local/self-hosted mode. "
-        "Use when user asks about files outside vectorAIz."
+        "Use when user asks about files outside AIM Data."
     ),
     "input_schema": {
         "type": "object",
@@ -1276,7 +1276,7 @@ Tools run in a **sandboxed execution context** (separate process with restricted
 {
     "name": "import_files",
     "description": (
-        "Import files from user's filesystem into vectorAIz. "
+        "Import files from user's filesystem into AIM Data. "
         "Files are COPIED (not moved). Processing starts automatically. "
         "Only works in local/self-hosted mode."
     ),
@@ -1430,7 +1430,7 @@ When frontend receives `CONFIRMATION_REQUIRED`, show a modal/inline dialog:
 
 ### Phase C (Reach)
 - [ ] "What CSV files are in my Downloads?" → allAI lists them
-- [ ] "Import those" → confirmation dialog → files copied to vectorAIz
+- [ ] "Import those" → confirmation dialog → files copied to AIM Data
 - [ ] 🛡️ System directories blocked after realpath resolution
 - [ ] 🛡️ Symlinks resolved and re-checked
 - [ ] 🛡️ Disabled entirely in connected/cloud mode

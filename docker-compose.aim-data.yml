@@ -29,7 +29,7 @@ services:
       - VECTORAIZ_MODE=${VECTORAIZ_MODE:-connected}
       - VECTORAIZ_SECRET_KEY=${VECTORAIZ_SECRET_KEY:-}
       - AIM_DATA_APIKEY_HMAC_SECRET=${AIM_DATA_APIKEY_HMAC_SECRET:-}
-      - DATABASE_URL=postgresql://vectoraiz:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/vectoraiz
+      - DATABASE_URL=postgresql://aim_data:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/aim_data
       - QDRANT_HOST=qdrant
       - AIM_DATA_MAX_CONCURRENT_PROCESSING=${AIM_DATA_MAX_CONCURRENT_PROCESSING:-2}
       - QDRANT_PORT=6333
@@ -38,7 +38,7 @@ services:
       - AI_MARKET_AWS_ACCOUNT_ID=${AI_MARKET_AWS_ACCOUNT_ID:-948749907373}
       - AIM_DATA_ALLAI_ENABLED=${AIM_DATA_ALLAI_ENABLED:-true}
       # Allie / ai.market integration
-      - AIM_DATA_AI_MARKET_URL=${AIM_DATA_AI_MARKET_URL:-}
+      - AIM_DATA_AI_MARKET_URL=${AIM_DATA_AI_MARKET_URL:-https://api.ai.market}
       - VECTORAIZ_AI_MARKET_URL=${VECTORAIZ_AI_MARKET_URL:-https://api.ai.market}
       - AIM_DATA_ALLIE_PROVIDER=${AIM_DATA_ALLIE_PROVIDER:-}
       # Serial auto-activation (env var fallback — normally provisioned via serial.json in /data volume)
@@ -78,11 +78,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_USER=vectoraiz
+      - POSTGRES_USER=aim_data
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      - POSTGRES_DB=vectoraiz
+      - POSTGRES_DB=aim_data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vectoraiz"]
+      test: ["CMD-SHELL", "pg_isready -U aim_data"]
       interval: 5s
       timeout: 3s
       retries: 5

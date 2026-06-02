@@ -101,7 +101,7 @@ class TestMetadataExtractorFormats:
         path = allow_tmp_raw_dirs / "sample.pdf"
         writer = PdfWriter()
         writer.add_blank_page(width=72, height=72)
-        writer.add_metadata({"/Title": "Sample PDF", "/Author": "VectorAIz"})
+        writer.add_metadata({"/Title": "Sample PDF", "/Author": "AIM Data"})
         with path.open("wb") as handle:
             writer.write(handle)
 
@@ -121,7 +121,7 @@ class TestMetadataExtractorFormats:
         assert metadata["source"] == "allai"
         assert metadata["technical_metadata"]["page_count"] == 1
         assert metadata["technical_metadata"]["title"] == "Sample PDF"
-        assert metadata["technical_metadata"]["author"] == "VectorAIz"
+        assert metadata["technical_metadata"]["author"] == "AIM Data"
 
     def test_extract_audio_gracefully_degrades_without_mutagen(self, allow_tmp_raw_dirs, monkeypatch):
         path = allow_tmp_raw_dirs / "sample.wav"

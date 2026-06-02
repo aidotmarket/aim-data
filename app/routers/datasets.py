@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
 from app.core.async_utils import run_sync
-from app.core.errors import VectorAIzError
+from app.core.errors import AIMDataError
 from app.services.batch_service import _check_magic_bytes
 from app.utils.sanitization import validate_path_traversal
 
@@ -629,7 +629,7 @@ async def get_dataset(
     """Get metadata for a specific dataset."""
     record = processing.get_dataset(dataset_id)
     if not record:
-        raise VectorAIzError("VAI-UX-001", detail=f"Dataset '{dataset_id}' not found")
+        raise AIMDataError("VAI-UX-001", detail=f"Dataset '{dataset_id}' not found")
 
     response = record.to_dict()
 
@@ -655,7 +655,7 @@ async def get_dataset_status(
     """Get processing status for a dataset (for polling)."""
     record = processing.get_dataset(dataset_id)
     if not record:
-        raise VectorAIzError("VAI-UX-001", detail=f"Dataset '{dataset_id}' not found")
+        raise AIMDataError("VAI-UX-001", detail=f"Dataset '{dataset_id}' not found")
 
     status_val = record.status.value if isinstance(record.status, DatasetStatus) else record.status
     result = {

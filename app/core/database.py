@@ -5,7 +5,7 @@ Database Configuration
 Persistent SQL database for AIM Data state.
 
 Supports two backends via DATABASE_URL env var:
-  - SQLite (default): sqlite:///data/vectoraiz.db
+  - SQLite (default): sqlite:///data/aim_data.db
   - PostgreSQL: postgresql://user:pass@host/db
 
 SQLite extras: WAL mode, busy_timeout=5000, check_same_thread=False,
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # DATABASE_URL resolution
 # ---------------------------------------------------------------------------
-_DEFAULT_SQLITE_PATH = Path(settings.data_directory) / "vectoraiz.db"
+_DEFAULT_SQLITE_PATH = Path(settings.data_directory) / "aim_data.db"
 DATABASE_URL: str = os.environ.get(
     "DATABASE_URL",
     f"sqlite:///{_DEFAULT_SQLITE_PATH}",

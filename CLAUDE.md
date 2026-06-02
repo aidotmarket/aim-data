@@ -1,4 +1,4 @@
-# vectorAIz — Claude Code Context
+# AIM Data — Claude Code Context
 
 ## Project
 Local-first data processing tool. Upload docs, vectorize, search, query via LLM. Docker-packaged, runs on customer hardware. Never phones home with customer data.

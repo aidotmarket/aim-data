@@ -2,7 +2,7 @@
 
 ## Summary
 Add file upload, image paste, and drag-and-drop capabilities to the allAI copilot
-chat in vectorAIz. Users can share screenshots, CSVs, PDFs, and other files directly
+chat in AIM Data. Users can share screenshots, CSVs, PDFs, and other files directly
 in the chat for allAI to analyze, diagnose errors, and provide data guidance.
 
 ## Gate 1 — Council Direction (S135)
@@ -708,7 +708,7 @@ async def _extract_text(self, file_path: Path, mime_type: str) -> Optional[str]:
 ### Fix 4: Base64 Memory Note
 
 For images at max size (10MB file → ~13MB base64), the proxy handles this in a single
-streaming request to Anthropic. At the vectorAIz backend level, the file is read from
+streaming request to Anthropic. At the AIM Data backend level, the file is read from
 disk and base64-encoded once per LLM call — not held in memory across turns.
 
 With the 1600px resize cap, most screenshots will be 200-500KB (300-700KB base64),
@@ -716,7 +716,7 @@ well within normal request sizes.
 
 ### Fix 5: Frontend Component Clarification
 
-The spec targets `vectoraiz-backend/frontend/src/components/copilot/` which already
+The spec targets `aim-data-backend/frontend/src/components/copilot/` which already
 contains `ChatInput.tsx`, `ChatMessage.tsx`, `ChatPanel.tsx`, and `CoPilotContext.tsx`.
 These files exist and are the correct modification targets.
 
@@ -841,7 +841,7 @@ class ChatAttachment:
 
 ### Fix 10: Multi-Worker Consistency (MP #8.5)
 
-vectorAIz runs a single Uvicorn worker in production (constrained by DuckDB single-writer).
+AIM Data runs a single Uvicorn worker in production (constrained by DuckDB single-writer).
 Spec explicitly requires: **single worker deployment for chat attachment service**.
 
 If multi-worker is needed in future, migrate to SQLite-backed index (already on disk at

@@ -38,7 +38,7 @@ def test_openapi_json():
     
     assert "openapi" in data
     assert "info" in data
-    assert data["info"]["title"] == "vectorAIz API"
+    assert data["info"]["title"] == "AIM Data API"
     assert "paths" in data
     assert "tags" in data
 
@@ -61,7 +61,7 @@ def test_postman_collection():
     data = response.json()
     
     assert "info" in data
-    assert data["info"]["name"] == "vectorAIz API"
+    assert data["info"]["name"] == "AIM Data API"
     assert "item" in data
     assert len(data["item"]) > 0
 

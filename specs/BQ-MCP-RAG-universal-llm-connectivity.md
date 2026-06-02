@@ -1,4 +1,4 @@
-# BQ-MCP-RAG: Universal LLM Connectivity for vectorAIz
+# BQ-MCP-RAG: Universal LLM Connectivity for AIM Data
 
 **Status:** GATE 2 — Rev 2 (Council feedback incorporated)
 **Author:** Vulcan (S136)
@@ -12,13 +12,13 @@
 
 ## 1. Problem Statement
 
-vectorAIz customers process their data locally and build a RAG database (Qdrant vectors + DuckDB structured data). Today, querying this data requires using the built-in Co-Pilot chat. Customers cannot use their preferred AI — Claude Desktop, ChatGPT, Gemini, DeepSeek, Cursor, or any other LLM — against their own local data.
+AIM Data customers process their data locally and build a RAG database (Qdrant vectors + DuckDB structured data). Today, querying this data requires using the built-in Co-Pilot chat. Customers cannot use their preferred AI — Claude Desktop, ChatGPT, Gemini, DeepSeek, Cursor, or any other LLM — against their own local data.
 
 This is the #1 friction point for adoption. Customers don't want to learn a new chat interface. They want to keep using the AI they already know and love, pointed at their own data.
 
 ## 2. Solution Overview
 
-Three-tier connectivity that lets ANY LLM query vectorAIz data:
+Three-tier connectivity that lets ANY LLM query AIM Data data:
 
 | Tier | Mechanism | Covers | Priority |
 |------|-----------|--------|----------|
@@ -79,7 +79,7 @@ The MCP server and RAG REST API run inside the existing FastAPI process. A share
 └────────────────────────────────────────────────────────────────┘
 
 External LLM clients connect via:
-  1. MCP stdio:  docker exec -i vectoraiz python -m app.mcp_server
+  1. MCP stdio:  docker exec -i aim-data-app python -m app.mcp_server
   2. MCP SSE:    http://localhost:8100/mcp/sse
   3. REST API:   http://localhost:8100/api/v1/ext/{tool}
 ```
@@ -250,8 +250,8 @@ CONNECTIVITY_SQL_MAX_LENGTH: int = 4096
 
 **Stdio (Primary — Claude Desktop, Cursor, etc.):**
 ```bash
-# Customer runs this from host to connect to containerized vectorAIz:
-docker exec -i vectoraiz python -m app.mcp_server --token vzmcp_a1b2c3d4_...
+# Customer runs this from host to connect to containerized AIM Data:
+docker exec -i aim-data-app python -m app.mcp_server --token vzmcp_a1b2c3d4_...
 ```
 
 The `app/mcp_server.py` module runs as a standalone MCP server over stdin/stdout, importing the QueryOrchestrator directly (no HTTP hop — same process imports).
@@ -597,7 +597,7 @@ Added to `ALLAI_TOOLS` in `app/services/allai_tools.py` (appended, not replacing
 
 #### `connectivity_generate_setup`
 
-**Description:** "Generate step-by-step setup instructions for connecting a specific AI platform to vectorAIz data. Includes the exact configuration to copy-paste."
+**Description:** "Generate step-by-step setup instructions for connecting a specific AI platform to AIM Data data. Includes the exact configuration to copy-paste."
 
 **Input:**
 ```json
@@ -631,7 +631,7 @@ Added to `ALLAI_TOOLS` in `app/services/allai_tools.py` (appended, not replacing
     { "step": 2, "instruction": "Click 'Add MCP Server' and paste this configuration:", "config": "..." },
     { "step": 3, "instruction": "Restart Claude Desktop", "validation": "Has Claude Desktop restarted?" },
     { "step": 4, "instruction": "You should see 'vectoraiz' in the MCP tools list", "validation": "Do you see vectoraiz in the tools?" },
-    { "step": 5, "instruction": "Try asking: 'What datasets do I have in vectorAIz?'", "validation": "Did you get a response listing your datasets?" }
+    { "step": 5, "instruction": "Try asking: 'What datasets do I have in AIM Data?'", "validation": "Did you get a response listing your datasets?" }
   ],
   "config": {
     "mcpServers": {
@@ -644,7 +644,7 @@ Added to `ALLAI_TOOLS` in `app/services/allai_tools.py` (appended, not replacing
   "config_file_path": "~/Library/Application Support/Claude/claude_desktop_config.json (macOS) or %APPDATA%/Claude/claude_desktop_config.json (Windows)",
   "troubleshooting": [
     "If tools don't appear: make sure the Docker container 'vectoraiz' is running (docker ps)",
-    "If auth fails: verify the token hasn't been revoked in vectorAIz Settings > Connectivity",
+    "If auth fails: verify the token hasn't been revoked in AIM Data Settings > Connectivity",
     "If 'command not found': ensure Docker is installed and in your PATH"
   ]
 }
@@ -700,7 +700,7 @@ Add to the allAI system prompt (in `prompt_registry.py` or `prompt_factory.py`):
 ## External Connectivity Guide
 
 You can help users connect their preferred AI tools (Claude Desktop, ChatGPT,
-Cursor, Gemini, etc.) to query their vectorAIz data. This is a key feature —
+Cursor, Gemini, etc.) to query their AIM Data data. This is a key feature —
 customers should be able to use ANY AI they want with their data.
 
 When a user asks about connecting external AI tools:
@@ -725,7 +725,7 @@ its own token for easy revocation if compromised.
 
 ## 9. New Files
 
-### Backend (vectoraiz-backend)
+### Backend (aim-data-backend)
 
 | File | Purpose |
 |------|---------|
@@ -892,7 +892,7 @@ All mandates incorporated:
 
 ## 15. Success Criteria
 
-1. Customer can connect Claude Desktop to vectorAIz in under 3 minutes with allAI guidance
+1. Customer can connect Claude Desktop to AIM Data in under 3 minutes with allAI guidance
 2. Customer can connect ANY LLM via system prompt in under 5 minutes
 3. All external queries are sandboxed, rate-limited, and audit-logged
 4. Zero data mutations possible through external connectivity

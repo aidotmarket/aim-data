@@ -10,14 +10,14 @@ class HealthResponse(BaseModel):
     """Health check response."""
     status: str = Field(..., example="healthy", description="Service health status")
     timestamp: str = Field(..., example="2024-01-15T10:30:00", description="ISO timestamp")
-    service: str = Field(..., example="vectoraiz-api", description="Service name")
+    service: str = Field(..., example="aim-data-api", description="Service name")
 
     class Config:
         json_schema_extra = {
             "example": {
                 "status": "healthy",
                 "timestamp": "2024-01-15T10:30:00.000000",
-                "service": "vectoraiz-api"
+                "service": "aim-data-api"
             }
         }
 
