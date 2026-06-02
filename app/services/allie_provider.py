@@ -53,7 +53,7 @@ class AllieStreamChunk:
 
 
 class AllieDisabledError(Exception):
-    """Raised when Allie is called in standalone mode."""
+    """Raised when Allie cannot be used in the current configuration."""
 
 
 class AllieTimeoutError(Exception):

@@ -280,10 +280,6 @@ def metered(category: str):
         request: Request,
         store: SerialStore = Depends(get_serial_store),
     ) -> MeterDecision:
-        # Standalone mode: no metering — all operations are free
-        if settings.mode == "standalone":
-            return MeterDecision(allowed=True, category=category)
-
         state = store.state
 
         # If MIGRATED, use ledger strategy

@@ -175,10 +175,6 @@ async def publish_to_marketplace(
 @router.get("/marketplace/publish-status")
 async def publish_status(user=Depends(get_current_user)):
     """Check if this AIM Data installation is ready to publish to ai.market."""
-    # Must be in connected mode
-    if settings.mode != "connected":
-        return {"can_publish": False, "reason": "VZ is in standalone mode — connect to ai.market to publish"}
-
     # Must have keystore passphrase
     if not settings.keystore_passphrase:
         return {"can_publish": False, "reason": "Keystore passphrase not configured"}

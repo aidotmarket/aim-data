@@ -25,7 +25,6 @@ from typing import Any, Dict, List, Optional
 
 from app.models.copilot import StateSnapshot
 from app.services.prompt_factory import AllieContext, resolve_tone_mode
-from app.core.local_only_guard import is_local_only
 
 logger = logging.getLogger(__name__)
 
@@ -106,10 +105,9 @@ class CoPilotContextManager:
             selection = _cap_selection_total(selection)
 
         # System state
-        connected_mode = not is_local_only()
+        connected_mode = True
         vectorization_enabled = _check_vectorization_enabled()
         qdrant_status = _check_qdrant_status()
-        local_only = is_local_only()
 
         # Dataset list: prefer frontend-provided summary, fallback to DB
         dataset_list: List[Dict[str, Any]] = []
@@ -144,7 +142,7 @@ class CoPilotContextManager:
             daily_limit = 100_000
 
         # Capabilities based on deployment
-        capabilities = self._resolve_capabilities(connected_mode, local_only)
+        capabilities = self._resolve_capabilities()
 
         return AllieContext(
             screen=screen,
@@ -163,7 +161,6 @@ class CoPilotContextManager:
             daily_token_limit=daily_limit,
             tone_mode=tone_mode.value,
             quiet_mode=quiet_mode,
-            local_only=local_only,
         )
 
     @staticmethod
@@ -202,8 +199,8 @@ class CoPilotContextManager:
         return "unknown"
 
     @staticmethod
-    def _resolve_capabilities(connected_mode: bool, local_only: bool) -> Dict[str, bool]:
-        """Resolve available capabilities based on deployment mode."""
+    def _resolve_capabilities() -> Dict[str, bool]:
+        """Resolve available connected AIM Data capabilities."""
         caps = {
             "can_preview_rows": True,
             "can_convert_encoding": True,
@@ -211,7 +208,7 @@ class CoPilotContextManager:
             "can_generate_diagnostic_bundle": True,
             "can_run_query": True,
             "can_modify_settings": False,
-            "can_push_to_marketplace": connected_mode and not local_only,
+            "can_push_to_marketplace": True,
         }
         return caps
 

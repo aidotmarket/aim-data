@@ -102,9 +102,6 @@ class ActivationManager:
 
     async def _auto_provision(self) -> None:
         """Auto-generate a serial from ai.market on first boot."""
-        if settings.mode == "standalone":
-            return  # Don't auto-provision in standalone mode
-
         logger.info("Auto-provisioning serial from ai.market...")
         base_url = settings.aimarket_url.rstrip("/") if settings.aimarket_url else "https://ai-market-backend-production.up.railway.app"
         url = f"{base_url}/api/v1/serials/generate"

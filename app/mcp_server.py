@@ -99,11 +99,8 @@ def _validate_dataset_id(dataset_id: str) -> str:
 
 
 def _try_meter(tool_name: str, bucket: str = "setup") -> None:
-    """Best-effort metering for MCP tool calls (connected mode only)."""
+    """Best-effort metering for MCP tool calls."""
     try:
-        from app.config import settings
-        if settings.mode == "standalone":
-            return
         from app.services.serial_store import get_serial_store, ACTIVE, MIGRATED
         store = get_serial_store()
         state = store.state

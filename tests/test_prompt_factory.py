@@ -96,7 +96,7 @@ class TestLayer1Safety:
         assert "No hallucinations" in layer
         assert "destructive actions" in layer
         assert "No raw data" in layer
-        assert "Privacy" in layer or "local_only" in layer
+        assert "Privacy" in layer
         assert "sanitization" in layer
         assert "No secrets" in layer
         assert "Audit" in layer

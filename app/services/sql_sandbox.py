@@ -125,7 +125,7 @@ class SQLSandbox:
         if first_keyword not in ("SELECT", "WITH"):
             return False, f"Only SELECT queries allowed, got: {first_keyword}"
 
-        # 3. Check for blocked statements as standalone words
+        # 3. Check for blocked statements as whole words.
         sql_upper = sql_stripped.upper()
         # Pad with spaces for word boundary matching
         padded = f" {sql_upper} "

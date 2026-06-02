@@ -544,7 +544,7 @@ ALLAI_TOOLS = [
             "Create an export artifact by running a SQL query and saving the results directly to a file. "
             "Use this for large data exports that would exceed chat display limits — e.g. "
             "'export all transactions from Q4', 'save all rows where price > 500'. "
-            "Results are written directly to a standalone export file in CSV, XLSX, JSON, or Parquet format, "
+            "Results are written directly to an export file in CSV, XLSX, JSON, or Parquet format, "
             "bypassing output size limits. "
             "Only SELECT queries are allowed. Tables are named dataset_{dataset_id}."
         ),

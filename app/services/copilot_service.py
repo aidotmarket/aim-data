@@ -42,7 +42,6 @@ from app.services.prompt_factory import (
 )
 from app.services.context_manager_copilot import context_manager
 from app.core.input_sanitizer import input_sanitizer
-from app.core.local_only_guard import is_local_only
 from app.auth.api_key_auth import AuthenticatedUser
 from app.models.copilot import StateSnapshot
 from app.services.chat_attachment_service import ChatAttachment
@@ -168,23 +167,15 @@ class CoPilotService:
         Stream a metered Co-Pilot response (BQ-128 Phase 1+2).
 
         Pipeline:
-        1. Check standalone guard
-        2. Input sanitization (OWASP-grade)
-        3. Build runtime context (CoPilotContextManager)
-        4. Assemble 5-layer system prompt (PromptFactory)
-        5. Handle intro behavior (first message only)
-        6. Stream via AllieProvider.stream()
-        7. Call send_chunk() for each token
-        8. Return full response + usage
+        1. Input sanitization (OWASP-grade)
+        2. Build runtime context (CoPilotContextManager)
+        3. Assemble 5-layer system prompt (PromptFactory)
+        4. Stream via AllieProvider.stream()
+        5. Call send_chunk() for each token
+        6. Return full response + usage
 
         CancelledError: propagated — no usage charged.
         """
-        if is_local_only():
-            raise AllieDisabledError(
-                "Allie requires an ai.market connection. "
-                "Switch to connected mode to use Allie."
-            )
-
         # --- Step 2: Input sanitization ---
         sanitize_result = input_sanitizer.sanitize(message, user_id=user.user_id)
 
@@ -261,23 +252,15 @@ class CoPilotService:
         Agentic Co-Pilot response with tool use (BQ-ALLAI-B).
 
         Pipeline:
-        1. Check standalone guard
-        2. Input sanitization (OWASP-grade)
-        3. Build runtime context (CoPilotContextManager)
-        4. Assemble 5-layer system prompt (PromptFactory) with tool instructions
-        5. Handle intro behavior (first message only)
-        6. Run agentic loop: LLM call → tool execution → feed results → repeat
-        7. Stream text chunks to frontend
-        8. Return full response + usage
+        1. Input sanitization (OWASP-grade)
+        2. Build runtime context (CoPilotContextManager)
+        3. Assemble 5-layer system prompt (PromptFactory) with tool instructions
+        4. Run agentic loop: LLM call → tool execution → feed results → repeat
+        5. Stream text chunks to frontend
+        6. Return full response + usage
 
         CancelledError: propagated — no usage charged.
         """
-        if is_local_only():
-            raise AllieDisabledError(
-                "Allie requires an ai.market connection. "
-                "Switch to connected mode to use Allie."
-            )
-
         # --- Step 2: Input sanitization ---
         sanitize_result = input_sanitizer.sanitize(message, user_id=user.user_id)
 

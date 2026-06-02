@@ -42,8 +42,17 @@ if len(error_registry) == 0:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def _clean_manager():
+def _clean_manager(monkeypatch):
     """Ensure ConnectionManager is clean before/after each test."""
+    from app.services.serial_metering import MeterDecision
+
+    async def _allow_meter(self, category, estimated_cost, request_id):
+        return MeterDecision(allowed=True, category=category)
+
+    monkeypatch.setattr(
+        "app.services.serial_metering.SerialMeteringStrategy.check_and_meter",
+        _allow_meter,
+    )
     manager._active.clear()
     manager._user_sessions.clear()
     manager._connected_since.clear()
@@ -165,13 +174,12 @@ class TestWebSocketConnectionAuthEnabled:
         """Valid ?token= should authenticate and receive CONNECTED message."""
         monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
 
-        from app.auth.api_key_auth import api_key_cache, settings as auth_settings
+        from app.auth.api_key_auth import api_key_cache
         api_key_cache.clear()
 
         app = _create_test_app(auth_enabled=True)
 
-        with patch.object(auth_settings, "mode", "connected"), \
-             patch("app.auth.api_key_auth.httpx.AsyncClient") as mock_client_cls:
+        with patch("app.auth.api_key_auth.httpx.AsyncClient") as mock_client_cls:
             mock_instance = mock_client_cls.return_value
             mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
             mock_instance.__aexit__ = AsyncMock(return_value=None)
@@ -603,35 +611,42 @@ class TestBrainMessageMetering:
       AC 11: Markup rate configurable (tested in test_metering.py)
     """
 
-    @patch("app.services.copilot_service.is_local_only", return_value=False)
-    @patch("app.routers.copilot.is_local_only", return_value=False)
-    def test_brain_message_returns_streaming_response_auth_disabled(self, _mock_guard1, _mock_guard2, client):
+    def test_brain_message_returns_streaming_response_auth_disabled(self, client):
         """BRAIN_MESSAGE with auth disabled should return BRAIN_STREAM_CHUNK + BRAIN_STREAM_END."""
         with client.websocket_connect("/ws/copilot") as ws:
             connected = ws.receive_json()
             assert connected["type"] == "CONNECTED"
 
-            ws.send_json({
-                "type": "BRAIN_MESSAGE",
-                "message": "Hello, Co-Pilot!",
-            })
+            async def mock_process_agentic(user, message, session_id, message_id, send_chunk, **kwargs):
+                await send_chunk("Connected response")
+                return "Connected response", None
 
-            # Collect all stream chunks
-            chunks = []
-            while True:
-                msg = ws.receive_json()
-                if msg["type"] == "BRAIN_STREAM_CHUNK":
-                    chunks.append(msg["chunk"])
-                elif msg["type"] == "BRAIN_STREAM_END":
-                    assert "full_text" in msg
-                    assert "usage" in msg
-                    break
-                else:
-                    raise AssertionError(f"Unexpected message type: {msg['type']}: {msg}")
+            with patch(
+                "app.routers.copilot.copilot_service.process_message_agentic",
+                new_callable=AsyncMock,
+                side_effect=mock_process_agentic,
+            ):
+                ws.send_json({
+                    "type": "BRAIN_MESSAGE",
+                    "message": "Hello, Co-Pilot!",
+                })
 
-            assert len(chunks) > 0
-            full_text = "".join(chunks)
-            assert len(full_text) > 0
+                # Collect all stream chunks
+                chunks = []
+                while True:
+                    msg = ws.receive_json()
+                    if msg["type"] == "BRAIN_STREAM_CHUNK":
+                        chunks.append(msg["chunk"])
+                    elif msg["type"] == "BRAIN_STREAM_END":
+                        assert "full_text" in msg
+                        assert "usage" in msg
+                        break
+                    else:
+                        raise AssertionError(f"Unexpected message type: {msg['type']}: {msg}")
+
+                assert len(chunks) > 0
+                full_text = "".join(chunks)
+                assert len(full_text) > 0
 
     def test_brain_message_empty_message_returns_error(self, client):
         """BRAIN_MESSAGE with empty message should return ERROR."""
@@ -662,16 +677,13 @@ class TestBrainMessageMetering:
             assert error["type"] == "ERROR"
             assert "non-empty" in error["message"]
 
-    @patch("app.routers.copilot.is_local_only", return_value=False)
-    def test_brain_message_balance_gate_blocks_zero_balance(self, _mock_guard, client, monkeypatch):
+    def test_brain_message_zero_balance_delegates_billing_to_aimarket(self, client, monkeypatch):
         """
-        BRAIN_MESSAGE with zero balance should return BALANCE_GATE.
-        AC 9: zero balance = BALANCE_GATE with 'Purchase credits to use Co-Pilot'
+        Connected mode does not locally gate allAI usage; ai.market proxy handles billing.
         """
         monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
 
-        from app.auth.api_key_auth import api_key_cache, settings as auth_settings
-        from app.services.metering_service import BalanceCheck
+        from app.auth.api_key_auth import api_key_cache
         api_key_cache.clear()
 
         app = _create_test_app()
@@ -685,18 +697,16 @@ class TestBrainMessageMetering:
             "free_trial_remaining_cents": 0,
         }
 
-        # Mock check_balance to actually enforce balance (settings.auth_enabled is False in tests)
-        def mock_check_balance(balance_cents, estimated_cost_cents=None):
-            cost = estimated_cost_cents or 3
-            if balance_cents <= 0:
-                return BalanceCheck(allowed=False, balance_cents=balance_cents, estimated_cost_cents=cost, reason="zero_balance")
-            if balance_cents < cost:
-                return BalanceCheck(allowed=False, balance_cents=balance_cents, estimated_cost_cents=cost, reason="insufficient_balance")
-            return BalanceCheck(allowed=True, balance_cents=balance_cents, estimated_cost_cents=cost)
+        async def mock_process_agentic(user, message, session_id, message_id, send_chunk, **kwargs):
+            await send_chunk("Allowed by connected proxy")
+            return "Allowed by connected proxy", None
 
-        with patch.object(auth_settings, "mode", "connected"), \
-             patch("app.routers.copilot.metering_service.check_balance", side_effect=mock_check_balance):
-            with patch("app.auth.api_key_auth.httpx.AsyncClient") as mock_client_cls:
+        with patch("app.auth.api_key_auth.httpx.AsyncClient") as mock_client_cls:
+            with patch(
+                "app.routers.copilot.copilot_service.process_message_agentic",
+                new_callable=AsyncMock,
+                side_effect=mock_process_agentic,
+            ):
                 mock_instance = mock_client_cls.return_value
                 mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
                 mock_instance.__aexit__ = AsyncMock(return_value=None)
@@ -710,33 +720,23 @@ class TestBrainMessageMetering:
                     assert connected["type"] == "CONNECTED"
                     assert connected["balance_cents"] == 0
 
-                    # Should receive BALANCE_GATE immediately after CONNECTED
-                    # (because balance is zero at connect time)
-                    gate = ws.receive_json()
-                    assert gate["type"] == "BALANCE_GATE"
-                    assert gate["message"] == "Purchase credits to use Co-Pilot"
-                    assert gate["balance_cents"] == 0
-
-                    # Now try to send a BRAIN_MESSAGE — should be blocked
                     ws.send_json({
                         "type": "BRAIN_MESSAGE",
-                        "message": "This should be blocked",
+                        "message": "This should be delegated",
                     })
 
-                    gate2 = ws.receive_json()
-                    assert gate2["type"] == "BALANCE_GATE"
-                    assert gate2["message"] == "Purchase credits to use Co-Pilot"
+                    chunk = ws.receive_json()
+                    assert chunk["type"] == "BRAIN_STREAM_CHUNK"
+                    end = ws.receive_json()
+                    assert end["type"] == "BRAIN_STREAM_END"
 
-    @patch("app.routers.copilot.is_local_only", return_value=False)
-    def test_brain_message_balance_gate_blocks_insufficient_balance(self, _mock_guard, client, monkeypatch):
+    def test_brain_message_low_balance_delegates_billing_to_aimarket(self, client, monkeypatch):
         """
-        BRAIN_MESSAGE with insufficient balance should return BALANCE_GATE.
-        AC 9: insufficient balance = BALANCE_GATE
+        Connected mode does not locally gate low allAI balance; ai.market proxy handles billing.
         """
         monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
 
-        from app.auth.api_key_auth import api_key_cache, settings as auth_settings
-        from app.services.metering_service import BalanceCheck
+        from app.auth.api_key_auth import api_key_cache
         api_key_cache.clear()
 
         app = _create_test_app()
@@ -751,18 +751,16 @@ class TestBrainMessageMetering:
             "free_trial_remaining_cents": 0,
         }
 
-        # Mock check_balance to actually enforce balance
-        def mock_check_balance(balance_cents, estimated_cost_cents=None):
-            cost = estimated_cost_cents or 3
-            if balance_cents <= 0:
-                return BalanceCheck(allowed=False, balance_cents=balance_cents, estimated_cost_cents=cost, reason="zero_balance")
-            if balance_cents < cost:
-                return BalanceCheck(allowed=False, balance_cents=balance_cents, estimated_cost_cents=cost, reason="insufficient_balance")
-            return BalanceCheck(allowed=True, balance_cents=balance_cents, estimated_cost_cents=cost)
+        async def mock_process_agentic(user, message, session_id, message_id, send_chunk, **kwargs):
+            await send_chunk("Allowed by connected proxy")
+            return "Allowed by connected proxy", None
 
-        with patch.object(auth_settings, "mode", "connected"), \
-             patch("app.routers.copilot.metering_service.check_balance", side_effect=mock_check_balance):
-            with patch("app.auth.api_key_auth.httpx.AsyncClient") as mock_client_cls:
+        with patch("app.auth.api_key_auth.httpx.AsyncClient") as mock_client_cls:
+            with patch(
+                "app.routers.copilot.copilot_service.process_message_agentic",
+                new_callable=AsyncMock,
+                side_effect=mock_process_agentic,
+            ):
                 mock_instance = mock_client_cls.return_value
                 mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
                 mock_instance.__aexit__ = AsyncMock(return_value=None)
@@ -776,23 +774,17 @@ class TestBrainMessageMetering:
                     assert connected["type"] == "CONNECTED"
                     assert connected["balance_cents"] == 1
 
-                    # Should get BALANCE_GATE at connect (1 < 3 estimated cost)
-                    gate = ws.receive_json()
-                    assert gate["type"] == "BALANCE_GATE"
-
-                    # BRAIN_MESSAGE should also be blocked
                     ws.send_json({
                         "type": "BRAIN_MESSAGE",
-                        "message": "Not enough credits",
+                        "message": "Delegated billing",
                     })
 
-                    gate2 = ws.receive_json()
-                    assert gate2["type"] == "BALANCE_GATE"
-                    assert "reason" in gate2
+                    chunk = ws.receive_json()
+                    assert chunk["type"] == "BRAIN_STREAM_CHUNK"
+                    end = ws.receive_json()
+                    assert end["type"] == "BRAIN_STREAM_END"
 
-    @patch("app.services.copilot_service.is_local_only", return_value=False)
-    @patch("app.routers.copilot.is_local_only", return_value=False)
-    def test_brain_message_mid_stream_depletion(self, _mock_guard1, _mock_guard2, client, monkeypatch):
+    def test_brain_message_mid_stream_depletion(self, client, monkeypatch):
         """
         AC 10: If balance runs out mid-stream, current response completes,
         usage is reported (balance may go slightly negative), and a
@@ -802,7 +794,7 @@ class TestBrainMessageMetering:
         """
         monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
 
-        from app.auth.api_key_auth import api_key_cache, settings as auth_settings
+        from app.auth.api_key_auth import api_key_cache
         api_key_cache.clear()
 
         app = _create_test_app()
@@ -820,13 +812,13 @@ class TestBrainMessageMetering:
         from app.services.allie_provider import AllieUsage
         from app.services.metering_service import BalanceCheck, UsageReport
 
-        # Mock streaming to return a simple response with usage
+        # Mock agentic response to return a simple response with usage
         mock_usage = AllieUsage(
             input_tokens=10, output_tokens=20,
             cost_cents=5, provider="mock", model="mock-v1",
         )
 
-        async def mock_process_streaming(user, message, session_id, message_id, send_chunk, **kwargs):
+        async def mock_process_agentic(user, message, session_id, message_id, send_chunk, **kwargs):
             await send_chunk("Response before depletion")
             return "Response before depletion", mock_usage
 
@@ -847,8 +839,7 @@ class TestBrainMessageMetering:
                 return BalanceCheck(allowed=False, balance_cents=balance_cents, estimated_cost_cents=cost, reason="insufficient_balance")
             return BalanceCheck(allowed=True, balance_cents=balance_cents, estimated_cost_cents=cost)
 
-        with patch.object(auth_settings, "mode", "connected"), \
-             patch("app.routers.copilot.metering_service.check_balance", side_effect=mock_check_balance):
+        with patch("app.routers.copilot.metering_service.check_balance", side_effect=mock_check_balance):
             with patch("app.auth.api_key_auth.httpx.AsyncClient") as mock_auth_cls:
                 mock_auth_instance = mock_auth_cls.return_value
                 mock_auth_instance.__aenter__ = AsyncMock(return_value=mock_auth_instance)
@@ -864,9 +855,9 @@ class TestBrainMessageMetering:
                     assert connected["balance_cents"] == 5
 
                     with patch(
-                        "app.routers.copilot.copilot_service.process_message_streaming",
+                        "app.routers.copilot.copilot_service.process_message_agentic",
                         new_callable=AsyncMock,
-                        side_effect=mock_process_streaming,
+                        side_effect=mock_process_agentic,
                     ), patch(
                         "app.routers.copilot.metering_service.report_usage",
                         new_callable=AsyncMock,
@@ -903,10 +894,18 @@ class TestRESTBrainEndpoint:
 
     def test_brain_returns_response_auth_disabled(self, client):
         """POST /brain with auth disabled should return BRAIN_RESPONSE."""
-        response = client.post(
-            "/api/copilot/brain",
-            json={"message": "Hello from REST"},
-        )
+        from app.services.metering_service import UsageReport
+
+        mock_report = UsageReport(success=True, cost_cents=1, new_balance_cents=9999, allowed=True)
+        with patch(
+            "app.routers.copilot.copilot_service.process_message_metered",
+            new_callable=AsyncMock,
+            return_value=("Metered response", mock_report),
+        ):
+            response = client.post(
+                "/api/copilot/brain",
+                json={"message": "Hello from REST"},
+            )
         assert response.status_code == 200
         data = response.json()
         assert "message" in data

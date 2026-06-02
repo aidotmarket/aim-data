@@ -2,14 +2,13 @@
 BQ-127: Local Auth Models
 =========================
 
-SQLModel tables for standalone-mode authentication.
-Used when VECTORAIZ_MODE=standalone (air-gapped, no ai.market dependency).
+SQLModel tables for local operator authentication.
 
 Tables:
     local_users     — Admin/user accounts with bcrypt password hashes.
     local_api_keys  — API keys with HMAC-SHA256 hashed secrets and scoped permissions.
 
-Phase: BQ-127 — Air-Gap Architecture
+Phase: BQ-127 — Local operator auth
 Created: 2026-02-13
 """
 
@@ -21,7 +20,7 @@ from sqlmodel import Field, SQLModel
 
 
 class LocalUser(SQLModel, table=True):
-    """BQ-127: Local user account for standalone auth.
+    """BQ-127: Local operator user account.
 
     Password is stored as a bcrypt hash. The ``role`` field controls
     admin vs. regular user permissions (currently only 'admin' in Phase 1).
@@ -43,7 +42,7 @@ class LocalUser(SQLModel, table=True):
 
 
 class LocalAPIKey(SQLModel, table=True):
-    """BQ-127: Local API key for standalone auth (C2).
+    """BQ-127: Local operator API key (C2).
 
     Key format: ``vz_<key_id>_<secret>``
     - ``key_id``: 8-char alphanumeric, stored in DB, indexed for O(1) lookup.

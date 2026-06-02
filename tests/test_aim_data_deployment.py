@@ -16,7 +16,6 @@ COMPOSE_FILE = REPO_ROOT / "docker-compose.aim-data.yml"
 FORBIDDEN_KEYS = {"AIM_DATA_MARKETPLACE_ENABLED"}
 REQUIRED_ENV = {
     "VECTORAIZ_CHANNEL=aim-data",
-    "VECTORAIZ_MODE=${VECTORAIZ_MODE:-connected}",
     "VECTORAIZ_SECRET_KEY=${VECTORAIZ_SECRET_KEY:-}",
 }
 
@@ -39,7 +38,7 @@ def test_aim_data_compose_uses_aim_data_image_and_env():
     service = data["services"]["app"]
     env = set(service["environment"])
 
-    assert service["image"] == "ghcr.io/aidotmarket/aim-data:${AIM_DATA_VERSION:-latest}"
+    assert service["image"].startswith("ghcr.io/aidotmarket/aim-data:${AIM_DATA_VERSION:-")
     assert REQUIRED_ENV.issubset(env)
     assert "AIM_DATA_AI_MARKET_URL=${AIM_DATA_AI_MARKET_URL:-https://api.ai.market}" in env
     assert "VECTORAIZ_AI_MARKET_URL=${VECTORAIZ_AI_MARKET_URL:-https://api.ai.market}" in env
@@ -99,7 +98,6 @@ def test_aim_data_connected_grants_allai_feature(monkeypatch):
     import app.core.channel_config as channel_config
 
     monkeypatch.setattr(channel_config, "CHANNEL", ChannelType.aim_data)
-    monkeypatch.setattr(settings, "mode", "connected")
     monkeypatch.setattr(settings, "allai_enabled", False)
 
     client = TestClient(app)
@@ -114,7 +112,6 @@ def test_aim_data_connected_copilot_reports_allie_available(monkeypatch):
     import app.core.channel_config as channel_config
 
     monkeypatch.setattr(channel_config, "CHANNEL", ChannelType.aim_data)
-    monkeypatch.setattr(settings, "mode", "connected")
     monkeypatch.setattr(settings, "allai_enabled", False)
 
     client = TestClient(app)

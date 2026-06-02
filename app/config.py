@@ -9,8 +9,7 @@ PURPOSE:
 UPDATED:
     S94 (2026-02-07) - BQ-066 Sub-task 1: Added SECRET_KEY with Fernet
         auto-generation for API key encryption at rest.
-    S130 (2026-02-13) - BQ-127: Air-Gap Architecture — added VECTORAIZ_MODE,
-        local auth secrets, connected fallback, premium feature flags.
+    S130 (2026-02-13) - BQ-127: added local auth secrets and feature flags.
 """
 
 import logging
@@ -24,7 +23,6 @@ import psutil
 
 logger = logging.getLogger(__name__)
 
-# BQ-127: Default ai.market URL used for mode inference
 _DEFAULT_AI_MARKET_URL = "https://ai-market-backend-production.up.railway.app"
 _IAM_PRINCIPAL_ARN_RE = re.compile(r"^arn:aws:iam::\d{12}:(role|user)/.+$")
 
@@ -85,19 +83,10 @@ def _generate_fernet_key() -> str:
 
 
 class Settings(BaseSettings):
-    """BQ-127: Settings now include operating mode and local auth configuration."""
+    """AIM Data settings."""
 
     app_name: str = Field(default="AIM Data", validation_alias=_env_alias("app_name"))
     debug: bool = Field(default=False, validation_alias=_env_alias("debug"))  # S100: Default OFF for production safety
-
-    # BQ-127: Operating mode — standalone (air-gapped) or connected (ai.market)
-    mode: Literal["standalone", "connected"] = Field(default="standalone", validation_alias=_env_alias("mode"))
-
-    # BQ-127: Connected fallback behavior (C4) — what happens when ai.market is unreachable
-    connected_fallback: Literal["standalone", "refuse"] = Field(
-        default="standalone",
-        validation_alias=_env_alias("connected_fallback"),
-    )
 
     # BQ-127: Local auth secrets (C1 — separate from SECRET_KEY)
     apikey_hmac_secret: Optional[str] = Field(
@@ -107,7 +96,7 @@ class Settings(BaseSettings):
     )
     local_auth_secret: Optional[str] = Field(default=None, validation_alias=_env_alias("local_auth_secret"))    # JWT signing key (Phase 2, not used yet)
 
-    # BQ-127: Premium feature flags (only relevant in connected mode)
+    # Feature flags for connected ai.market capabilities.
     allai_enabled: bool = Field(
         default=True,
         validation_alias=_env_alias("allai_enabled"),
@@ -356,21 +345,4 @@ logger.info(
     settings.streaming_batch_target_rows,
 )
 
-# ---------------------------------------------------------------------------
-# BQ-127: Mode inference for backward compatibility (C6)
-# If AIM_DATA_MODE/VECTORAIZ_MODE is NOT explicitly set but an ai.market URL IS set
-# to a non-default value, infer connected mode and log a deprecation warning.
-# ---------------------------------------------------------------------------
-import os as _os
-
-if not (_os.environ.get("AIM_DATA_MODE") or _os.environ.get("VECTORAIZ_MODE")) and (
-    _os.environ.get("AIM_DATA_AI_MARKET_URL") or _os.environ.get("VECTORAIZ_AI_MARKET_URL")
-):
-    if settings.ai_market_url != _DEFAULT_AI_MARKET_URL:
-        settings.mode = "connected"
-        logger.warning(
-            "AIM_DATA_MODE not set but AI_MARKET_URL detected — defaulting to connected. "
-            "Set AIM_DATA_MODE=connected explicitly. This inference will be removed in v2.0."
-        )
-
-logger.info("AIM Data operating mode: %s", settings.mode)
+logger.info("AIM Data operating mode: connected")

@@ -21,22 +21,34 @@ client = TestClient(app)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def _clean_tables():
+def _clean_tables(monkeypatch):
     """Clean local auth + connectivity token tables before each test."""
     from sqlmodel import SQLModel
     from app.core.database import get_engine
     from app.models.local_auth import LocalUser, LocalAPIKey  # noqa: F401
     from app.models.connectivity import ConnectivityTokenRecord  # noqa: F401
+    from app.models.user import User  # noqa: F401
 
     engine = get_engine()
     with engine.connect() as conn:
         conn.execute(SQLModel.metadata.tables["local_api_keys"].delete())
         conn.execute(SQLModel.metadata.tables["local_users"].delete())
+        conn.execute(SQLModel.metadata.tables["users"].delete())
         conn.execute(SQLModel.metadata.tables["connectivity_tokens"].delete())
         conn.commit()
 
     from app.auth.api_key_auth import api_key_cache
     api_key_cache.clear()
+
+    from app.services.serial_metering import MeterDecision
+
+    async def _allow_meter(self, category, estimated_cost, request_id):
+        return MeterDecision(allowed=True, category=category)
+
+    monkeypatch.setattr(
+        "app.services.serial_metering.SerialMeteringStrategy.check_and_meter",
+        _allow_meter,
+    )
 
     from app.routers.auth import _setup_attempts
     _setup_attempts.clear()
@@ -95,7 +107,7 @@ class TestConnectivityStatus:
 class TestConnectivityToggle:
     def test_enable(self):
         key = _setup_and_get_key()
-        from app.config import settings
+        from app.routers.connectivity_mgmt import settings
         original = settings.connectivity_enabled
         try:
             settings.connectivity_enabled = False
@@ -110,7 +122,7 @@ class TestConnectivityToggle:
 
     def test_disable(self):
         key = _setup_and_get_key()
-        from app.config import settings
+        from app.routers.connectivity_mgmt import settings
         original = settings.connectivity_enabled
         try:
             settings.connectivity_enabled = True
@@ -125,7 +137,7 @@ class TestConnectivityToggle:
 
     def test_enable_already_enabled(self):
         key = _setup_and_get_key()
-        from app.config import settings
+        from app.routers.connectivity_mgmt import settings
         original = settings.connectivity_enabled
         try:
             settings.connectivity_enabled = True
@@ -278,7 +290,7 @@ class TestTokenTest:
     def test_token_test_no_path_param(self):
         """POST /api/connectivity/test works without token_id in path."""
         key = _setup_and_get_key()
-        from app.config import settings
+        from app.routers.connectivity_mgmt import settings
         original = settings.connectivity_enabled
         try:
             settings.connectivity_enabled = True
@@ -316,7 +328,7 @@ class TestTokenTest:
     def test_token_test_invalid_token(self):
         """Error response when token is invalid."""
         key = _setup_and_get_key()
-        from app.config import settings
+        from app.routers.connectivity_mgmt import settings
         original = settings.connectivity_enabled
         try:
             settings.connectivity_enabled = True

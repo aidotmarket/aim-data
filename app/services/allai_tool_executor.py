@@ -639,10 +639,8 @@ class AllAIToolExecutor:
 
     async def _handle_get_system_status(self, _tool_input: dict) -> ToolResult:
         """Get system health status."""
-        from app.core.local_only_guard import is_local_only
-
         status = {
-            "mode": "standalone" if is_local_only() else "connected",
+            "mode": "connected",
         }
 
         # Check DuckDB

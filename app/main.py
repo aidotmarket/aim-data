@@ -15,7 +15,6 @@ faulthandler.enable(file=sys.stderr, all_threads=True)
 
 from app.config import settings
 
-# BQ-127: Stock routers — always imported regardless of mode
 from app.routers import health, datasets, sql, pii, docs, diagnostics, imports, s3_connections
 from app.routers import auth as auth_router_module
 from app.core.database import init_db, close_db
@@ -33,9 +32,8 @@ from app.services.serial_metering import (
     UnprovisionedException,
 )
 
-# BQ-127 (C5): Premium modules are NOT imported at module level.
 # DeviceCrypto, register_with_marketplace, stripe_connect_proxy,
-# allai, billing, integrations, webhooks are lazy-imported in connected mode only.
+# billing, integrations, and webhooks are lazy-imported during app startup.
 
 def _custom_thread_excepthook(args):
     """BQ-URGENT: Capture unhandled exceptions in background threads."""
@@ -56,32 +54,6 @@ logger = logging.getLogger(__name__)
 API_TITLE = "AIM Data API"
 API_VERSION = os.environ.get("AIM_DATA_VERSION") or os.environ.get("VECTORAIZ_VERSION", "dev")
 
-# BQ-127 (§7): Mode-aware API descriptions
-API_DESCRIPTION_STANDALONE = """
-## AIM Data - Data Processing & Semantic Search
-
-Upload, process, vectorize, and search your data using your own LLM.
-Runs entirely on your infrastructure with no internet required.
-
-### Quick Start
-1. Access the web interface at http://your-hostname
-2. Complete the setup wizard (create admin account)
-3. Upload data files
-4. Configure your LLM provider (Settings > LLM)
-5. Search and query your data
-
-### Authentication
-
-All data endpoints require authentication via API key.
-Include in requests: `X-API-Key: vz_your_key_here`
-
-### Premium Features
-Set AIM_DATA_MODE=connected to enable ai.market integration:
-- allAI intelligent data assistant
-- Premium data connectors
-- Marketplace listing & discovery
-"""
-
 API_DESCRIPTION_CONNECTED = """
 ## AIM Data - Data Processing & Semantic Search (Connected)
 
@@ -101,10 +73,7 @@ All data endpoints require authentication via API key.
 - Usage-based billing via ai.market
 """
 
-API_DESCRIPTION = (
-    API_DESCRIPTION_CONNECTED if settings.mode == "connected"
-    else API_DESCRIPTION_STANDALONE
-)
+API_DESCRIPTION = API_DESCRIPTION_CONNECTED
 
 # Tag metadata for organizing endpoints
 TAGS_METADATA = [
@@ -170,8 +139,8 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info(
-        "Starting AIM Data API v%s in %s mode...",
-        API_VERSION, settings.mode.upper(),
+        "Starting AIM Data API v%s in connected mode...",
+        API_VERSION,
     )
 
     # BQ-123A: Load error registry + issue tracker
@@ -221,42 +190,38 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("datasets.json migration error (will retry next startup): %s", e)
 
-    # BQ-127: Device registration and marketplace connect only in connected mode
-    if settings.mode == "connected":
-        # BQ-102: Initialize device cryptographic identity
-        from app.core.crypto import DeviceCrypto
-        from app.services.registration_service import register_with_marketplace
+    # BQ-102: Initialize device cryptographic identity
+    from app.core.crypto import DeviceCrypto
+    from app.services.registration_service import register_with_marketplace
 
-        if settings.keystore_passphrase:
-            try:
-                crypto = DeviceCrypto(
-                    keystore_path=settings.keystore_path,
-                    passphrase=settings.keystore_passphrase,
-                )
-                crypto.get_or_create_keypairs()
-                logger.info("Device keypairs initialized (Ed25519 + X25519)")
-
-                # BQ-102 ST-3: Register with ai.market (non-blocking background task)
-                async def _register_background():
-                    try:
-                        await register_with_marketplace(crypto)
-                    except Exception as e:
-                        logger.warning(f"Background registration failed: {e}")
-
-                asyncio.create_task(_register_background())
-            except Exception as e:
-                logger.error(f"Failed to initialize device keypairs: {e}")
-        else:
-            logger.warning(
-                "VECTORAIZ_KEYSTORE_PASSPHRASE not set — device keypair generation skipped. "
-                "Set this env var to enable Trust Channel device registration."
+    if settings.keystore_passphrase:
+        try:
+            crypto = DeviceCrypto(
+                keystore_path=settings.keystore_path,
+                passphrase=settings.keystore_passphrase,
             )
+            crypto.get_or_create_keypairs()
+            logger.info("Device keypairs initialized (Ed25519 + X25519)")
+
+            # BQ-102 ST-3: Register with ai.market (non-blocking background task)
+            async def _register_background():
+                try:
+                    await register_with_marketplace(crypto)
+                except Exception as e:
+                    logger.warning(f"Background registration failed: {e}")
+
+            asyncio.create_task(_register_background())
+        except Exception as e:
+            logger.error(f"Failed to initialize device keypairs: {e}")
     else:
-        logger.info("Standalone mode — skipping device registration and marketplace connect.")
+        logger.warning(
+            "VECTORAIZ_KEYSTORE_PASSPHRASE not set — device keypair generation skipped. "
+            "Set this env var to enable Trust Channel device registration."
+        )
 
     # BQ-D1: Trust Channel client + fulfillment service (connected mode only)
     trust_channel_task = None
-    if settings.mode == "connected" and settings.internal_api_key:
+    if settings.internal_api_key:
         from app.services.trust_channel_client import get_trust_channel_client
         from app.services.fulfillment_service import get_fulfillment_service
 
@@ -266,7 +231,7 @@ async def lifespan(app: FastAPI):
             _safe_background_task("trust_channel", tc_client.run())
         )
         logger.info("BQ-D1: Trust Channel client + fulfillment handler started")
-    elif settings.mode == "connected":
+    else:
         logger.warning("BQ-D1: Trust Channel skipped — no VECTORAIZ_INTERNAL_API_KEY")
 
     # BQ-110: Start queue processor with cancellation support
@@ -416,10 +381,8 @@ async def lifespan(app: FastAPI):
             pass
         logger.info("Trust Channel client stopped")
 
-    # BQ-127: Only close stripe proxy in connected mode
-    if settings.mode == "connected":
-        from app.services.stripe_connect_proxy import close_proxy_client
-        await close_proxy_client()
+    from app.services.stripe_connect_proxy import close_proxy_client
+    await close_proxy_client()
     close_db()
     executor.shutdown(wait=False)
 
@@ -526,7 +489,7 @@ def create_app() -> FastAPI:
     # Legacy alias — still works for existing code that references it
 
     # ------------------------------------------------------------------
-    # BQ-127: Register routers — stock (always) vs connected (conditional)
+    # Register routers.
     # ------------------------------------------------------------------
 
     # PUBLIC — no auth required
@@ -612,30 +575,26 @@ def create_app() -> FastAPI:
     )
     app.include_router(copilot_ws_router)  # WebSocket at /ws/copilot (no prefix, own auth)
 
-    # CONNECTED MODE — billing/marketplace
-    if settings.mode == "connected":
-        from app.routers import billing, integrations, webhooks
+    from app.routers import billing, integrations, webhooks
 
-        app.include_router(
-            webhooks.router,
-            prefix="/api/webhooks",
-            tags=["webhooks"],
-        )
-        app.include_router(
-            billing.router,
-            prefix="/api",
-            tags=["billing", "api-keys"],
-            dependencies=admin_route_dependency,
-        )
-        app.include_router(
-            integrations.router,
-            prefix="/api/integrations",
-            tags=["integrations"],
-            dependencies=admin_route_dependency,
-        )
-        logger.info("Connected mode: premium routers mounted (billing, integrations, webhooks)")
-    else:
-        logger.info("Standalone mode: premium routers NOT mounted")
+    app.include_router(
+        webhooks.router,
+        prefix="/api/webhooks",
+        tags=["webhooks"],
+    )
+    app.include_router(
+        billing.router,
+        prefix="/api",
+        tags=["billing", "api-keys"],
+        dependencies=admin_route_dependency,
+    )
+    app.include_router(
+        integrations.router,
+        prefix="/api/integrations",
+        tags=["integrations"],
+        dependencies=admin_route_dependency,
+    )
+    logger.info("Connected routers mounted (billing, integrations, webhooks)")
 
     # PUBLIC — website chat widget (no auth)
     from app.routers.website_chat import router as website_chat_router
@@ -748,7 +707,7 @@ def create_app() -> FastAPI:
         return {
             "name": API_TITLE,
             "version": API_VERSION,
-            "mode": settings.mode,
+            "mode": "connected",
             "status": "running",
             "docs": {
                 "swagger": "/docs",

@@ -37,17 +37,13 @@ AIM Data backend → ai.market proxy → Anthropic Claude API
 
 ## Standalone / Connected Mode Boundaries
 
-| Capability | Connected | Standalone |
-|-----------|-----------|------------|
-| Allie LLM | Yes | Disabled (AllieDisabledError) |
-| ai.market calls | Yes | Blocked |
-| Local RAG queries | Yes | Yes |
-| Dataset upload/process | Yes | Yes |
-| Credit metering | Yes | Skipped |
-
-The standalone guard (`is_local_only()`) is checked at the service layer.
-Attempting to call Allie in standalone mode raises `AllieDisabledError`, which
-the WebSocket handler converts to an `ALLIE_DISABLED` error message.
+| Capability | Connected AIM Data |
+|-----------|--------------------|
+| Allie LLM | Yes |
+| ai.market calls | Yes |
+| Local RAG queries | Yes |
+| Dataset upload/process | Yes |
+| Credit metering | Yes |
 
 ## Input Sanitization Layers
 
