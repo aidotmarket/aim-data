@@ -60,7 +60,6 @@ export default function ChatPanel() {
     close,
     messages,
     isStreaming,
-    isStandalone,
     allieAvailable,
     connectionStatus,
     reconnectCountdown,
@@ -119,7 +118,7 @@ export default function ChatPanel() {
     []
   );
 
-  const disabled = isStandalone || !allieAvailable;
+  const disabled = !allieAvailable;
 
   if (!isOpen) return null;
   if (disabled) return null;

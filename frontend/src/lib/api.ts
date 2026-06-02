@@ -627,7 +627,6 @@ export const piiApi = {
 
 // System info types
 export interface SystemInfo {
-  mode: string;
   version: string;
   features: Record<string, boolean>;
   system: {

@@ -91,7 +91,7 @@ interface SidebarProps {
 
 const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
   const location = useLocation();
-  const { hasFeature, isStandalone } = useMode();
+  const { hasFeature } = useMode();
   const channel = useChannel();
   const brand = useBrand();
 
