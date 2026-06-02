@@ -203,6 +203,14 @@ cmd_promote() {
            "Verify RC image exists: $DOCKER manifest inspect $IMAGE:${rc_version}"
   pass "Multi-arch retag complete"
 
+  header "Retagging $IMAGE:v${ver} → $IMAGE:latest"
+  "$DOCKER" buildx imagetools create \
+    --tag "$IMAGE:latest" \
+    "$IMAGE:v${ver}" \
+    || die "Failed to retag $IMAGE:v${ver} → latest" \
+           "Installer pulls :latest; without this, new installs get the previous image."
+  pass ":latest now points to v${ver}"
+
   info "Pulling image..."
   "$DOCKER" pull "$IMAGE:v${ver}" &>/dev/null && pass "docker pull OK" || die "docker pull failed"
 
