@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pandoc \
     libmagic1 \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed Python packages from builder
@@ -74,7 +75,8 @@ RUN chmod +x /entrypoint.sh
 # Ensure non-root user owns the app directory
 RUN chown -R aim_data:aim_data /app
 
-USER aim_data
+# NOTE: runtime UID drop happens in entrypoint.sh (root -> aim_data via gosu)
+# so the entrypoint can repair ownership on legacy root-owned /data volumes first.
 
 EXPOSE 8000
 
