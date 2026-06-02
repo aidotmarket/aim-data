@@ -2,9 +2,9 @@ import { MessageCircle } from "lucide-react";
 import { useCoPilot } from "@/contexts/CoPilotContext";
 
 export default function CoPilotFab() {
-  const { toggle, isOpen, isStandalone, allieAvailable } = useCoPilot();
+  const { toggle, isOpen, allieAvailable } = useCoPilot();
 
-  if (isStandalone || !allieAvailable) return null;
+  if (!allieAvailable) return null;
   if (isOpen) return null;
 
   return (

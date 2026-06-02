@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { useMode } from "@/contexts/ModeContext";
 
 export interface PublishedDataset {
   id: string;
@@ -27,17 +26,6 @@ const MarketplaceContext = createContext<MarketplaceContextType | undefined>(und
 
 const STORAGE_KEY = "vectoraiz_marketplace";
 
-const NOOP_CONTEXT: MarketplaceContextType = {
-  publishedDatasets: {},
-  isPublished: () => false,
-  getPublishedData: () => undefined,
-  publishDataset: () => {},
-  unpublishDataset: () => {},
-  getTotalEarnings: () => 0,
-  getPublishedCount: () => 0,
-};
-
-/** Full marketplace provider — only used in connected mode. */
 const ConnectedMarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [publishedDatasets, setPublishedDatasets] = useState<Record<string, PublishedDataset>>(() => {
     try {
@@ -127,18 +115,7 @@ const ConnectedMarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 };
 
-/** Routes through no-op provider in standalone mode, real provider in connected. */
 export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isStandalone } = useMode();
-
-  if (isStandalone) {
-    return (
-      <MarketplaceContext.Provider value={NOOP_CONTEXT}>
-        {children}
-      </MarketplaceContext.Provider>
-    );
-  }
-
   return <ConnectedMarketplaceProvider>{children}</ConnectedMarketplaceProvider>;
 };
 

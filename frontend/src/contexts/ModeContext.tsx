@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { getApiUrl } from "@/lib/api";
 import { setMarketplaceApiUrl } from "@/lib/data-requests-api";
 
-type Mode = "standalone" | "connected";
 type Channel = "direct" | "marketplace" | "aim-data";
 
 interface Features {
@@ -13,11 +12,9 @@ interface Features {
 }
 
 interface ModeContextType {
-  mode: Mode;
   channel: Channel;
   version: string;
   features: Features;
-  isStandalone: boolean;
   isConnected: boolean;
   hasFeature: (name: keyof Features) => boolean;
   isLoading: boolean;
@@ -28,7 +25,6 @@ const DEFAULT_FEATURES: Features = { allai: false, marketplace: false, earnings:
 const ModeContext = createContext<ModeContextType | undefined>(undefined);
 
 export const ModeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [mode, setMode] = useState<Mode>("standalone");
   const [channel, setChannel] = useState<Channel>("direct");
   const [version, setVersion] = useState("0.0.0");
   const [features, setFeatures] = useState<Features>(DEFAULT_FEATURES);
@@ -40,7 +36,6 @@ export const ModeProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const res = await fetch(`${getApiUrl()}/api/system/info`);
         if (res.ok) {
           const data = await res.json();
-          setMode(data.mode ?? "standalone");
           setChannel(
             data.channel === "marketplace"
               ? "marketplace"
@@ -66,12 +61,10 @@ export const ModeProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <ModeContext.Provider
       value={{
-        mode,
         channel,
         version,
         features,
-        isStandalone: mode === "standalone",
-        isConnected: mode === "connected",
+        isConnected: true,
         hasFeature,
         isLoading,
       }}

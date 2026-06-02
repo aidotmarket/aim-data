@@ -57,7 +57,6 @@ interface CoPilotState {
   connectionStatus: ConnectionStatus;
   reconnectCountdown: number | null;
   allieAvailable: boolean;
-  isStandalone: boolean;
   toneMode: ToneMode;
 }
 
@@ -109,7 +108,7 @@ function summarizeS3Connection(connection: S3ConnectionSnapshot) {
 
 export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { apiKey, isAuthenticated } = useAuth();
-  const { isStandalone, channel, hasFeature, isLoading: modeLoading } = useMode();
+  const { channel, hasFeature, isLoading: modeLoading } = useMode();
 
   const [isOpen, setIsOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -139,7 +138,7 @@ export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const cachedS3ConnectionsRef = useRef<S3ConnectionSnapshot[]>([]);
 
   const location = useLocation();
-  const configuredAvailable = !modeLoading && !isStandalone && hasFeature("allai");
+  const configuredAvailable = !modeLoading && hasFeature("allai");
 
   // Helper: build and send STATE_SNAPSHOT to the backend via WS
   const sendStateSnapshot = useCallback(() => {
@@ -757,7 +756,6 @@ export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
         connectionStatus,
         reconnectCountdown,
         allieAvailable,
-        isStandalone,
         toneMode,
         open,
         close,
