@@ -13,11 +13,10 @@ from app.main import app
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 COMPOSE_FILE = REPO_ROOT / "docker-compose.aim-data.yml"
-FORBIDDEN_KEYS = {"AIM_DATA_MODE", "AIM_DATA_MARKETPLACE_ENABLED"}
+FORBIDDEN_KEYS = {"AIM_DATA_MARKETPLACE_ENABLED"}
 REQUIRED_ENV = {
     "VECTORAIZ_CHANNEL=aim-data",
-    "VECTORAIZ_VERSION=${VECTORAIZ_VERSION:-latest}",
-    "VECTORAIZ_MODE=${VECTORAIZ_MODE:-standalone}",
+    "VECTORAIZ_MODE=${VECTORAIZ_MODE:-connected}",
     "VECTORAIZ_SECRET_KEY=${VECTORAIZ_SECRET_KEY:-}",
 }
 
@@ -31,19 +30,19 @@ def test_aim_data_compose_yaml_is_valid():
     assert "volumes" in data
 
 
-def test_aim_data_compose_uses_standard_vectoraiz_image_and_env():
-    """AIM Data deploys the shared vectoraiz image with channel config."""
+def test_aim_data_compose_uses_aim_data_image_and_env():
+    """AIM Data deploys the AIM Data image with channel config."""
     data = yaml.safe_load(COMPOSE_FILE.read_text())
 
-    assert "vectoraiz" in data["services"]
-    assert "aim-data" not in data["services"]
+    assert "app" in data["services"]
 
-    service = data["services"]["vectoraiz"]
+    service = data["services"]["app"]
     env = set(service["environment"])
 
-    assert service["image"] == "ghcr.io/aidotmarket/vectoraiz:${VECTORAIZ_VERSION:-latest}"
+    assert service["image"] == "ghcr.io/aidotmarket/aim-data:${AIM_DATA_VERSION:-latest}"
     assert REQUIRED_ENV.issubset(env)
-    assert all(not item.startswith("AIM_DATA_VERSION=") for item in env)
+    assert "AIM_DATA_AI_MARKET_URL=${AIM_DATA_AI_MARKET_URL:-https://api.ai.market}" in env
+    assert "VECTORAIZ_AI_MARKET_URL=${VECTORAIZ_AI_MARKET_URL:-https://api.ai.market}" in env
     assert all(not any(item.startswith(f"{key}=") for key in FORBIDDEN_KEYS) for item in env)
     assert service["ports"] == ["${AIM_DATA_PORT:-8080}:80"]
     assert service["volumes"] == [
@@ -52,6 +51,11 @@ def test_aim_data_compose_uses_standard_vectoraiz_image_and_env():
         "/var/run/docker.sock:/var/run/docker.sock",
     ]
     assert set(service["depends_on"]) == {"postgres", "qdrant"}
+
+    postgres_env = set(data["services"]["postgres"]["environment"])
+    assert "POSTGRES_USER=aim_data" in postgres_env
+    assert "POSTGRES_DB=aim_data" in postgres_env
+    assert any(item.startswith("DATABASE_URL=postgresql://aim_data:") for item in env)
 
 
 def test_no_runtime_aim_data_mode_or_marketplace_enabled_refs_remain():

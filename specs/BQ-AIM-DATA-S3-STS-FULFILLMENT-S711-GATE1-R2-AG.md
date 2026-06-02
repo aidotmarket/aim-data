@@ -22,7 +22,7 @@
 ## Mandate Verification
 
 - **HIGH-1**: **ADDRESSED**
-  - Evidence: §1 and §2.2 explicitly lock signing ownership to the customer's vectorAIz container (ai.market platform never holds `role_arn` or `external_id`), define the `Listing.raw_metadata` JSON contract, resolve the C6-to-C4 dependency via internal-only JWT-authenticated `/sign-url` calls, and document the agent-QA path as a separate read-only seller-side role.
+  - Evidence: §1 and §2.2 explicitly lock signing ownership to the customer's AIM Data container (ai.market platform never holds `role_arn` or `external_id`), define the `Listing.raw_metadata` JSON contract, resolve the C6-to-C4 dependency via internal-only JWT-authenticated `/sign-url` calls, and document the agent-QA path as a separate read-only seller-side role.
 - **HIGH-2**: **ADDRESSED**
   - Evidence: §2.2 and §3.4 correctly trace the token issuance chain from `orders.py:214` through `order_service.issue_download_token` to `security.py:188` (`create_delivery_token`), specifying that the S3 URL is carried in the existing JWT `delivery_config` without conflating it with the hash-based `FulfillmentDownloadToken`.
 - **MED-3**: **ADDRESSED**
@@ -48,7 +48,7 @@ Under the current spec, Step 1 will fail database validation. Even if a placehol
 
 ### FINDING-MEDIUM-2-R2 — Disk Space Exhaustion Risk on Ephemeral Scan Downloads (MEDIUM)
 
-§2.1 describes a scan flow where vectorAIz downloads S3 objects to `upload_dir/safe_filename` to run `create_dataset` and then immediately deletes them. For large buckets containing multi-gigabyte files, downloading these files to the local container's disk can easily exhaust disk space or cause severe performance degradation and timeouts during the extraction cycle. The spec lacks any mitigation, size-limit checks, or streaming extraction strategies for these ephemeral downloads.
+§2.1 describes a scan flow where AIM Data downloads S3 objects to `upload_dir/safe_filename` to run `create_dataset` and then immediately deletes them. For large buckets containing multi-gigabyte files, downloading these files to the local container's disk can easily exhaust disk space or cause severe performance degradation and timeouts during the extraction cycle. The spec lacks any mitigation, size-limit checks, or streaming extraction strategies for these ephemeral downloads.
 
 ### FINDING-LOW-3-R2 — Undocumented session_purpose for Scan and Probe Operations (LOW)
 

@@ -12,9 +12,9 @@ Verdict: **APPROVE**
 
 ### HIGH-1 — Marketplace metadata contract + signing ownership
 
-Resolved. The spec now consistently locks signing ownership to the AIM Data customer's vectorAIz container. ai.market platform is explicitly barred from holding `role_arn` or `external_id`, assuming seller roles, signing S3 URLs, or storing STS credentials.
+Resolved. The spec now consistently locks signing ownership to the AIM Data customer's AIM Data container. ai.market platform is explicitly barred from holding `role_arn` or `external_id`, assuming seller roles, signing S3 URLs, or storing STS credentials.
 
-The marketplace carrier is now limited to `Listing.raw_metadata` fields `{connection_id, vectoraiz_instance_url, object_key, bucket, region}` at §2.2 / §3.3 / C6. C6 now depends coherently on C4 by calling seller vectorAIz `/sign-url` with `connection_id`, `object_key`, and `session_purpose = "order-{order_id}"`, while vectorAIz owns `role_arn`/`external_id` internally. Agent QA is documented as a separate read-only seller-side role through the same `/sign-url` gatekeeper with `session_purpose = "agent-qa-{listing_id}"`.
+The marketplace carrier is now limited to `Listing.raw_metadata` fields `{connection_id, vectoraiz_instance_url, object_key, bucket, region}` at §2.2 / §3.3 / C6. C6 now depends coherently on C4 by calling seller AIM Data `/sign-url` with `connection_id`, `object_key`, and `session_purpose = "order-{order_id}"`, while AIM Data owns `role_arn`/`external_id` internally. Agent QA is documented as a separate read-only seller-side role through the same `/sign-url` gatekeeper with `session_purpose = "agent-qa-{listing_id}"`.
 
 ### HIGH-2 — Fulfillment token citation drift
 
@@ -28,7 +28,7 @@ Resolved. §6 R4 now labels the risk as `BOUNDED-EXPOSURE`, states that S3 honor
 
 ### MEDIUM-4 — STS cache key
 
-Resolved. The vectorAIz STS cache key is now `(role_arn, region, session_purpose)` in §3.4, C2 acceptance criteria, C4 `/sign-url` criteria, and §6 R1. The spec defines `session_purpose` values as `order-{order_id}` for buyer fulfillment and `agent-qa-{listing_id}` for QA, and documents the v1 trade-off of one STS AssumeRole call per distinct order or QA listing. The cache is now correctly scoped to vectorAIz under the vectorAIz-signs ownership model.
+Resolved. The AIM Data STS cache key is now `(role_arn, region, session_purpose)` in §3.4, C2 acceptance criteria, C4 `/sign-url` criteria, and §6 R1. The spec defines `session_purpose` values as `order-{order_id}` for buyer fulfillment and `agent-qa-{listing_id}` for QA, and documents the v1 trade-off of one STS AssumeRole call per distinct order or QA listing. The cache is now correctly scoped to AIM Data under the AIM Data-signs ownership model.
 
 ### LOW-5 — Missing integration tests
 

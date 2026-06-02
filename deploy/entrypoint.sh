@@ -34,7 +34,7 @@ export OMP_NUM_THREADS OPENBLAS_NUM_THREADS MKL_NUM_THREADS VECLIB_MAXIMUM_THREA
 echo ""
 echo "  ╔═══════════════════════════════════════════╗"
 echo "  ║                                           ║"
-echo "  ║       ⚡ vectorAIz v${VECTORAIZ_VERSION:-dev}               ║"
+echo "  ║       ⚡ AIM Data v${VECTORAIZ_VERSION:-dev}               ║"
 echo "  ║                                           ║"
 echo "  ║   Mode: $(printf '%-34s' "${VECTORAIZ_MODE:-standalone}")║"
 echo "  ║                                           ║"

@@ -56,10 +56,10 @@ class TestClaudeDesktopSetup:
         json_str = json.dumps(config)
         parsed = json.loads(json_str)
 
-        # Must have mcpServers.vectoraiz.command and args
+        # Must have mcpServers.aim-data.command and args
         assert "mcpServers" in parsed
-        assert "vectoraiz" in parsed["mcpServers"]
-        server = parsed["mcpServers"]["vectoraiz"]
+        assert "aim-data" in parsed["mcpServers"]
+        server = parsed["mcpServers"]["aim-data"]
         assert "command" in server
         assert "args" in server
         assert isinstance(server["args"], list)
@@ -80,8 +80,8 @@ class TestChatGPTDesktopSetup:
         parsed = json.loads(json.dumps(config))
 
         assert "mcpServers" in parsed
-        assert "vectoraiz" in parsed["mcpServers"]
-        server = parsed["mcpServers"]["vectoraiz"]
+        assert "aim-data" in parsed["mcpServers"]
+        server = parsed["mcpServers"]["aim-data"]
         assert "command" in server
         assert "args" in server
 
@@ -101,7 +101,7 @@ class TestCursorSetup:
         parsed = json.loads(json.dumps(config))
 
         assert "mcpServers" in parsed
-        server = parsed["mcpServers"]["vectoraiz"]
+        server = parsed["mcpServers"]["aim-data"]
         assert "command" in server
 
     def test_config_includes_token(self, generator):
@@ -185,7 +185,7 @@ class TestVSCodeSetup:
         parsed = json.loads(json.dumps(config))
 
         assert "mcpServers" in parsed
-        assert "vectoraiz" in parsed["mcpServers"]
+        assert "aim-data" in parsed["mcpServers"]
 
     def test_config_includes_token(self, generator):
         result = generator.generate("vscode", token=FAKE_TOKEN, base_url=BASE_URL)

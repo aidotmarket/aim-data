@@ -1,8 +1,8 @@
-# vectorAIz Security Model
+# AIM Data Security Model
 
 ## Overview
 
-vectorAIz operates in two modes with different security boundaries:
+AIM Data operates in two modes with different security boundaries:
 
 - **Connected mode** — Full ai.market integration with metered Allie LLM access.
 - **Standalone mode** — Air-gapped local operation; Allie is disabled, no
@@ -25,10 +25,10 @@ Client → WebSocket: ?token=aim_xxx  → validate via get_current_user_ws()
 ## Allie LLM Path Security
 
 Allie communicates with Claude via the ai.market proxy — **no API keys are
-stored or transmitted by the vectorAIz backend**. The flow:
+stored or transmitted by the AIM Data backend**. The flow:
 
 ```
-vectorAIz backend → ai.market proxy → Anthropic Claude API
+AIM Data backend → ai.market proxy → Anthropic Claude API
 ```
 
 - The ai.market proxy authenticates the request using the user's session.

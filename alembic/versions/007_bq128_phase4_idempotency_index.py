@@ -2,7 +2,7 @@
 
 Originally created to add a partial unique index on messages(session_id,
 client_message_id). However, the messages table lives in vai_state.db
-(legacy engine), NOT in vectoraiz.db (Alembic-managed). The index is now
+(legacy engine), NOT in aim_data.db (Alembic-managed). The index is now
 created in _migrate_legacy_bq128() in app/core/database.py instead.
 
 This migration is kept as a no-op to maintain the Alembic revision chain.

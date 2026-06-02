@@ -2,7 +2,7 @@
 """
 allAI End-to-End Integration Test Suite
 ========================================
-Tests against a LIVE vectorAIz Docker instance at http://localhost:8080.
+Tests against a LIVE AIM Data Docker instance at http://localhost:8080.
 
 Covers:
   1. Backend API tests (health, datasets, search, SQL)
@@ -539,7 +539,7 @@ async def test_copilot_regression_no_xml():
 
 async def test_copilot_file_types():
     t0 = time.time()
-    resp = await copilot_send("What file types can vectorAIz process?")
+    resp = await copilot_send("What file types can AIM Data process?")
     text = resp["text"].lower()
     mentions_types = any(term in text for term in [
         "csv", "json", "parquet", "pdf", "excel", "xlsx", "xml"

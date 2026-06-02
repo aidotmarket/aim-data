@@ -2,7 +2,7 @@
 Alembic Environment Configuration
 ==================================
 
-Runs migrations against the vectoraiz.db (BQ-111) database.
+Runs migrations against the aim_data.db (BQ-111) database.
 The sqlalchemy.url is overridden at runtime by app.core.database
 so the value in alembic.ini is only a fallback for CLI usage.
 """

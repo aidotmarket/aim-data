@@ -77,10 +77,10 @@ class ConnectivitySetupGenerator:
     ) -> Dict[str, Any]:
         config = {
             "mcpServers": {
-                "vectoraiz": {
+                "aim-data": {
                     "command": "docker",
                     "args": [
-                        "exec", "-i", "vectoraiz", "python",
+                        "exec", "-i", "aim-data", "python",
                         "-m", "app.mcp_server", "--token", token,
                     ],
                 }
@@ -109,14 +109,14 @@ class ConnectivitySetupGenerator:
                     "step": 3,
                     "instruction": "Restart Claude Desktop",
                     "detail": "Quit and reopen Claude Desktop for the new MCP server to load.",
-                    "validation": "After restart, you should see 'vectoraiz' in the MCP server list.",
+                    "validation": "After restart, you should see 'aim-data' in the MCP server list.",
                 },
                 {
                     "step": 4,
                     "instruction": "Test the connection",
                     "detail": (
                         "In Claude Desktop, try asking: 'What datasets are available in AIM Data?' "
-                        "Claude should use the vectoraiz MCP tools to answer."
+                        "Claude should use the aim-data MCP tools to answer."
                     ),
                     "validation": "You should see dataset names from your AIM Data instance.",
                 },
@@ -127,7 +127,7 @@ class ConnectivitySetupGenerator:
                 "windows": "%APPDATA%/Claude/claude_desktop_config.json",
             },
             "troubleshooting": [
-                "Ensure Docker is running and the vectoraiz container is active.",
+                "Ensure Docker is running and the aim-data container is active.",
                 "Check that the token is valid by running connectivity_test.",
                 "If Claude Desktop doesn't show the MCP server, check the JSON syntax in your config file.",
                 "Verify the container name matches — run 'docker ps' to confirm.",
@@ -143,10 +143,10 @@ class ConnectivitySetupGenerator:
     ) -> Dict[str, Any]:
         config = {
             "mcpServers": {
-                "vectoraiz": {
+                "aim-data": {
                     "command": "docker",
                     "args": [
-                        "exec", "-i", "vectoraiz", "python",
+                        "exec", "-i", "aim-data", "python",
                         "-m", "app.mcp_server", "--token", token,
                     ],
                 }
@@ -175,7 +175,7 @@ class ConnectivitySetupGenerator:
                     "step": 3,
                     "instruction": "Restart ChatGPT Desktop",
                     "detail": "Quit and reopen ChatGPT Desktop to load the new MCP server.",
-                    "validation": "The vectoraiz MCP server should show as connected.",
+                    "validation": "The aim-data MCP server should show as connected.",
                 },
                 {
                     "step": 4,
@@ -191,7 +191,7 @@ class ConnectivitySetupGenerator:
             },
             "troubleshooting": [
                 "Ensure MCP support is enabled in ChatGPT Desktop beta features.",
-                "Check that Docker is running and the vectoraiz container is active.",
+                "Check that Docker is running and the aim-data container is active.",
                 "Verify the token is valid with connectivity_test.",
             ],
             "notes": [
@@ -205,10 +205,10 @@ class ConnectivitySetupGenerator:
     ) -> Dict[str, Any]:
         config = {
             "mcpServers": {
-                "vectoraiz": {
+                "aim-data": {
                     "command": "docker",
                     "args": [
-                        "exec", "-i", "vectoraiz", "python",
+                        "exec", "-i", "aim-data", "python",
                         "-m", "app.mcp_server", "--token", token,
                     ],
                 }
@@ -236,14 +236,14 @@ class ConnectivitySetupGenerator:
                 {
                     "step": 3,
                     "instruction": "Enable the server",
-                    "detail": "Toggle the vectoraiz server to 'enabled' in the MCP settings.",
+                    "detail": "Toggle the aim-data server to 'enabled' in the MCP settings.",
                     "validation": "The server status should show as connected.",
                 },
                 {
                     "step": 4,
                     "instruction": "Test the connection",
                     "detail": (
-                        "In Cursor chat, ask: 'Use the vectoraiz MCP to list my datasets.' "
+                        "In Cursor chat, ask: 'Use the aim-data MCP to list my datasets.' "
                         "Cursor should invoke the MCP tools."
                     ),
                     "validation": "You should see dataset info from your AIM Data instance.",
@@ -255,7 +255,7 @@ class ConnectivitySetupGenerator:
                 "global": "~/.cursor/mcp.json",
             },
             "troubleshooting": [
-                "Ensure Docker is running and the vectoraiz container is active.",
+                "Ensure Docker is running and the aim-data container is active.",
                 "Check Cursor's MCP server logs for connection errors.",
                 "Verify the token is valid with connectivity_test.",
             ],
@@ -321,10 +321,10 @@ class ConnectivitySetupGenerator:
     ) -> Dict[str, Any]:
         config = {
             "mcpServers": {
-                "vectoraiz": {
+                "aim-data": {
                     "command": "docker",
                     "args": [
-                        "exec", "-i", "vectoraiz", "python",
+                        "exec", "-i", "aim-data", "python",
                         "-m", "app.mcp_server", "--token", token,
                     ],
                 }
@@ -353,8 +353,8 @@ class ConnectivitySetupGenerator:
                     "step": 3,
                     "instruction": "Test the connection",
                     "detail": (
-                        "In the Copilot chat panel, use @vectoraiz to query your data: "
-                        "'@vectoraiz list my datasets'."
+                        "In the Copilot chat panel, use @aim-data to query your data: "
+                        "'@aim-data list my datasets'."
                     ),
                     "validation": "You should see your AIM Data datasets in the response.",
                 },
@@ -367,7 +367,7 @@ class ConnectivitySetupGenerator:
             "troubleshooting": [
                 "Ensure the GitHub Copilot extension is installed and up to date.",
                 "Check that MCP support is enabled in Copilot settings.",
-                "Verify Docker is running and the vectoraiz container is active.",
+                "Verify Docker is running and the aim-data container is active.",
             ],
             "notes": [
                 "This token is a secret — do not commit it to version control.",

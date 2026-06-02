@@ -1,4 +1,4 @@
-# vectorAIz Frontend — Railway Deployment Dockerfile
+# AIM Data Frontend — Railway Deployment Dockerfile
 # Build context: repo root (Railway sets this when using RAILWAY_DOCKERFILE_PATH)
 # VITE_API_URL is injected at build time by Railway from env vars.
 

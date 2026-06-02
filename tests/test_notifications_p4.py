@@ -232,12 +232,12 @@ class TestPIIScrubbing:
         config = {
             "gemini_api_key": "sk-proj-abc123def456ghi789",
             "openai_api_key": "sk-1234567890abcdef",
-            "app_name": "vectorAIz",
+            "app_name": "AIM Data",
         }
         redacted = redact_config(config)
         assert "****" in redacted["gemini_api_key"]
         assert "****" in redacted["openai_api_key"]
-        assert redacted["app_name"] == "vectorAIz"
+        assert redacted["app_name"] == "AIM Data"
 
     def test_emails_redacted_in_logs(self):
         """Email addresses in log entries are scrubbed."""

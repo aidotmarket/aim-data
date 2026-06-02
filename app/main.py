@@ -20,9 +20,9 @@ from app.routers import health, datasets, sql, pii, docs, diagnostics, imports, 
 from app.routers import auth as auth_router_module
 from app.core.database import init_db, close_db
 from app.core.structured_logging import setup_logging
-from app.core.errors import VectorAIzError
+from app.core.errors import AIMDataError
 from app.core.errors.registry import error_registry
-from app.core.errors.middleware import vectoraiz_error_handler
+from app.core.errors.middleware import aim_data_error_handler
 from app.core.log_middleware import CorrelationMiddleware
 from app.core.issue_tracker import issue_tracker
 from app.core.resource_guards import resource_monitor_loop, ensure_log_fallback
@@ -39,7 +39,7 @@ from app.services.serial_metering import (
 
 def _custom_thread_excepthook(args):
     """BQ-URGENT: Capture unhandled exceptions in background threads."""
-    logger = logging.getLogger("vectoraiz.thread_crash")
+    logger = logging.getLogger("aim_data.thread_crash")
     if issubclass(args.exc_type, MemoryError):
         logger.critical("Fatal MemoryError in background thread '%s'", args.thread.name if args.thread else 'unknown', exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
     else:
@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 # API metadata
 API_TITLE = "AIM Data API"
-API_VERSION = os.environ.get("VECTORAIZ_VERSION", "dev")
+API_VERSION = os.environ.get("AIM_DATA_VERSION") or os.environ.get("VECTORAIZ_VERSION", "dev")
 
 # BQ-127 (§7): Mode-aware API descriptions
 API_DESCRIPTION_STANDALONE = """
@@ -76,7 +76,7 @@ All data endpoints require authentication via API key.
 Include in requests: `X-API-Key: vz_your_key_here`
 
 ### Premium Features
-Set VECTORAIZ_MODE=connected to enable ai.market integration:
+Set AIM_DATA_MODE=connected to enable ai.market integration:
 - allAI intelligent data assistant
 - Premium data connectors
 - Marketplace listing & discovery
@@ -191,14 +191,14 @@ async def lifespan(app: FastAPI):
 
     # BQ-116: File lock to prevent multiple processes
     import fcntl
-    _lock_path = os.environ.get("VECTORAIZ_LOCK_PATH", "/var/tmp/vectoraiz_copilot.lock")
+    _lock_path = os.environ.get("AIM_DATA_LOCK_PATH") or os.environ.get("VECTORAIZ_LOCK_PATH", "/var/tmp/aim_data_copilot.lock")
     _lock_file = open(_lock_path, "w")
     try:
         fcntl.flock(_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         logger.info("Acquired single-worker lock: %s", _lock_path)
     except OSError:
         _lock_file.close()
-        logger.critical("Another vectoraiz process is already running (lock: %s)", _lock_path)
+        logger.critical("Another AIM Data process is already running (lock: %s)", _lock_path)
         raise RuntimeError("Co-Pilot requires single-worker mode")
 
     # BQ-110: Configure thread pool for run_sync() / asyncio.to_thread()
@@ -470,8 +470,8 @@ def create_app() -> FastAPI:
     # BQ-123A: Correlation ID middleware (request_id + correlation_id in every log)
     app.add_middleware(CorrelationMiddleware)
 
-    # BQ-123A: Structured error handler for VectorAIzError
-    app.add_exception_handler(VectorAIzError, vectoraiz_error_handler)
+    # BQ-123A: Structured error handler for AIMDataError
+    app.add_exception_handler(AIMDataError, aim_data_error_handler)
 
     # BQ-VZ-SERIAL-CLIENT: Credit wall exception handlers
     @app.exception_handler(CreditExhaustedException)

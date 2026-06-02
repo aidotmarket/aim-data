@@ -43,7 +43,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from pydantic import BaseModel, ValidationError
 from sqlmodel import Session as DBSession, select
 
-from app.core.errors import VectorAIzError
+from app.core.errors import AIMDataError
 from app.config import settings
 from app.core.local_only_guard import is_local_only
 from app.auth.api_key_auth import AuthenticatedUser, get_current_user, get_current_user_ws
@@ -1521,13 +1521,13 @@ async def send_command(
     """
     session_id = manager.get_session_for_user(user.user_id)
     if not session_id:
-        raise VectorAIzError("VAI-COP-001", detail="No active WebSocket session for user")
+        raise AIMDataError("VAI-COP-001", detail="No active WebSocket session for user")
 
     ws = manager.get_ws(session_id)
     if not ws:
         # Session exists in mapping but WS is gone — clean up
         await manager.disconnect(session_id)
-        raise VectorAIzError("VAI-COP-001", detail="WebSocket disconnected, session stale")
+        raise AIMDataError("VAI-COP-001", detail="WebSocket disconnected, session stale")
 
     # Forward command to frontend via WebSocket
     try:

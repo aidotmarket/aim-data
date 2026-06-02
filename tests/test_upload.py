@@ -26,7 +26,7 @@ def test_upload_unsupported_type():
 
     response = client.post("/api/datasets/upload", files=files)
 
-    assert response.status_code in (400, 422)  # VectorAIzError VAI-ING-001 → 422
+    assert response.status_code in (400, 422)  # AIMDataError VAI-ING-001 → 422
 
 
 def test_list_datasets():

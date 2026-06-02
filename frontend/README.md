@@ -1,6 +1,6 @@
-# vectorAIz Frontend
+# AIM Data Frontend
 
-React + Vite + Tailwind CSS frontend for vectorAIz.
+React + Vite + Tailwind CSS frontend for AIM Data.
 
 ## Development
 

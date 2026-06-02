@@ -101,13 +101,13 @@ class TestClaudeDesktop:
         )
         config = result["config"]
         assert "mcpServers" in config
-        assert "vectoraiz" in config["mcpServers"]
+        assert "aim-data" in config["mcpServers"]
 
     def test_config_has_docker_command(self, generator):
         result = generator.generate(
             platform="claude_desktop", token=TEST_TOKEN, base_url=TEST_BASE_URL,
         )
-        server = result["config"]["mcpServers"]["vectoraiz"]
+        server = result["config"]["mcpServers"]["aim-data"]
         assert server["command"] == "docker"
         assert "exec" in server["args"]
 

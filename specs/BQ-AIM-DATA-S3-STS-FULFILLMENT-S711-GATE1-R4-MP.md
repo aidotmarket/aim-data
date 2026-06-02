@@ -24,7 +24,7 @@ Verified. Grep returned zero hits in `specs/BQ-AIM-DATA-S3-STS-FULFILLMENT-S711-
 
 `vectoraiz-frontend`, `vectoraiz/app/`, `vectoraiz/tests/`, `src/pages/`, `src/components/`, `tests/services/`, `tests/routers/`, and `app/models/listing.py`.
 
-§2.4 cites `components/PresignedUrlDownloader.tsx`. C8 is headed `Frontends (vectoraiz-monorepo frontend + ai-market-frontend)`, with the vectorAIz frontend subdir deferred to Gate 2 chunk-dispatch verification. C9 integration test paths use `tests/integration/` without a `vectoraiz/` prefix.
+§2.4 cites `components/PresignedUrlDownloader.tsx`. C8 is headed `Frontends (vectoraiz-monorepo frontend + ai-market-frontend)`, with the AIM Data frontend subdir deferred to Gate 2 chunk-dispatch verification. C9 integration test paths use `tests/integration/` without a `vectoraiz/` prefix.
 
 ### Group 3 — R3.5 Block B raw_metadata files[] convention
 
@@ -33,7 +33,7 @@ Verified. §2.2, §3.3, §3.4, C6(b), §8, and §9 consistently apply Max's lock
 - `Listing.raw_metadata` reuses the existing `files[]` carrier convention from `app/schemas/raw_delivery.py`.
 - Per-file `files[].path` carries `s3://{bucket}/{key}`.
 - A top-level `s3_connection` metadata object carries `connection_id`, `vectoraiz_instance_url`, `bucket`, and `region`.
-- The purchase flow reads `s3_connection.*` for the seller vectorAIz gatekeeper target and parses object keys from `files[].path`.
+- The purchase flow reads `s3_connection.*` for the seller AIM Data gatekeeper target and parses object keys from `files[].path`.
 - The raw-delivery validator extension rejects S3 paths when `s3_connection` is null.
 - `role_arn` and `external_id` remain excluded from all platform-side raw metadata, order snapshots, token payloads, logs, and DB tables.
 

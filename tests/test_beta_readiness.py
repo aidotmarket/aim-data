@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VectorAIz Beta-Readiness Integration Test Suite (Stress Test #2)
+AIM Data Beta-Readiness Integration Test Suite (Stress Test #2)
 ================================================================
 
 Runs against a live VZ instance and exercises every user-facing feature:
@@ -863,7 +863,7 @@ def _write_report(suite: TestSuite, base_url: str, vz_version: str,
         tiers.setdefault(tier_name, []).append(r)
 
     lines: List[str] = []
-    lines.append("# VectorAIz Stress Test #2 — Report")
+    lines.append("# AIM Data Stress Test #2 — Report")
     lines.append("")
     lines.append(f"**Date:** {now}")
     lines.append(f"**VZ Version:** {vz_version}")
@@ -965,7 +965,7 @@ def run_all_tests(base_url: str, include_xl: bool = False):
 
     vz_version = _get_vz_version(base_url)
 
-    print(f"\nVectorAIz Stress Test #2 — Beta-Readiness Integration Tests")
+    print(f"\nAIM Data Stress Test #2 — Beta-Readiness Integration Tests")
     print(f"Target: {base_url}")
     print(f"VZ Version: {vz_version}")
     print(f"Test data: {TEST_DATA_DIR}")
@@ -1948,7 +1948,7 @@ def main():
     global BASE_URL, ADMIN_USER, ADMIN_PASS
 
     parser = argparse.ArgumentParser(
-        description="VectorAIz Beta-Readiness Integration Tests")
+        description="AIM Data Beta-Readiness Integration Tests")
     parser.add_argument("--base-url", default=BASE_URL,
                         help=f"VZ instance URL (default: {BASE_URL})")
     parser.add_argument("--xl", action="store_true",

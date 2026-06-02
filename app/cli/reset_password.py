@@ -13,7 +13,7 @@ Usage::
     python -m app.cli.reset_password --username admin
 
     # Via docker exec:
-    docker exec vectoraiz-backend python -m app.cli.reset_password --username admin
+    docker exec aim-data-backend python -m app.cli.reset_password --username admin
 
 Phase: BQ-VZ-MULTI-USER — Admin/User Role Split
 Created: 2026-03-03

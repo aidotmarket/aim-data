@@ -7,7 +7,7 @@ client = TestClient(app)
 def test_root():
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json()["name"] == "vectorAIz API"
+    assert response.json()["name"] == "AIM Data API"
     assert response.json()["status"] == "running"
 
 

@@ -1,7 +1,7 @@
 # BQ-TIKA: Apache Tika Integration — 28+ File Format Support
 
 ## Overview
-Add Apache Tika as a Docker sidecar to expand vectorAIz from 13 file formats to 28+.
+Add Apache Tika as a Docker sidecar to expand AIM Data from 13 file formats to 28+.
 Tika runs as a self-contained REST server — zero external API calls, works fully offline in standalone mode.
 
 ## Strategic Value

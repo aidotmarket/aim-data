@@ -1,6 +1,8 @@
 import importlib
+from typing import get_args, get_origin
 
 import pytest
+from pydantic import AliasChoices
 
 
 @pytest.fixture
@@ -10,54 +12,96 @@ def reload_config():
     yield lambda: importlib.reload(app.config)
 
 
-@pytest.mark.parametrize(
-    "env_name,field_name,test_value",
-    [
-        ("VECTORAIZ_KEYSTORE_PASSPHRASE", "keystore_passphrase", "test-vec-keystore"),
-        ("AIM_DATA_KEYSTORE_PASSPHRASE", "keystore_passphrase", "test-aim-keystore"),
-        ("VECTORAIZ_AI_MARKET_URL", "ai_market_url", "https://vec.example/api"),
-        ("AIM_DATA_AI_MARKET_URL", "ai_market_url", "https://aim.example/api"),
-        ("VECTORAIZ_INTERNAL_API_KEY", "internal_api_key", "k-vec-1"),
-        ("AIM_DATA_INTERNAL_API_KEY", "internal_api_key", "k-aim-1"),
-        ("VECTORAIZ_SERIAL", "serial", "VZ-001"),
-        ("AIM_DATA_SERIAL", "serial", "AD-001"),
-        ("VECTORAIZ_APIKEY_HMAC_SECRET", "apikey_hmac_secret", "hmac-vec"),
-        ("AIM_DATA_APIKEY_HMAC_SECRET", "apikey_hmac_secret", "hmac-aim"),
-    ],
-)
-def test_field_reads_from_both_prefixes(monkeypatch, reload_config, env_name, field_name, test_value):
-    for pref in ("VECTORAIZ_", "AIM_DATA_"):
-        monkeypatch.delenv(pref + field_name.upper(), raising=False)
-    monkeypatch.setenv(env_name, test_value)
+def _field_env_names(field_name: str) -> tuple[str, str]:
+    env_name = field_name.upper()
+    return f"AIM_DATA_{env_name}", f"VECTORAIZ_{env_name}"
+
+
+def _alias_choices(field) -> list[str]:
+    alias = field.validation_alias
+    assert isinstance(alias, AliasChoices)
+    return list(alias.choices)
+
+
+def _sample_env_value(field_name: str, annotation) -> tuple[str, object]:
+    if field_name == "ai_market_aws_account_id":
+        return "123456789012", "123456789012"
+    if field_name == "ai_market_assume_role_principal_arn":
+        arn = "arn:aws:iam::123456789012:role/aim-data-test"
+        return arn, arn
+    if field_name == "cors_origins":
+        return '["https://aim.example"]', ["https://aim.example"]
+    if field_name == "allowed_raw_file_dirs":
+        return '["/tmp/aim-data-raw"]', ["/tmp/aim-data-raw"]
+    if field_name == "mode":
+        return "connected", "connected"
+    if field_name == "connected_fallback":
+        return "refuse", "refuse"
+    if field_name == "hybrid_search_mode":
+        return "dense_only", "dense_only"
+
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if annotation is bool:
+        return "true", True
+    if annotation is int:
+        return "17", 17
+    if annotation is float:
+        return "1.75", 1.75
+    if annotation is str or (origin is None and str in args):
+        return f"{field_name}-value", f"{field_name}-value"
+    if origin is list:
+        return '["sample"]', ["sample"]
+    if type(None) in args:
+        non_none_args = [arg for arg in args if arg is not type(None)]
+        if non_none_args and non_none_args[0] is str:
+            return f"{field_name}-value", f"{field_name}-value"
+
+    return f"{field_name}-value", f"{field_name}-value"
+
+
+def _clear_settings_env(monkeypatch, config_mod):
+    for name, field in config_mod.Settings.model_fields.items():
+        for choice in _alias_choices(field):
+            monkeypatch.delenv(choice, raising=False)
+        primary, legacy = _field_env_names(name)
+        monkeypatch.delenv(primary, raising=False)
+        monkeypatch.delenv(legacy, raising=False)
+    monkeypatch.delenv("AI_MARKET_AWS_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("AI_MARKET_ASSUME_ROLE_PRINCIPAL_ARN", raising=False)
+    monkeypatch.delenv("AIM_DATA_AWS_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("AIM_DATA_AWS_PRINCIPAL_ARN", raising=False)
+    monkeypatch.delenv("VECTORAIZ_AWS_PRINCIPAL_ARN", raising=False)
+    monkeypatch.delenv("AIM_DATA_VERSION", raising=False)
+    monkeypatch.delenv("VECTORAIZ_VERSION", raising=False)
+
+
+def test_every_settings_field_has_primary_and_legacy_aliases(reload_config):
     mod = reload_config()
-    assert getattr(mod.settings, field_name) == test_value
+    for name, field in mod.Settings.model_fields.items():
+        primary, legacy = _field_env_names(name)
+        choices = _alias_choices(field)
+        assert primary in choices, name
+        assert legacy in choices, name
+
+
+@pytest.mark.parametrize("prefix", ["AIM_DATA", "VECTORAIZ"])
+def test_every_settings_field_resolves_from_primary_and_legacy_prefixes(monkeypatch, reload_config, prefix):
+    mod = reload_config()
+    _clear_settings_env(monkeypatch, mod)
+
+    for name, field in mod.Settings.model_fields.items():
+        _clear_settings_env(monkeypatch, mod)
+        env_value, expected = _sample_env_value(name, field.annotation)
+        monkeypatch.setenv(f"{prefix}_{name.upper()}", env_value)
+        mod = reload_config()
+        assert getattr(mod.settings, name) == expected, name
 
 
 def test_aim_data_prefix_wins_when_both_set(monkeypatch, reload_config):
+    mod = reload_config()
+    _clear_settings_env(monkeypatch, mod)
     monkeypatch.setenv("VECTORAIZ_KEYSTORE_PASSPHRASE", "vec-loses")
     monkeypatch.setenv("AIM_DATA_KEYSTORE_PASSPHRASE", "aim-wins")
     mod = reload_config()
     assert mod.settings.keystore_passphrase == "aim-wins"
-
-
-def test_boolean_fields_accept_either_prefix(monkeypatch, reload_config):
-    monkeypatch.setenv("AIM_DATA_CONNECTIVITY_ENABLED", "true")
-    monkeypatch.setenv("AIM_DATA_AUTH_ENABLED", "false")
-    monkeypatch.setenv("AIM_DATA_ALLAI_ENABLED", "true")
-    mod = reload_config()
-    assert mod.settings.connectivity_enabled is True
-    assert mod.settings.auth_enabled is False
-    assert mod.settings.allai_enabled is True
-
-
-def test_boolean_fields_legacy_vectoraiz_prefix_still_works(monkeypatch, reload_config):
-    monkeypatch.delenv("AIM_DATA_CONNECTIVITY_ENABLED", raising=False)
-    monkeypatch.delenv("AIM_DATA_AUTH_ENABLED", raising=False)
-    monkeypatch.delenv("AIM_DATA_ALLAI_ENABLED", raising=False)
-    monkeypatch.setenv("VECTORAIZ_CONNECTIVITY_ENABLED", "true")
-    monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "false")
-    monkeypatch.setenv("VECTORAIZ_ALLAI_ENABLED", "true")
-    mod = reload_config()
-    assert mod.settings.connectivity_enabled is True
-    assert mod.settings.auth_enabled is False
-    assert mod.settings.allai_enabled is True

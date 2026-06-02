@@ -112,7 +112,7 @@ class TestLayer2RoleDomain:
     def test_role_identity(self, factory):
         layer = factory._layer_2_role_domain({})
         assert "allAI" in layer
-        assert "vectorAIz" in layer
+        assert "AIM Data" in layer
         assert "Ally" in layer
 
     def test_capabilities_listed(self, factory):

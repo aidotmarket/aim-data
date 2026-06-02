@@ -371,7 +371,7 @@ async def postman_collection(request: Request):
     return JSONResponse(
         content=collection,
         headers={
-            "Content-Disposition": "attachment; filename=vectoraiz-api.postman_collection.json"
+            "Content-Disposition": "attachment; filename=aim-data-api.postman_collection.json"
         }
     )
 

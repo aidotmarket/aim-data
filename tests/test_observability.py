@@ -14,7 +14,7 @@ import pytest
 import yaml
 from unittest.mock import patch, MagicMock
 
-from app.core.errors import VectorAIzError, CODE_PATTERN
+from app.core.errors import AIMDataError, CODE_PATTERN
 from app.core.errors.registry import ErrorRegistry, RegistryValidationError, VALID_DOMAINS
 from app.core.issue_tracker import IssueTracker
 from app.core.structured_logging import (
@@ -154,15 +154,15 @@ class TestErrorRegistryLoading:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 2. VectorAIzError → Structured Response
+# 2. AIMDataError → Structured Response
 # ═══════════════════════════════════════════════════════════════════════
 
-class TestVectorAIzError:
+class TestAIMDataError:
     """Test the base exception class."""
 
     def test_valid_code(self):
         """Creating error with valid code works."""
-        err = VectorAIzError("VAI-QDR-001", detail="connection refused")
+        err = AIMDataError("VAI-QDR-001", detail="connection refused")
         assert err.code == "VAI-QDR-001"
         assert err.detail == "connection refused"
         assert str(err) == "VAI-QDR-001: connection refused"
@@ -170,16 +170,16 @@ class TestVectorAIzError:
     def test_invalid_code_raises(self):
         """Creating error with bad code format raises ValueError."""
         with pytest.raises(ValueError, match="Invalid error code format"):
-            VectorAIzError("BAD")
+            AIMDataError("BAD")
 
     def test_context_dict(self):
         """Context is stored as a dict."""
-        err = VectorAIzError("VAI-DB-001", context={"table": "users"})
+        err = AIMDataError("VAI-DB-001", context={"table": "users"})
         assert err.context == {"table": "users"}
 
     def test_code_without_detail(self):
         """Code-only error works."""
-        err = VectorAIzError("VAI-SYS-001")
+        err = AIMDataError("VAI-SYS-001")
         assert err.detail is None
         assert str(err) == "VAI-SYS-001"
 
@@ -190,16 +190,16 @@ class TestErrorMiddleware:
     @pytest.mark.asyncio
     async def test_known_code_returns_structured_response(self):
         """Middleware produces correct JSON for known error codes."""
-        from app.core.errors.middleware import vectoraiz_error_handler
+        from app.core.errors.middleware import aim_data_error_handler
 
         # Load registry
         registry = ErrorRegistry()
         registry.load()
 
         with patch("app.core.errors.middleware.error_registry", registry):
-            exc = VectorAIzError("VAI-QDR-001", detail="internal detail")
+            exc = AIMDataError("VAI-QDR-001", detail="internal detail")
             request = MagicMock()
-            response = await vectoraiz_error_handler(request, exc)
+            response = await aim_data_error_handler(request, exc)
 
             assert response.status_code == 503
             body = json.loads(response.body)
@@ -213,13 +213,13 @@ class TestErrorMiddleware:
     @pytest.mark.asyncio
     async def test_unknown_code_returns_500(self):
         """Middleware returns 500 for unregistered error code."""
-        from app.core.errors.middleware import vectoraiz_error_handler
+        from app.core.errors.middleware import aim_data_error_handler
 
         registry = ErrorRegistry()  # Empty — not loaded
         with patch("app.core.errors.middleware.error_registry", registry):
-            exc = VectorAIzError("VAI-API-099", detail="unregistered")
+            exc = AIMDataError("VAI-API-099", detail="unregistered")
             request = MagicMock()
-            response = await vectoraiz_error_handler(request, exc)
+            response = await aim_data_error_handler(request, exc)
 
             assert response.status_code == 500
             body = json.loads(response.body)
@@ -351,17 +351,17 @@ class TestRedaction:
 
     @pytest.mark.asyncio
     async def test_internal_detail_not_in_response(self):
-        """VectorAIzError detail must not appear in JSON response body."""
-        from app.core.errors.middleware import vectoraiz_error_handler
+        """AIMDataError detail must not appear in JSON response body."""
+        from app.core.errors.middleware import aim_data_error_handler
 
         registry = ErrorRegistry()
         registry.load()
 
         with patch("app.core.errors.middleware.error_registry", registry):
             secret = "my_secret_api_key_12345"
-            exc = VectorAIzError("VAI-API-001", detail=f"Auth failed with key={secret}")
+            exc = AIMDataError("VAI-API-001", detail=f"Auth failed with key={secret}")
             request = MagicMock()
-            response = await vectoraiz_error_handler(request, exc)
+            response = await aim_data_error_handler(request, exc)
             body_str = response.body.decode()
             assert secret not in body_str
 

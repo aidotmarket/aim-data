@@ -10,9 +10,9 @@ Verdict: **CHANGES_REQUESTED**
 
 ### HIGH — C6 cannot be implemented from the specified contracts because the marketplace-side S3 fulfillment metadata is undefined
 
-The spec adds only `SELLER_S3_PRESIGNED_URL` to ai-market-backend schema (§3.3) but C6 requires ai-market-backend to resolve "seller's S3Connection record from listing snapshot" and generate a URL for the "buyer-purchased S3ObjectMetadata" (§2.2, §3.4). There is no contract for how `role_arn`, `external_id`, `region`, `bucket`, `object_key`, `connection_id`, or a selected `s3_object_metadata_id` get from vectorAIz into ai-market listing/order state. The vectorAIz tables are local to AIM-Channel, while ai-market-backend has no S3 connection table or listing metadata delta beyond the enum.
+The spec adds only `SELLER_S3_PRESIGNED_URL` to ai-market-backend schema (§3.3) but C6 requires ai-market-backend to resolve "seller's S3Connection record from listing snapshot" and generate a URL for the "buyer-purchased S3ObjectMetadata" (§2.2, §3.4). There is no contract for how `role_arn`, `external_id`, `region`, `bucket`, `object_key`, `connection_id`, or a selected `s3_object_metadata_id` get from AIM Data into ai-market listing/order state. The AIM Data tables are local to AIM-Channel, while ai-market-backend has no S3 connection table or listing metadata delta beyond the enum.
 
-This also makes the chunk dependencies incoherent: C6 declares a dependency on C4's vectorAIz gatekeeper contract, but §2.2/§3.4 say C6 directly assumes the seller role and signs the S3 URL platform-side. Those are different ownership models. Gate 2 needs one explicit contract: either platform signs from platform-stored role/bucket/object metadata, or vectorAIz signs through `POST /sign-url`, with exact request/response auth and listing snapshot fields.
+This also makes the chunk dependencies incoherent: C6 declares a dependency on C4's AIM Data gatekeeper contract, but §2.2/§3.4 say C6 directly assumes the seller role and signs the S3 URL platform-side. Those are different ownership models. Gate 2 needs one explicit contract: either platform signs from platform-stored role/bucket/object metadata, or AIM Data signs through `POST /sign-url`, with exact request/response auth and listing snapshot fields.
 
 ### HIGH — The fulfillment-token predecessor contract is misstated; the named function/path does not exist
 
@@ -53,10 +53,10 @@ Citation drift / unsubstantiated references:
 
 ## Open Questions
 
-The Living State locked decisions at `build:bq-aim-data-s3-sts-fulfillment-s711.body.decisions_locked_s711_12_50_utc` cover the big architecture defaults: 3600s STS sessions, 900s presigned URLs, ExternalId format, RoleSessionName format, required MaxSessionDuration, 9 chunks, and platform-side allAI placement. They do not resolve the marketplace listing/order metadata contract, platform-vs-vectorAIz signing ownership, or the per-order CloudTrail versus STS cache tradeoff. Those should remain open until the Gate 1 spec is revised.
+The Living State locked decisions at `build:bq-aim-data-s3-sts-fulfillment-s711.body.decisions_locked_s711_12_50_utc` cover the big architecture defaults: 3600s STS sessions, 900s presigned URLs, ExternalId format, RoleSessionName format, required MaxSessionDuration, 9 chunks, and platform-side allAI placement. They do not resolve the marketplace listing/order metadata contract, platform-vs-AIM Data signing ownership, or the per-order CloudTrail versus STS cache tradeoff. Those should remain open until the Gate 1 spec is revised.
 
 ## Schema / Chunk Notes
 
-The proposed vectorAIz tables are additive and avoid long-lived AWS secrets. The ai-market enum extension is additive, but the migration must be isolated and account for the deployed PostgreSQL version's `ALTER TYPE ... ADD VALUE IF NOT EXISTS` behavior.
+The proposed AIM Data tables are additive and avoid long-lived AWS secrets. The ai-market enum extension is additive, but the migration must be isolated and account for the deployed PostgreSQL version's `ALTER TYPE ... ADD VALUE IF NOT EXISTS` behavior.
 
 Chunk decomposition is mostly plausible after C1-C3. C4 and C5 can ship in parallel after C3. C6 and C7 are not truly parallel-shippable until the C6 metadata/signing contract is fixed because C7's `sts_probe` and onboarding persistence depend on knowing which side owns role metadata and probe execution.

@@ -33,14 +33,14 @@ MARKETPLACE_FEATURES = {
 }
 
 DIRECT_TITLES = [
-    "Welcome to vectorAIz",
+    "Welcome to AIM Data",
     "Vectorize & Index",
     "Query your data",
     "Ready!",
 ]
 
 MARKETPLACE_TITLES = [
-    "Welcome to vectorAIz for ai.market",
+    "Welcome to AIM Data for ai.market",
     "Upload your data",
     "Enhance & Preview",
     "Publish!",
@@ -81,7 +81,7 @@ def test_step_count_is_four():
 
 def test_direct_starts_with_welcome():
     """Direct channel first step is the generic welcome."""
-    assert DIRECT_TITLES[0] == "Welcome to vectorAIz"
+    assert DIRECT_TITLES[0] == "Welcome to AIM Data"
 
 
 def test_marketplace_starts_with_aimarket_welcome():

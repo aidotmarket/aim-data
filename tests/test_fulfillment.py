@@ -2,7 +2,7 @@
 BQ-D1: Fulfillment Listener Tests
 ==================================
 
-Tests the vectorAIz fulfillment handler (§7, items 1-7):
+Tests the AIM Data fulfillment handler (§7, items 1-7):
   1. Valid deliver → metadata → chunks → complete
   2. Unknown listing_id → DATASET_NOT_FOUND error
   3. File not found on disk → FILE_READ_ERROR
