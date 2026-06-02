@@ -77,8 +77,8 @@ latest_stable_tag() {
 
 update_compose() {
   local ver="$1"
-  sed -i '' "s|ghcr.io/aidotmarket/aim-data:v[^\"]*|ghcr.io/aidotmarket/aim-data:v${ver}|g" "$COMPOSE_FILE"
-  grep -q "ghcr.io/aidotmarket/aim-data:v${ver}" "$COMPOSE_FILE" || die "sed failed to update $COMPOSE_FILE"
+  sed -i '' "s|ghcr.io/aidotmarket/aim-data:\${AIM_DATA_VERSION:-[^}]*}|ghcr.io/aidotmarket/aim-data:\${AIM_DATA_VERSION:-v${ver}}|g" "$COMPOSE_FILE"
+  grep -qF "ghcr.io/aidotmarket/aim-data:\${AIM_DATA_VERSION:-v${ver}}" "$COMPOSE_FILE" || die "sed failed to update $COMPOSE_FILE"
   pass "Compose updated → v${ver}"
 }
 
