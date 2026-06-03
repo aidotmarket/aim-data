@@ -353,6 +353,11 @@ async def _handle_ai_market_token(
             exc,
             exc_info=True,
         )
+    try:
+        from app.services.serial_store import get_serial_store
+        get_serial_store().persist_ai_market_session(access_token, str(user_data.get("id") or ""))
+    except Exception as exc:
+        logger.warning("Failed to persist ai.market bearer session: %s", exc)
 
     api_key_cache[_ai_market_bearer_cache_key(access_token)] = authenticated_user
     return user_data, authenticated_user

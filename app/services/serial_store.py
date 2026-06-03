@@ -38,6 +38,10 @@ class SerialState:
     serial: str = ""
     install_token: Optional[str] = None
     bootstrap_token: Optional[str] = None
+    vz_install_id: Optional[str] = None
+    vz_install_token: Optional[str] = None
+    ai_market_access_token: Optional[str] = None
+    ai_market_seller_id: Optional[str] = None
     state: str = UNPROVISIONED
     last_app_version: Optional[str] = None
     last_status_cache: Optional[dict] = None
@@ -80,6 +84,10 @@ class SerialStore:
                 serial=raw.get("serial", ""),
                 install_token=raw.get("install_token"),
                 bootstrap_token=raw.get("bootstrap_token"),
+                vz_install_id=raw.get("vz_install_id"),
+                vz_install_token=raw.get("vz_install_token"),
+                ai_market_access_token=raw.get("ai_market_access_token"),
+                ai_market_seller_id=raw.get("ai_market_seller_id"),
                 state=raw.get("state", UNPROVISIONED),
                 last_app_version=raw.get("last_app_version"),
                 last_status_cache=raw.get("last_status_cache"),
@@ -168,6 +176,20 @@ class SerialStore:
 
     def update_app_version(self, version: str) -> None:
         self._state.last_app_version = version
+        self.save()
+
+    def persist_ai_market_session(self, access_token: str, seller_id: Optional[str]) -> None:
+        """Persist seller bearer auth used for VZ install registration."""
+        self._state.ai_market_access_token = access_token
+        if seller_id:
+            self._state.ai_market_seller_id = seller_id
+        self.save()
+
+    def persist_vz_install(self, install_id: str, install_token: Optional[str] = None) -> None:
+        """Persist ai.market VZ install credentials."""
+        self._state.vz_install_id = install_id
+        if install_token:
+            self._state.vz_install_token = install_token
         self.save()
 
 

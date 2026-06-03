@@ -212,6 +212,28 @@ class ActivationManager:
             self._store.record_success()
             now = datetime.now(timezone.utc).isoformat()
             self._store.update_status_cache(result.data, now)
+            if (
+                not self._store.state.vz_install_id
+                and self._store.state.ai_market_access_token
+                and settings.keystore_passphrase
+                and result.data.get("gateway_user_id")
+            ):
+                try:
+                    from app.core.crypto import DeviceCrypto
+                    from app.services.registration_service import ensure_vz_install_registered
+
+                    crypto = DeviceCrypto(
+                        keystore_path=settings.keystore_path,
+                        passphrase=settings.keystore_passphrase,
+                    )
+                    crypto.get_or_create_keypairs()
+                    await ensure_vz_install_registered(
+                        crypto,
+                        access_token=self._store.state.ai_market_access_token,
+                        seller_id=str(result.data.get("gateway_user_id") or ""),
+                    )
+                except Exception:
+                    logger.warning("VZ install registration during status sync failed", exc_info=True)
             if result.migrated:
                 gw_user_id = result.data.get("gateway_user_id")
                 self._store.transition_to_migrated(gw_user_id)

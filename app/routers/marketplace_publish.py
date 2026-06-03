@@ -18,14 +18,14 @@ from uuid import uuid4
 
 import httpx
 import jwt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.auth.api_key_auth import get_current_user
 from app.config import settings
 from app.core.channel_config import CHANNEL
 from app.core.crypto import DeviceCrypto
-from app.services.registration_service import _get_device_id
+from app.services.registration_service import ensure_vz_install_registered
 from app.services.serial_store import get_serial_store
 
 logger = logging.getLogger(__name__)
@@ -71,12 +71,12 @@ def _jcs_hash(body: dict) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
-def _build_jwt(seller_id: str, device_id: str, metadata_hash: str, ed_priv) -> str:
+def _build_jwt(seller_id: str, install_id: str, metadata_hash: str, ed_priv) -> str:
     """Create a short-lived EdDSA JWT for the publish action."""
     now = datetime.now(timezone.utc)
     claims = {
         "sub": seller_id,
-        "iss": device_id,
+        "iss": install_id,
         "action": "publish_listing",
         "metadata_hash": metadata_hash,
         "exp": now.timestamp() + 300,
@@ -106,6 +106,7 @@ def _get_crypto() -> DeviceCrypto:
 @router.post("/marketplace/publish", response_model=MarketplacePublishResponse)
 async def publish_to_marketplace(
     body: MarketplacePublishRequest,
+    request: Request,
     user=Depends(get_current_user),
 ):
     """Publish a dataset listing to ai.market via signed JWT proxy."""
@@ -115,13 +116,29 @@ async def publish_to_marketplace(
 
     # 2. Resolve install_id (iss) and seller_id (sub)
     store = get_serial_store()
-    device_id = _get_device_id()  # deterministic device hash = install_id
     cached = store.state.last_status_cache or {}
-    seller_id = cached.get("gateway_user_id")
+    seller_id = (
+        store.state.ai_market_seller_id
+        or (user.user_id if getattr(user, "key_id", "") == "ai_market_bearer" else None)
+        or cached.get("gateway_user_id")
+    )
     if not seller_id:
         raise HTTPException(
             status_code=409,
-            detail="Seller identity not available — ensure this AIM Data installation has completed activation and status sync with ai.market",
+            detail="Seller identity not available — sign in with ai.market before publishing",
+        )
+
+    incoming_auth = request.headers.get("Authorization", "")
+    incoming_bearer = incoming_auth.removeprefix("Bearer ").strip() if incoming_auth.startswith("Bearer ") else None
+    install_id = await ensure_vz_install_registered(
+        crypto,
+        access_token=store.state.ai_market_access_token or incoming_bearer,
+        seller_id=str(seller_id),
+    )
+    if not install_id:
+        raise HTTPException(
+            status_code=409,
+            detail="VZ install registration not available — sign in with ai.market and try publishing again",
         )
 
     # 3. Build payload for ai.market
@@ -133,7 +150,7 @@ async def publish_to_marketplace(
 
     # 4. JCS hash + JWT
     metadata_hash = _jcs_hash(payload)
-    token = _build_jwt(seller_id, device_id, metadata_hash, ed_priv)
+    token = _build_jwt(str(seller_id), install_id, metadata_hash, ed_priv)
 
     # 5. POST to ai.market
     url = f"{settings.ai_market_url}/api/v1/vz/publish"

@@ -32,7 +32,7 @@ import {
   ListingEditorForm,
   type ListingEditorValue,
 } from "@/components/ListingEditorForm";
-import { datasetsApi, type DatasetPreviewResponse } from "@/lib/api";
+import { datasetsApi, marketplaceApi, type DatasetPreviewResponse } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 
 const DataTypeColors: Record<string, string> = {
@@ -67,7 +67,6 @@ export default function DatasetPreview({ datasetId }: DatasetPreviewProps) {
   const navigate = useNavigate();
   const [preview, setPreview] = useState<DatasetPreviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [metadataLoading, setMetadataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -105,32 +104,6 @@ export default function DatasetPreview({ datasetId }: DatasetPreviewProps) {
     fetchPreview();
   }, [datasetId]);
 
-  useEffect(() => {
-    if (!preview?.file) return;
-    let cancelled = false;
-    setMetadataLoading(true);
-    datasetsApi.getListingMetadata(datasetId)
-      .then((metadata) => {
-        if (cancelled) return;
-        setForm((current) => ({
-          ...current,
-          title: current.title || metadata.title,
-          description: metadata.description || current.description,
-          category: metadata.data_categories[0] || current.category,
-          tags: metadata.tags || current.tags,
-        }));
-      })
-      .catch(() => {
-        // S3 drafts may not have generated profile artifacts yet; filename defaults still apply.
-      })
-      .finally(() => {
-        if (!cancelled) setMetadataLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [datasetId, preview?.file]);
-
   const handlePublish = async () => {
     const price = Number.parseFloat(form.priceUsd);
     if (!form.title.trim()) {
@@ -148,12 +121,19 @@ export default function DatasetPreview({ datasetId }: DatasetPreviewProps) {
 
     setPublishing(true);
     try {
-      await datasetsApi.publish(datasetId, {
+      const schema = preview?.preview?.schema || [];
+      await marketplaceApi.publish({
         title: form.title.trim(),
         description: form.description.trim(),
         tags: form.tags,
-        price,
         category: form.category,
+        price_cents: Math.round(price * 100),
+        row_count: preview?.preview?.row_count_estimate || null,
+        column_names: schema.length ? schema.map((column) => column.name) : null,
+        column_types: schema.length ? schema.map((column) => column.type) : null,
+        file_format: preview?.file?.file_type || null,
+        file_size_bytes: preview?.file?.size_bytes || null,
+        vz_dataset_id: datasetId,
       });
       setPublished(true);
       toast({ title: "Live on ai.market", description: "Your listing has been published." });
@@ -328,7 +308,6 @@ export default function DatasetPreview({ datasetId }: DatasetPreviewProps) {
           <CardTitle className="flex items-center gap-2 text-base">
             <Store className="h-4 w-4 text-primary" />
             Listing Details
-            {metadataLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">

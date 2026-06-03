@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { rawFilesApi, type RawFile } from "@/lib/api";
+import { marketplaceApi, type RawFile } from "@/lib/api";
 
 interface RawPublishModalProps {
   open: boolean;
@@ -76,14 +76,15 @@ const RawPublishModal = ({
 
     setSubmitting(true);
     try {
-      const draft = await rawFilesApi.createRawListing({
-        raw_file_id: rawFile.id,
+      await marketplaceApi.publish({
+        vz_dataset_id: rawFile.id,
         title: title.trim(),
         description: description.trim(),
         tags,
-        price_cents: priceCents,
+        price_cents: priceCents ?? 0,
+        file_format: rawFile.mime_type || null,
+        file_size_bytes: rawFile.file_size_bytes,
       });
-      await rawFilesApi.publishRawListing(draft.id);
       onPublishSuccess();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Publish failed";

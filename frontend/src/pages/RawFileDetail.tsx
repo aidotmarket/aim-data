@@ -19,7 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { rawFilesApi, type RawFile } from "@/lib/api";
+import { marketplaceApi, rawFilesApi, type RawFile } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { useMode } from "@/contexts/ModeContext";
 import {
@@ -274,14 +274,16 @@ export default function RawFileDetail() {
 
     setPublishing(true);
     try {
-      const draft = await rawFilesApi.createRawListing({
-        raw_file_id: file.id,
+      await marketplaceApi.publish({
+        vz_dataset_id: file.id,
         title: form.title.trim(),
         description: form.description.trim(),
         tags: form.tags,
+        category: form.category,
         price_cents: Math.round(price * 100),
+        file_format: file.mime_type || null,
+        file_size_bytes: file.file_size_bytes,
       });
-      await rawFilesApi.publishRawListing(draft.id);
       setFile({ ...file, listing_status: "listed", price_cents: Math.round(price * 100) });
       toast({ title: "Live on ai.market", description: "Your listing has been published." });
     } catch (e) {

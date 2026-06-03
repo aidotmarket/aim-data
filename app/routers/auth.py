@@ -509,6 +509,23 @@ async def aim_market_login(
     if me_r.status_code == 200:
         me = me_r.json()
         await _handle_ai_market_token(access_token, user_data=me, db=db)
+        if settings.keystore_passphrase:
+            try:
+                from app.core.crypto import DeviceCrypto
+                from app.services.registration_service import ensure_vz_install_registered
+
+                crypto = DeviceCrypto(
+                    keystore_path=settings.keystore_path,
+                    passphrase=settings.keystore_passphrase,
+                )
+                crypto.get_or_create_keypairs()
+                await ensure_vz_install_registered(
+                    crypto,
+                    access_token=access_token,
+                    seller_id=str(me.get("id") or ""),
+                )
+            except Exception:
+                logger.warning("VZ install registration during ai.market login failed", exc_info=True)
 
     return {
         "access_token": data["access_token"],
@@ -543,7 +560,28 @@ async def aim_market_refresh(payload: dict):
             status_code=r.status_code,
             detail=r.json().get("detail", "Refresh failed"),
         )
-    return r.json()
+    data = r.json()
+    access_token = data.get("access_token")
+    if access_token:
+        try:
+            me, _ = await _handle_ai_market_token(access_token)
+            if settings.keystore_passphrase:
+                from app.core.crypto import DeviceCrypto
+                from app.services.registration_service import ensure_vz_install_registered
+
+                crypto = DeviceCrypto(
+                    keystore_path=settings.keystore_path,
+                    passphrase=settings.keystore_passphrase,
+                )
+                crypto.get_or_create_keypairs()
+                await ensure_vz_install_registered(
+                    crypto,
+                    access_token=access_token,
+                    seller_id=str(me.get("id") or ""),
+                )
+        except Exception:
+            logger.warning("Failed to persist refreshed ai.market token", exc_info=True)
+    return data
 
 
 # ---------------------------------------------------------------------------

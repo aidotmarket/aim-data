@@ -390,6 +390,28 @@ export interface DatasetPublishResponse {
   [key: string]: unknown;
 }
 
+export interface MarketplacePublishRequest {
+  title: string;
+  description: string;
+  tags?: string[];
+  category?: string | null;
+  pricing_type?: 'one_time' | 'subscription';
+  price_cents: number;
+  row_count?: number | null;
+  column_names?: string[] | null;
+  column_types?: string[] | null;
+  file_format?: string | null;
+  file_size_bytes?: number | null;
+  vz_dataset_id: string;
+}
+
+export interface MarketplacePublishResponse {
+  status: string;
+  listing_id?: string | null;
+  marketplace_url?: string | null;
+  error?: string | null;
+}
+
 // BQ-108: Batch upload types
 export interface BatchItemAccepted {
   client_file_index: number;
@@ -739,6 +761,30 @@ export const notificationsApi = {
 
   delete: (id: string) =>
     apiFetch<{ message: string }>(`/api/notifications/${id}`, { method: 'DELETE' }),
+};
+
+export const marketplaceApi = {
+  publish: async (req: MarketplacePublishRequest): Promise<MarketplacePublishResponse> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const accessToken = getStoredAccessToken();
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+
+    const response = await fetch(`${getApiUrl()}/api/marketplace/publish`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ pricing_type: 'one_time', ...req }),
+    });
+
+    if (!response.ok) {
+      const error: any = await response.json().catch(() => ({ detail: 'Publish failed' }));
+      const message = error.detail || error.error?.safe_message || error.error?.title || `Publish failed: ${response.status}`;
+      throw new Error(message);
+    }
+
+    return response.json();
+  },
 };
 
 export const rawFilesApi = {

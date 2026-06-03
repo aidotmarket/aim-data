@@ -168,3 +168,80 @@ async def register_with_marketplace(
 
     logger.error(f"Device registration failed after {MAX_RETRIES} attempts — will retry on next startup")
     return False
+
+
+async def ensure_vz_install_registered(
+    crypto: DeviceCrypto,
+    access_token: Optional[str] = None,
+    seller_id: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Register this install for signed VZ publish, returning ai.market install_id.
+
+    This is separate from the Trust Channel registration above. ai.market binds
+    the Ed25519 public key to the authenticated seller and returns the UUID that
+    must be used as JWT iss for /api/v1/vz/publish.
+    """
+    from app.services.serial_store import get_serial_store
+
+    store = get_serial_store()
+    if store.state.vz_install_id:
+        return store.state.vz_install_id
+
+    token = access_token or store.state.ai_market_access_token
+    if not token:
+        logger.warning("No ai.market bearer token available for VZ install registration")
+        return None
+
+    ed25519_pub_b64, _x25519_pub_b64 = crypto.get_public_keys_b64()
+    url = f"{settings.ai_market_url}/api/v1/vz/register"
+    payload = {"public_key_b64": ed25519_pub_b64}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                url,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+            )
+    except httpx.TimeoutException:
+        logger.warning("VZ install registration timed out")
+        return None
+    except httpx.RequestError as exc:
+        logger.warning("VZ install registration request failed: %s", exc)
+        return None
+
+    if resp.status_code in (200, 201):
+        data = resp.json()
+        install_id = str(data.get("install_id") or "")
+        install_token = data.get("install_token")
+        if install_id:
+            store.persist_vz_install(install_id, install_token)
+            if seller_id:
+                store.state.ai_market_seller_id = seller_id
+                store.save()
+            logger.info("VZ install registered with ai.market: install_id=%s", install_id)
+            return install_id
+        logger.warning("VZ install registration succeeded without install_id: %s", data)
+        return None
+
+    if resp.status_code == 409:
+        data = resp.json()
+        install_id = str(data.get("install_id") or "")
+        install_token = data.get("install_token")
+        if install_id:
+            store.persist_vz_install(install_id, install_token)
+            logger.info("VZ install already registered: install_id=%s", install_id)
+            return install_id
+        logger.info("VZ install already registered, but ai.market did not return install_id")
+        return store.state.vz_install_id
+
+    if resp.status_code in (401, 403):
+        logger.warning("VZ install registration auth failed (%d): %s", resp.status_code, resp.text[:300])
+        return None
+
+    logger.warning("VZ install registration failed (%d): %s", resp.status_code, resp.text[:300])
+    return None
