@@ -126,7 +126,7 @@ async def check_for_updates(force: bool = False) -> dict:
                 "latest": None,
                 "update_available": False,
                 "error": str(e),
-                "changelog_url": "https://github.com/aidotmarket/vectoraiz/releases",
+                "changelog_url": "https://github.com/aidotmarket/aim-data/releases",
                 "can_auto_update": _docker_available(),
             }
 
@@ -146,7 +146,7 @@ def _build_response(current: str, latest: str | None, published_at: str | None) 
         "latest": latest,
         "update_available": update_available,
         "latest_published_at": published_at,
-        "changelog_url": "https://github.com/aidotmarket/vectoraiz/releases",
+        "changelog_url": "https://github.com/aidotmarket/aim-data/releases",
         "can_auto_update": _docker_available(),
     }
 
