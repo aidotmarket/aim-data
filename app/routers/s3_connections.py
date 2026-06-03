@@ -5,6 +5,7 @@ S3 Connection Router
 Customer-facing S3 STS connection setup and verification endpoints.
 """
 
+import json
 import os
 import re
 import uuid
