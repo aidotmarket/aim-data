@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard,
   Database,
-  Code,
   Settings,
   DollarSign,
   Upload,
@@ -31,9 +29,7 @@ interface CommandPaletteProps {
 }
 
 const pages = [
-  { name: "Dashboard", path: "/", icon: LayoutDashboard },
   { name: "Datasets", path: "/datasets", icon: Database },
-  { name: "SQL Query", path: "/sql", icon: Code },
   { name: "Artifacts", path: "/artifacts", icon: FileOutput },
   { name: "Databases", path: "/databases", icon: Database },
   { name: "Settings", path: "/settings", icon: Settings },

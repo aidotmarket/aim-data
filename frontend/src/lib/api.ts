@@ -94,7 +94,9 @@ async function apiFetch<T>(
             headers: { ...(options.headers as Record<string, string>), 'X-Refresh-Retry': '1' },
           });
         }
-      } catch {}
+      } catch {
+        // Refresh is best-effort; fall through to clear tokens and redirect.
+      }
     }
     clearAuthTokens();
     if (typeof window !== 'undefined') window.location.href = '/login';
@@ -120,6 +122,7 @@ export interface ApiDataset {
   id: string;
   original_filename: string;
   file_type: string;
+  source?: 'upload' | 's3' | 'database';
   status: 'uploaded' | 'extracting' | 'preview_ready' | 'cancelled' | 'error' | 'uploading' | 'processing';
   error?: string;
   listing_id?: string | null;
@@ -456,9 +459,22 @@ export interface BatchStatusResponse {
 }
 
 // Dataset API
+interface DuplicateDatasetInfo {
+  id: string;
+  filename: string;
+  status: string;
+  created_at: string;
+}
+
+interface DuplicateUploadBody {
+  error?: string;
+  detail?: string;
+  existing_dataset?: DuplicateDatasetInfo;
+}
+
 export class DuplicateFileError extends Error {
-  existingDataset: { id: string; filename: string; status: string; created_at: string };
-  constructor(detail: string, existing: { id: string; filename: string; status: string; created_at: string }) {
+  existingDataset: DuplicateDatasetInfo;
+  constructor(detail: string, existing: DuplicateDatasetInfo) {
     super(detail);
     this.name = 'DuplicateFileError';
     this.existingDataset = existing;
@@ -551,8 +567,14 @@ export const datasetsApi = {
           reject(new Error('Upload failed — invalid server response'));
           return;
         }
-        if (xhr.status === 409 && body.error === 'duplicate_filename') {
-          reject(new DuplicateFileError(body.detail as string, body.existing_dataset as any));
+        const duplicateBody = body as DuplicateUploadBody;
+        if (
+          xhr.status === 409 &&
+          duplicateBody.error === 'duplicate_filename' &&
+          duplicateBody.detail &&
+          duplicateBody.existing_dataset
+        ) {
+          reject(new DuplicateFileError(duplicateBody.detail, duplicateBody.existing_dataset));
           return;
         }
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -778,7 +800,13 @@ export const marketplaceApi = {
     });
 
     if (!response.ok) {
-      const error: any = await response.json().catch(() => ({ detail: 'Publish failed' }));
+      const error = await response.json().catch(() => ({ detail: 'Publish failed' })) as {
+        detail?: string;
+        error?: {
+          safe_message?: string;
+          title?: string;
+        };
+      };
       const message = error.detail || error.error?.safe_message || error.error?.title || `Publish failed: ${response.status}`;
       throw new Error(message);
     }

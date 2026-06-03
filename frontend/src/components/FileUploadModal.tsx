@@ -29,8 +29,11 @@ import { cn } from "@/lib/utils";
 import { LocalImportBrowser } from "@/components/LocalImportBrowser";
 import { useUpload, type QueuedFile, type FileState } from "@/contexts/UploadContext";
 import { useState } from "react";
-import { useChannel } from "@/hooks/useChannel";
 import { toast } from "@/hooks/use-toast";
+
+interface FileWithRelativePath extends File {
+  webkitRelativePath?: string;
+}
 
 const getFileIcon = (fileName: string) => {
   const ext = fileName.split(".").pop()?.toLowerCase();
@@ -131,7 +134,6 @@ function FileRow({ item, onRemove, onCancel, onStatusChange, onMetadataUpdate }:
 
 const FileUploadModal = () => {
   const navigate = useNavigate();
-  const channel = useChannel();
   const {
     queue,
     addFiles,
@@ -192,7 +194,7 @@ const FileUploadModal = () => {
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const paths = acceptedFiles.map((f) => {
-      const wrp = (f as any).webkitRelativePath;
+      const wrp = (f as FileWithRelativePath).webkitRelativePath;
       return wrp || undefined;
     });
     const hasPaths = paths.some((p) => p !== undefined);
@@ -201,7 +203,6 @@ const FileUploadModal = () => {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    // AIM Data accepts any file type for raw file listings.
     accept: undefined,
     multiple: true,
   });
@@ -214,7 +215,7 @@ const FileUploadModal = () => {
     for (let i = 0; i < fileList.length; i++) {
       const f = fileList[i];
       files.push(f);
-      paths.push((f as any).webkitRelativePath || f.name);
+      paths.push((f as FileWithRelativePath).webkitRelativePath || f.name);
     }
     addFiles(files, paths);
     e.target.value = "";
@@ -238,8 +239,8 @@ const FileUploadModal = () => {
     routedUploadIdRef.current = item.datasetId;
     closeModal();
     toast({ title: "Listing created — set your price and publish." });
-    navigate(channel === "aim-data" ? `/raw-files/${item.datasetId}` : `/datasets/${item.datasetId}`);
-  }, [allDone, channel, closeModal, hasFailures, navigate, queue]);
+    navigate(`/datasets/${item.datasetId}`);
+  }, [allDone, closeModal, hasFailures, navigate, queue]);
 
   /**
    * Sort queue for display:

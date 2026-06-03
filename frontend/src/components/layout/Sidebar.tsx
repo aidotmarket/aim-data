@@ -1,15 +1,11 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard,
   Database,
-  Code,
   Settings,
   ChevronLeft,
   ChevronRight,
   DollarSign,
-  Monitor,
   Globe,
-  FileStack,
   FileOutput,
   HandHelping,
 } from "lucide-react";
@@ -27,10 +23,8 @@ interface NavItem {
 
 // All nav items — both channels contain identical items, just reordered (CH-C2)
 const ALL_NAV_ITEMS: NavItem[] = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/datasets", label: "Datasets", icon: Database },
   { path: "/list-data", label: "List Data", icon: FileOutput },
-  { path: "/sql", label: "SQL Query", icon: Code },
   { path: "/databases", label: "Databases", icon: Database },
   { path: "/settings", label: "Settings", icon: Settings },
   { path: "/data-requests", label: "I Need Data", icon: HandHelping },
@@ -39,27 +33,27 @@ const ALL_NAV_ITEMS: NavItem[] = [
 
 // direct channel: data-focused items first, marketplace items at bottom
 const NAV_ORDER_DIRECT = [
-  "/", "/datasets", "/list-data", "/sql", "/databases", "/settings",
+  "/datasets", "/list-data", "/databases", "/settings",
   "/data-requests", "/earnings",
 ];
 
 // marketplace channel: marketplace items promoted to top, then data items
 const NAV_ORDER_MARKETPLACE = [
-  "/data-requests", "/",
-  "/datasets", "/list-data", "/sql", "/databases",
+  "/data-requests",
+  "/datasets", "/list-data", "/databases",
   "/earnings", "/settings",
 ];
 
 const NAV_ORDER_AIM_DATA = [
-  "/", "/datasets", "/list-data", "/data-requests",
-  "/sql", "/databases",
+  "/datasets", "/list-data", "/data-requests",
+  "/databases",
   "/earnings", "/settings",
 ];
 
 // Separator index: items after this index go in the bottom section
-const SEPARATOR_INDEX_DIRECT = 7;    // after Settings
-const SEPARATOR_INDEX_MARKETPLACE = 2; // after Dashboard
-const SEPARATOR_INDEX_AIM_DATA = 5;
+const SEPARATOR_INDEX_DIRECT = 4;    // after Settings
+const SEPARATOR_INDEX_MARKETPLACE = 2;
+const SEPARATOR_INDEX_AIM_DATA = 4;
 
 function getOrderedItems(channel: "direct" | "marketplace" | "aim-data"): { top: NavItem[]; bottom: NavItem[] } {
   const order = channel === "marketplace"

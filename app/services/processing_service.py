@@ -74,10 +74,13 @@ class DatasetRecord:
         self.listing_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
+        source_type = self.metadata.get("source_type")
+        source = source_type if source_type in {"s3", "database"} else "upload"
         result = {
             "id": self.id,
             "original_filename": self.original_filename,
             "file_type": self.file_type,
+            "source": source,
             "status": self.status.value if isinstance(self.status, ProcessingStatus) else self.status,
             "error": self.error,
             "created_at": self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,

@@ -5,6 +5,7 @@ S3 Connection Router
 Customer-facing S3 STS connection setup and verification endpoints.
 """
 
+import json
 import os
 import re
 import uuid
@@ -277,6 +278,13 @@ def _create_dataset_for_object(metadata: S3ObjectMetadata, body: S3ObjectRegiste
         file_size_bytes=metadata.size_bytes,
         status="preview_ready",
         listing_id=body.listing_id,
+        metadata_json=json.dumps({
+            "source_type": "s3",
+            "source_connection_id": metadata.connection_id,
+            "source_object_key": metadata.object_key,
+            "content_type": metadata.content_type,
+            "size_bytes": metadata.size_bytes,
+        }),
         created_at=now,
         updated_at=now,
     )
