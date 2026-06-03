@@ -282,6 +282,7 @@ class ProcessingService:
                     existing.preview_metadata = json.dumps(rec.preview_metadata, default=str) if rec.preview_metadata else None
                     existing.confirmed_at = rec.confirmed_at
                     existing.confirmed_by = rec.confirmed_by
+                    existing.listing_id = rec.listing_id
 
                     session.add(existing)
                 else:

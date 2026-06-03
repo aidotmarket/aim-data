@@ -5,14 +5,15 @@ S3 Connection Router
 Customer-facing S3 STS connection setup and verification endpoints.
 """
 
-import json
 import os
 import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import aiofiles
+import httpx
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlmodel import select
 
@@ -23,6 +24,9 @@ from app.models.dataset import DatasetRecord
 from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
+from app.routers.datasets import process_dataset_task
+from app.services.processing_service import DatasetRecord as ProcessingDatasetRecord
+from app.services.processing_service import get_processing_service
 from app.services.s3_broker_client import S3BrokerClient, S3BrokerError
 from app.services.s3_scan_service import S3ScanService
 
@@ -232,14 +236,18 @@ def _object_response(metadata: S3ObjectMetadata) -> S3ObjectMetadataResponse:
     )
 
 
-def _dataset_response(dataset: DatasetRecord) -> S3DatasetResponse:
+def _dataset_response(dataset: DatasetRecord | ProcessingDatasetRecord) -> S3DatasetResponse:
+    storage_filename = getattr(dataset, "storage_filename", None)
+    if storage_filename is None and getattr(dataset, "upload_path", None) is not None:
+        storage_filename = dataset.upload_path.name
+    status = dataset.status.value if hasattr(dataset.status, "value") else dataset.status
     return S3DatasetResponse(
         id=dataset.id,
         original_filename=dataset.original_filename,
-        storage_filename=dataset.storage_filename,
+        storage_filename=storage_filename or "",
         file_type=dataset.file_type,
         file_size_bytes=dataset.file_size_bytes,
-        status=dataset.status,
+        status=status,
         listing_id=dataset.listing_id,
         created_at=dataset.created_at.isoformat(),
         updated_at=dataset.updated_at.isoformat(),
@@ -268,26 +276,18 @@ def _get_connection_for_user(session, connection_id: str, user: AuthenticatedUse
     return connection
 
 
-def _create_dataset_for_object(metadata: S3ObjectMetadata, body: S3ObjectRegisterRequest) -> DatasetRecord:
-    now = datetime.now(timezone.utc)
-    return DatasetRecord(
-        id=body.dataset_id or str(uuid.uuid4()),
-        original_filename=os.path.basename(metadata.object_key) or metadata.object_key,
-        storage_filename=metadata.object_key,
-        file_type=_dataset_file_type(metadata.object_key),
-        file_size_bytes=metadata.size_bytes,
-        status="preview_ready",
-        listing_id=body.listing_id,
-        metadata_json=json.dumps({
-            "source_type": "s3",
-            "source_connection_id": metadata.connection_id,
-            "source_object_key": metadata.object_key,
-            "content_type": metadata.content_type,
-            "size_bytes": metadata.size_bytes,
-        }),
-        created_at=now,
-        updated_at=now,
-    )
+async def _download_presigned_object(url: str, destination) -> int:
+    bytes_written = 0
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        async with client.stream("GET", url) as response:
+            response.raise_for_status()
+            async with aiofiles.open(destination, "wb") as out_file:
+                async for chunk in response.aiter_bytes(chunk_size=settings.chunk_size):
+                    if not chunk:
+                        continue
+                    bytes_written += len(chunk)
+                    await out_file.write(chunk)
+    return bytes_written
 
 
 @router.get("/config", summary="Get S3 connection setup config")
@@ -465,53 +465,103 @@ async def register_object(
     connection_id: str,
     object_id: str,
     body: S3ObjectRegisterRequest,
+    background_tasks: BackgroundTasks,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> S3ObjectRegisterResponse:
+    processing = get_processing_service()
+    record: Optional[ProcessingDatasetRecord] = None
+
     with get_session_context() as session:
-        _get_connection_for_user(session, connection_id, user)
+        connection = _get_connection_for_user(session, connection_id, user)
+        if connection.status != "verified" or not connection.role_arn:
+            raise HTTPException(status_code=409, detail="S3 connection must be verified before registering objects")
+
         metadata = session.get(S3ObjectMetadata, object_id)
         if metadata is None or metadata.connection_id != connection_id:
             raise HTTPException(status_code=404, detail="S3 object metadata not found")
 
-        dataset: Optional[DatasetRecord] = None
+        referenced_dataset: Optional[DatasetRecord] = None
         if body.dataset_id:
-            dataset = session.get(DatasetRecord, body.dataset_id)
+            referenced_dataset = session.get(DatasetRecord, body.dataset_id)
         elif body.listing_id:
-            dataset = session.exec(select(DatasetRecord).where(DatasetRecord.listing_id == body.listing_id)).first()
-
-        if dataset is not None:
-            # Ownership guard (S729 security review): an existing dataset may only be
-            # linked if THIS connection already owns it (has an object linked to it).
-            # Prevents one connection attaching its object to another seller's dataset.
+            referenced_dataset = session.exec(select(DatasetRecord).where(DatasetRecord.listing_id == body.listing_id)).first()
+        if referenced_dataset is not None:
             owned = session.exec(
                 select(S3ObjectMetadata)
-                .where(S3ObjectMetadata.dataset_id == dataset.id)
+                .where(S3ObjectMetadata.dataset_id == referenced_dataset.id)
                 .where(S3ObjectMetadata.connection_id == connection_id)
             ).first()
             if owned is None:
                 raise HTTPException(status_code=403, detail="Dataset is not owned by this connection")
 
-        if dataset is None:
-            dataset = _create_dataset_for_object(metadata, body)
-        else:
-            dataset.updated_at = datetime.now(timezone.utc)
-            if body.listing_id and not dataset.listing_id:
-                dataset.listing_id = body.listing_id
+        object_key = metadata.object_key
+        content_type = metadata.content_type
+        source_connection_id = metadata.connection_id
+        try:
+            presigned = S3BrokerClient().presign_object(
+                role_arn=connection.role_arn,
+                region=connection.region,
+                bucket=connection.bucket,
+                object_key=object_key,
+            )
+        except S3BrokerError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-        session.add(dataset)
-        session.flush()
+    original_filename = os.path.basename(object_key) or object_key
+    record = processing.create_dataset(
+        original_filename=original_filename,
+        file_type=_dataset_file_type(object_key),
+    )
 
-        metadata.dataset_id = dataset.id
-        metadata.updated_at = datetime.now(timezone.utc)
-        session.add(metadata)
-        session.commit()
-        session.refresh(dataset)
-        session.refresh(metadata)
+    try:
+        bytes_written = await _download_presigned_object(str(presigned["url"]), record.upload_path)
+        record.file_size_bytes = bytes_written
+        record.metadata.update(
+            {
+                "source_type": "s3",
+                "source_connection_id": source_connection_id,
+                "source_object_key": object_key,
+                "content_type": content_type,
+            }
+        )
+        record.listing_id = body.listing_id
+        processing._save_record(record, record.upload_path.name)
+
+        with get_session_context() as session:
+            metadata = session.get(S3ObjectMetadata, object_id)
+            if metadata is None or metadata.connection_id != connection_id:
+                raise HTTPException(status_code=404, detail="S3 object metadata not found")
+            metadata.dataset_id = record.id
+            metadata.updated_at = datetime.now(timezone.utc)
+            session.add(metadata)
+            session.commit()
+            session.refresh(metadata)
+
+        background_tasks.add_task(process_dataset_task, record.id)
 
         return S3ObjectRegisterResponse(
-            dataset=_dataset_response(dataset),
+            dataset=_dataset_response(record),
             object=_object_response(metadata),
         )
+    except HTTPException:
+        if record is not None:
+            processing.delete_dataset(record.id)
+        raise
+    except httpx.HTTPStatusError as exc:
+        if record is not None:
+            processing.delete_dataset(record.id)
+        raise HTTPException(
+            status_code=502,
+            detail=f"S3 object download failed with HTTP {exc.response.status_code}",
+        ) from exc
+    except httpx.HTTPError as exc:
+        if record is not None:
+            processing.delete_dataset(record.id)
+        raise HTTPException(status_code=502, detail="S3 object download failed") from exc
+    except Exception as exc:
+        if record is not None:
+            processing.delete_dataset(record.id)
+        raise HTTPException(status_code=500, detail=f"S3 object registration failed: {exc}") from exc
 
 
 @router.delete("/{connection_id}", status_code=204, summary="Delete S3 connection")

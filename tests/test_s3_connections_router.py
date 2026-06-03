@@ -1,9 +1,12 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import json
 from fnmatch import fnmatchcase
+from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
@@ -17,6 +20,7 @@ from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata  # noqa: F401
 from app.models.s3_scan_job import S3ScanJob  # noqa: F401
 from app.routers import s3_connections
+from app.services.processing_service import ProcessingService
 from app.services.s3_broker_client import S3BrokerError
 from app.services import s3_scan_service
 
@@ -31,7 +35,9 @@ class FakeS3BrokerClient:
         self.verify_error: Optional[Exception] = None
         self.external_id_error: Optional[Exception] = None
         self.verify_calls = []
+        self.presign_calls = []
         self.external_id_calls = 0
+        self.presign_result = {"status": "ok", "url": "https://presigned.example/object.csv"}
 
     def get_external_id(self):
         self.external_id_calls += 1
@@ -44,6 +50,10 @@ class FakeS3BrokerClient:
         if self.verify_error:
             raise self.verify_error
         return self.verify_result
+
+    def presign_object(self, **kwargs):
+        self.presign_calls.append(kwargs)
+        return self.presign_result
 
 
 @pytest.fixture
@@ -65,7 +75,7 @@ def s3_engine():
 
 
 @pytest.fixture
-def client(s3_engine, monkeypatch):
+def client(s3_engine, monkeypatch, tmp_path):
     @contextmanager
     def _session_context():
         with Session(s3_engine) as session:
@@ -73,6 +83,11 @@ def client(s3_engine, monkeypatch):
 
     monkeypatch.setattr(s3_connections, "get_session_context", _session_context)
     monkeypatch.setattr(s3_scan_service, "get_session_context", _session_context)
+    monkeypatch.setattr(ProcessingService, "_get_session", staticmethod(lambda: _session_context()))
+    monkeypatch.setattr(s3_connections.settings, "upload_directory", str(tmp_path / "uploads"))
+    monkeypatch.setattr(s3_connections.settings, "processed_directory", str(tmp_path / "processed"))
+    processing = ProcessingService()
+    monkeypatch.setattr(s3_connections, "get_processing_service", lambda: processing)
     monkeypatch.setattr(s3_connections.settings, "ai_market_aws_account_id", "123456789012")
     monkeypatch.setattr(s3_connections.settings, "ai_market_assume_role_principal_arn", None)
     broker = FakeS3BrokerClient()
@@ -103,6 +118,7 @@ def _configured_row(
     *,
     prefix: Optional[str] = "exports/",
     owner_id: Optional[str] = "user-a",
+    status: str = "configured",
 ) -> S3Connection:
     connection = S3Connection(
         id=str(uuid4()),
@@ -113,7 +129,7 @@ def _configured_row(
         prefix=prefix,
         role_arn="arn:aws:iam::210987654321:role/aim-data",
         external_id="broker-derived-external-id",
-        status="configured",
+        status=status,
     )
     with Session(s3_engine) as session:
         session.add(connection)
@@ -338,6 +354,111 @@ def test_user_cannot_get_scan_or_list_objects_on_foreign_connection(client, s3_e
     assert client.post(f"/api/s3-connections/{connection.id}/scan").status_code == 403
     assert client.get(f"/api/s3-connections/{connection.id}/objects").status_code == 403
     assert scan_called is False
+
+
+def test_register_s3_object_downloads_stages_and_enqueues_processing(client, s3_engine, monkeypatch):
+    connection = _configured_row(s3_engine, status="verified")
+    connection_id = connection.id
+    scan_job = S3ScanJob(id=str(uuid4()), connection_id=connection.id, status="completed")
+    object_metadata = S3ObjectMetadata(
+        id=str(uuid4()),
+        connection_id=connection.id,
+        scan_job_id=scan_job.id,
+        object_key="exports/report.csv",
+        size_bytes=17,
+        content_type="text/csv",
+        last_modified=datetime.now(timezone.utc),
+        etag="etag",
+    )
+    object_id = object_metadata.id
+    with Session(s3_engine) as session:
+        session.add(scan_job)
+        session.add(object_metadata)
+        session.commit()
+
+    object_bytes = b"name,value\nAda,1\n"
+    download_calls = []
+
+    class FakeStreamResponse:
+        def __init__(self, url: str):
+            self.url = url
+            self.response = httpx.Response(200, request=httpx.Request("GET", url))
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def raise_for_status(self):
+            self.response.raise_for_status()
+
+        async def aiter_bytes(self, chunk_size: int):
+            for start in range(0, len(object_bytes), chunk_size):
+                yield object_bytes[start : start + chunk_size]
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, method: str, url: str):
+            download_calls.append((method, url))
+            return FakeStreamResponse(url)
+
+    enqueued = []
+
+    async def fake_process_dataset_task(dataset_id: str):
+        enqueued.append(dataset_id)
+
+    monkeypatch.setattr(s3_connections.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(s3_connections, "process_dataset_task", fake_process_dataset_task)
+
+    response = client.post(
+        f"/api/s3-connections/{connection_id}/objects/{object_id}/register",
+        json={"listing_id": "listing-123", "dataset_id": "draft-dataset"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    dataset_id = payload["dataset"]["id"]
+    assert dataset_id
+    assert payload["object"]["dataset_id"] == dataset_id
+    assert payload["dataset"]["listing_id"] == "listing-123"
+    assert client.s3_broker.presign_calls == [
+        {
+            "role_arn": connection.role_arn,
+            "region": connection.region,
+            "bucket": connection.bucket,
+            "object_key": "exports/report.csv",
+        }
+    ]
+    assert download_calls == [("GET", "https://presigned.example/object.csv")]
+    assert enqueued == [dataset_id]
+
+    processing = ProcessingService()
+    record = processing.get_dataset(dataset_id)
+    assert record is not None
+    assert record.upload_path is not None
+    assert Path(record.upload_path).read_bytes() == object_bytes
+    assert record.file_size_bytes == len(object_bytes)
+    assert record.metadata["source_type"] == "s3"
+    assert record.metadata["source_connection_id"] == connection_id
+    assert record.metadata["source_object_key"] == "exports/report.csv"
+    assert record.metadata["content_type"] == "text/csv"
+
+    with Session(s3_engine) as session:
+        stored_dataset = session.get(DatasetRecord, dataset_id)
+        assert stored_dataset is not None
+        assert stored_dataset.listing_id == "listing-123"
+        assert json.loads(stored_dataset.metadata_json)["source_type"] == "s3"
+        stored_object = session.get(S3ObjectMetadata, object_id)
+        assert stored_object.dataset_id == dataset_id
 
 
 def test_delete_removes_row(client):
