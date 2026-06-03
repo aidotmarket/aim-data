@@ -63,10 +63,24 @@ VECTORAIZ_SECRET_KEY=$(generate_secret)
 VECTORAIZ_CHANNEL=aim-data
 AIM_DATA_PORT=8080
 VECTORAIZ_MODE=connected
+# Per-install marketplace signing identity. Derives the keystore that signs
+# your publish requests to ai.market. Generated once on install — back up this
+# value to preserve your seller identity across reinstalls.
+AIM_DATA_KEYSTORE_PASSPHRASE=$(generate_secret)
 EOF
   pass "Generated .env"
 else
   info ".env already exists — keeping it"
+fi
+
+# Self-heal: every install MUST carry a non-empty signing passphrase or the
+# marketplace publish cannot sign its requests. Repairs .env files written by
+# older installers that predate this step.
+if ! grep -q '^AIM_DATA_KEYSTORE_PASSPHRASE=.' .env 2>/dev/null; then
+  sed -i.bak '/^AIM_DATA_KEYSTORE_PASSPHRASE=$/d' .env 2>/dev/null || true
+  rm -f .env.bak
+  echo "AIM_DATA_KEYSTORE_PASSPHRASE=$(generate_secret)" >> .env
+  pass "Provisioned marketplace signing passphrase"
 fi
 
 info "Pulling ${IMAGE}..."
