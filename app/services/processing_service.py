@@ -71,6 +71,7 @@ class DatasetRecord:
         self.confirmed_at: Optional[datetime] = None
         self.confirmed_by: Optional[str] = None
         self.file_size_bytes: int = 0
+        self.listing_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -84,6 +85,7 @@ class DatasetRecord:
             "upload_path": str(self.upload_path) if self.upload_path else None,
             "processed_path": str(self.processed_path) if self.processed_path else None,
             "metadata": self.metadata,
+            "listing_id": self.listing_id,
         }
         if self.document_content:
             result["document_info"] = {
@@ -163,6 +165,7 @@ def _db_to_record(db_row) -> DatasetRecord:
     rec.preview_text = getattr(db_row, "preview_text", None)
     rec.confirmed_at = getattr(db_row, "confirmed_at", None)
     rec.confirmed_by = getattr(db_row, "confirmed_by", None)
+    rec.listing_id = getattr(db_row, "listing_id", None)
 
     # Deserialize preview_metadata JSON
     raw_pm = getattr(db_row, "preview_metadata", None)
@@ -212,6 +215,7 @@ def _record_to_db(rec: DatasetRecord, storage_filename: str):
         preview_metadata=json.dumps(rec.preview_metadata, default=str) if rec.preview_metadata else None,
         confirmed_at=rec.confirmed_at,
         confirmed_by=rec.confirmed_by,
+        listing_id=rec.listing_id,
     )
 
 

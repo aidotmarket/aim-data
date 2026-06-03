@@ -12,16 +12,21 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { rawFilesApi, type RawFile } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { useMode } from "@/contexts/ModeContext";
+import {
+  filenameToTitle,
+  ListingEditorForm,
+  type ListingEditorValue,
+} from "@/components/ListingEditorForm";
 
 function getFileIcon(mimeType: string | null) {
   if (!mimeType) return File;
@@ -44,12 +49,6 @@ function getListingStatusBadge(status: string | null) {
   if (status === "listed") return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Listed</Badge>;
   if (status === "draft") return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Draft</Badge>;
   return <Badge variant="outline">{status}</Badge>;
-}
-
-interface MetadataForm {
-  title: string;
-  description: string;
-  tags: string;
 }
 
 function ListingReadiness({ file, isConnected }: { file: RawFile; isConnected: boolean }) {
@@ -204,8 +203,16 @@ export default function RawFileDetail() {
   const [file, setFile] = useState<RawFile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [form, setForm] = useState<MetadataForm>({ title: "", description: "", tags: "" });
+  const [tagInput, setTagInput] = useState("");
+  const [form, setForm] = useState<ListingEditorValue>({
+    title: "",
+    description: "",
+    priceUsd: "25",
+    category: "other",
+    tags: [],
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -215,9 +222,11 @@ export default function RawFileDetail() {
         setFile(data);
         const meta = data.metadata as Record<string, unknown> | null;
         setForm({
-          title: (meta?.title as string) || "",
+          title: (meta?.title as string) || filenameToTitle(data.filename) || data.filename,
           description: (meta?.description as string) || "",
-          tags: Array.isArray(meta?.tags) ? (meta.tags as string[]).join(", ") : "",
+          priceUsd: data.price_cents ? String(data.price_cents / 100) : "25",
+          category: (meta?.category as string) || "other",
+          tags: Array.isArray(meta?.tags) ? (meta.tags as string[]) : [],
         });
       })
       .catch(() => {
@@ -234,7 +243,8 @@ export default function RawFileDetail() {
         ...(file.metadata || {}),
         title: form.title,
         description: form.description,
-        tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
+        category: form.category,
+        tags: form.tags,
       };
       const updated = await rawFilesApi.updateRawFile(id, metadata);
       setFile(updated);
@@ -243,6 +253,45 @@ export default function RawFileDetail() {
       toast({ title: "Error", description: "Failed to save metadata", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!file) return;
+    const price = Number.parseFloat(form.priceUsd);
+    if (!form.title.trim()) {
+      toast({ title: "Title required", description: "Add a title for this listing.", variant: "destructive" });
+      return;
+    }
+    if (!form.description.trim()) {
+      toast({ title: "Description required", description: "Add listing details for buyers.", variant: "destructive" });
+      return;
+    }
+    if (!Number.isFinite(price) || price < 25) {
+      toast({ title: "Price required", description: "Set a price of at least $25.", variant: "destructive" });
+      return;
+    }
+
+    setPublishing(true);
+    try {
+      const draft = await rawFilesApi.createRawListing({
+        raw_file_id: file.id,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        tags: form.tags,
+        price_cents: Math.round(price * 100),
+      });
+      await rawFilesApi.publishRawListing(draft.id);
+      setFile({ ...file, listing_status: "listed", price_cents: Math.round(price * 100) });
+      toast({ title: "Live on ai.market", description: "Your listing has been published." });
+    } catch (e) {
+      toast({
+        title: "Publish failed",
+        description: e instanceof Error ? e.message : "Failed to publish listing.",
+        variant: "destructive",
+      });
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -319,40 +368,23 @@ export default function RawFileDetail() {
       {/* File Preview */}
       <FilePreview file={file} />
 
-      {/* Metadata Editor */}
+      {/* Listing Editor */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Metadata</CardTitle>
-          <CardDescription>Edit file metadata for marketplace listing</CardDescription>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Store className="h-4 w-4 text-primary" />
+            Listing Details
+          </CardTitle>
+          <CardDescription>Edit buyer-facing details and publish when ready</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="meta-title">Title</Label>
-            <Input
-              id="meta-title"
-              placeholder="Enter a title for this file"
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="meta-description">Description</Label>
-            <Input
-              id="meta-description"
-              placeholder="Describe the contents and potential use cases"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="meta-tags">Tags (comma-separated)</Label>
-            <Input
-              id="meta-tags"
-              placeholder="e.g. finance, csv, quarterly-report"
-              value={form.tags}
-              onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
-            />
-          </div>
+          <ListingEditorForm
+            value={form}
+            onChange={setForm}
+            tagInput={tagInput}
+            onTagInputChange={setTagInput}
+            disabled={saving || publishing}
+          />
 
           {/* Show extracted technical metadata if present */}
           {file.metadata && (file.metadata as Record<string, unknown>).technical_metadata && (
@@ -364,10 +396,16 @@ export default function RawFileDetail() {
             </div>
           )}
 
-          <Button onClick={handleSave} disabled={saving} size="sm">
-            {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
-            Save Metadata
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handlePublish} disabled={saving || publishing || file.listing_status === "listed"} size="sm" className="gap-2">
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
+              {publishing ? "Publishing..." : file.listing_status === "listed" ? "Published" : "Publish to ai.market"}
+            </Button>
+            <Button onClick={handleSave} disabled={saving || publishing} size="sm" variant="outline">
+              {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
+              Save draft
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

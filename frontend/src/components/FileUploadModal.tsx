@@ -1,4 +1,5 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import {
   Dialog,
@@ -28,6 +29,8 @@ import { cn } from "@/lib/utils";
 import { LocalImportBrowser } from "@/components/LocalImportBrowser";
 import { useUpload, type QueuedFile, type FileState } from "@/contexts/UploadContext";
 import { useState } from "react";
+import { useChannel } from "@/hooks/useChannel";
+import { toast } from "@/hooks/use-toast";
 
 const getFileIcon = (fileName: string) => {
   const ext = fileName.split(".").pop()?.toLowerCase();
@@ -127,6 +130,8 @@ function FileRow({ item, onRemove, onCancel, onStatusChange, onMetadataUpdate }:
 }
 
 const FileUploadModal = () => {
+  const navigate = useNavigate();
+  const channel = useChannel();
   const {
     queue,
     addFiles,
@@ -157,6 +162,7 @@ const FileUploadModal = () => {
   } = useUpload();
 
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const routedUploadIdRef = useRef<string | null>(null);
 
   // Resizable dialog state (local — pure presentation concern)
   const [dialogSize, setDialogSize] = useState<{ width: number; height: number } | null>(null);
@@ -216,6 +222,24 @@ const FileUploadModal = () => {
 
   const pendingCount = queue.filter((f) => f.state === "pending").length;
   const totalSize = queue.filter((f) => f.state === "pending").reduce((sum, f) => sum + f.file.size, 0);
+
+  useEffect(() => {
+    if (!allDone) {
+      routedUploadIdRef.current = null;
+      return;
+    }
+
+    const completed = queue.filter((item) => item.state === "complete" && item.datasetId);
+    if (completed.length !== 1 || hasFailures) return;
+
+    const item = completed[0];
+    if (!item.datasetId || routedUploadIdRef.current === item.datasetId) return;
+
+    routedUploadIdRef.current = item.datasetId;
+    closeModal();
+    toast({ title: "Listing created — set your price and publish." });
+    navigate(channel === "aim-data" ? `/raw-files/${item.datasetId}` : `/datasets/${item.datasetId}`);
+  }, [allDone, channel, closeModal, hasFailures, navigate, queue]);
 
   /**
    * Sort queue for display:

@@ -122,6 +122,7 @@ export interface ApiDataset {
   file_type: string;
   status: 'uploaded' | 'extracting' | 'preview_ready' | 'cancelled' | 'error' | 'uploading' | 'processing';
   error?: string;
+  listing_id?: string | null;
   created_at: string;
   updated_at: string;
   metadata: {
@@ -352,6 +353,43 @@ export interface DatasetPreviewResponse {
   error_message?: string;
 }
 
+export interface DatasetListingMetadata {
+  title: string;
+  description: string;
+  tags: string[];
+  column_summary: Array<{
+    name: string;
+    type: string;
+    null_percentage: number;
+    uniqueness_ratio: number;
+    sample_values: string[];
+  }>;
+  row_count: number;
+  column_count: number;
+  file_format: string;
+  size_bytes: number;
+  freshness_score: number;
+  privacy_score: number | null;
+  data_categories: string[];
+  generated_at: string;
+}
+
+export interface DatasetPublishRequest {
+  title?: string;
+  description?: string;
+  tags?: string[];
+  price: number;
+  category: string;
+  model_provider?: string;
+}
+
+export interface DatasetPublishResponse {
+  listing_id?: string;
+  marketplace_url?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
 // BQ-108: Batch upload types
 export interface BatchItemAccepted {
   client_file_index: number;
@@ -538,6 +576,15 @@ export const datasetsApi = {
 
   confirm: (id: string) =>
     apiFetch<{ dataset_id: string; status: string }>(`/api/datasets/${id}/confirm`, { method: 'POST' }),
+
+  getListingMetadata: (id: string) =>
+    apiFetch<DatasetListingMetadata>(`/api/datasets/${id}/listing-metadata`, { method: 'POST' }),
+
+  publish: (id: string, req: DatasetPublishRequest) =>
+    apiFetch<DatasetPublishResponse>(`/api/datasets/${id}/publish`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
 
   getReadiness: (id: string) =>
     apiFetch<DatasetReadinessResponse>(`/api/datasets/${id}/readiness`),

@@ -58,6 +58,7 @@ class MarketplacePushService:
         price: float = 25.0,
         category: str = "tabular",
         model_provider: str = "local",
+        listing_metadata_override: Optional[ListingMetadata] = None,
     ) -> Dict[str, Any]:
         """
         Push a processed dataset to ai.market.
@@ -81,7 +82,7 @@ class MarketplacePushService:
         base_path = Path(f"/data/processed/{dataset_id}")
 
         # 1. Load local processing results
-        listing_metadata = self._load_listing_metadata(base_path)
+        listing_metadata = listing_metadata_override or self._load_listing_metadata(base_path)
         compliance = self._load_compliance_report(base_path)
         attestation = self._load_attestation(base_path)
 

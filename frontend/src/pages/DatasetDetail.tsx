@@ -50,6 +50,7 @@ import {
 import { type ColumnSchema, type Dataset } from "@/types/mockDatasets";
 import { toast } from "@/hooks/use-toast";
 import PublishModal from "@/components/PublishModal";
+import DatasetPreview from "@/components/DatasetPreview";
 import { useMarketplace } from "@/contexts/MarketplaceContext";
 import { useMode } from "@/contexts/ModeContext";
 import { useChannel } from "@/hooks/useChannel";
@@ -223,6 +224,18 @@ const DatasetDetail = () => {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Datasets
         </Button>
+      </div>
+    );
+  }
+
+  if (apiDataset.status === "preview_ready" && !apiDataset.listing_id) {
+    return (
+      <div className="space-y-6">
+        <Button variant="ghost" size="sm" onClick={() => navigate(backPath)} className="gap-2">
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </Button>
+        <DatasetPreview datasetId={apiDataset.id} />
       </div>
     );
   }

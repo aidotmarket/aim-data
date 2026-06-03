@@ -18,7 +18,8 @@ from app.services.batch_service import _check_magic_bytes
 from app.utils.sanitization import validate_path_traversal
 
 from app.config import settings
-from app.models.dataset import DatasetStatus
+from app.models.dataset import DatasetRecord as DBDatasetRecord, DatasetStatus
+from app.core.database import get_session_context
 from app.services.duckdb_service import ephemeral_duckdb_service
 from app.services.processing_service import (
     get_processing_service,
@@ -267,6 +268,15 @@ class UploadSummaryRequest(BaseModel):
     accepted: int = Field(ge=0)
     rejected: int = Field(ge=0)
     failed_filenames: List[str] = []
+
+
+class PublishDatasetRequest(BaseModel):
+    title: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = Field(None, max_length=10000)
+    tags: List[str] = Field(default_factory=list, max_length=20)
+    price: Optional[float] = Field(None, ge=25.0)
+    category: Optional[str] = Field(None, max_length=100)
+    model_provider: Optional[str] = Field(None, max_length=64)
 
 
 @router.post("/upload-summary")
@@ -1108,6 +1118,7 @@ async def delete_dataset(
 @router.post("/{dataset_id}/publish")
 async def publish_to_marketplace(
     dataset_id: str,
+    body: Optional[PublishDatasetRequest] = None,
     price: float = 25.0,
     category: str = "tabular",
     model_provider: str = "local",
@@ -1138,13 +1149,44 @@ async def publish_to_marketplace(
                    "Run the processing pipeline first."
         )
 
+    publish_price = body.price if body and body.price is not None else price
+    publish_category = body.category if body and body.category else category
+    publish_model_provider = body.model_provider if body and body.model_provider else model_provider
+
+    metadata_override = None
+    if body and (body.title or body.description or body.tags):
+        metadata_override = ListingMetadata(
+            title=(body.title or record.original_filename).strip(),
+            description=(body.description or f"Dataset file: {record.original_filename}").strip(),
+            tags=[tag.strip() for tag in body.tags if tag.strip()][:20],
+            row_count=int(record.metadata.get("row_count") or 0) if isinstance(record.metadata, dict) else 0,
+            column_count=int(record.metadata.get("column_count") or 0) if isinstance(record.metadata, dict) else 0,
+            file_format=record.file_type or "",
+            size_bytes=record.file_size_bytes or 0,
+            data_categories=[publish_category] if publish_category else [],
+            generated_at=datetime.now(timezone.utc).isoformat(),
+        )
+
     try:
         result = await push_service.push_to_marketplace(
             dataset_id=dataset_id,
-            price=price,
-            category=category,
-            model_provider=model_provider,
+            price=publish_price,
+            category=publish_category,
+            model_provider=publish_model_provider,
+            listing_metadata_override=metadata_override,
         )
+        listing_id = result.get("listing_id") or result.get("id")
+        if listing_id:
+            try:
+                with get_session_context() as session:
+                    db_record = session.get(DBDatasetRecord, dataset_id)
+                    if db_record:
+                        db_record.listing_id = str(listing_id)
+                        db_record.updated_at = datetime.now(timezone.utc)
+                        session.add(db_record)
+                        session.commit()
+            except Exception:
+                logger.warning("Failed to persist marketplace listing id for dataset %s", dataset_id)
         return result
     except MarketplacePushError as e:
         status_code = e.status_code or 502

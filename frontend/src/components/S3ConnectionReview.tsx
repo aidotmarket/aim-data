@@ -229,7 +229,7 @@ export function S3ConnectionReview({
       if (response.ok) {
         const data: S3RegisterResponse = await response.json();
         updateObject(data.object);
-        toast({ title: "Dataset created", description: "Opening the listing flow for this S3 object." });
+        toast({ title: "Listing created — set your price and publish." });
         return data.dataset.id;
       } else if (response.status === 403) {
         toast({
@@ -374,19 +374,20 @@ export function S3ConnectionReview({
               <TableHead>Object</TableHead>
               <TableHead className="w-28">Size</TableHead>
               <TableHead className="w-48">Content type</TableHead>
+              <TableHead className="w-28">Status</TableHead>
               <TableHead className="w-36 text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {objectsLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-20 text-center">
+                <TableCell colSpan={6} className="h-20 text-center">
                   <Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" />
                 </TableCell>
               </TableRow>
             ) : objects.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-20 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={6} className="h-20 text-center text-sm text-muted-foreground">
                   {scanInProgress ? "Waiting for scanned objects." : "No scanned objects found."}
                 </TableCell>
               </TableRow>
@@ -410,6 +411,9 @@ export function S3ConnectionReview({
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{formatBytes(object.size_bytes)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{object.content_type}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {object.dataset_id ? "Listed" : ""}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="outline"
@@ -418,7 +422,7 @@ export function S3ConnectionReview({
                         onClick={() => listSingleObject(object)}
                       >
                         {registering ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                        List
+                        {object.dataset_id ? "Edit" : "List"}
                       </Button>
                     </TableCell>
                   </TableRow>
