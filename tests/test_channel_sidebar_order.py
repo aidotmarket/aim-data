@@ -10,17 +10,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SIDEBAR_PATH = REPO_ROOT / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
 EXPECTED_ORDER = [
-    "/",
     "/datasets",
-    "/ai-market",
+    "/list-data",
     "/data-requests",
-    "/search",
-    "/sql",
-    "/artifacts",
     "/databases",
     "/earnings",
-    "/billing",
-    "/data-types",
     "/settings",
 ]
 
@@ -66,18 +60,12 @@ def test_get_ordered_items_aim_data_uses_expected_top_bottom_split():
     assert "bottom: ordered.slice(sepIdx)" in content
 
     assert order[:separator_index] == [
-        "/",
         "/datasets",
-        "/ai-market",
+        "/list-data",
         "/data-requests",
+        "/databases",
     ]
     assert order[separator_index:] == [
-        "/search",
-        "/sql",
-        "/artifacts",
-        "/databases",
         "/earnings",
-        "/billing",
-        "/data-types",
         "/settings",
     ]

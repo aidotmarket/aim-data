@@ -12,7 +12,7 @@ between AIM Data instances and the ai.market platform. Messages are
 JSON-encoded actions identified by an "action" field.
 
 Connection lifecycle:
-  1. Connect to ws://{ai_market_url}/ws/trust-channel
+  1. Connect to ws://{ai_market_url}/api/v1/trust/stream
   2. Authenticate with internal API key
   3. Listen for incoming actions, dispatch to registered handlers
   4. Reconnect with exponential backoff on disconnect
@@ -60,11 +60,11 @@ class TrustChannelClient:
         # Build WS URL from ai_market_url (http → ws, https → wss)
         base = settings.ai_market_url.rstrip("/")
         if base.startswith("https://"):
-            self._ws_url = base.replace("https://", "wss://") + "/ws/trust-channel"
+            self._ws_url = base.replace("https://", "wss://") + "/api/v1/trust/stream"
         elif base.startswith("http://"):
-            self._ws_url = base.replace("http://", "ws://") + "/ws/trust-channel"
+            self._ws_url = base.replace("http://", "ws://") + "/api/v1/trust/stream"
         else:
-            self._ws_url = "wss://" + base + "/ws/trust-channel"
+            self._ws_url = "wss://" + base + "/api/v1/trust/stream"
 
     def register_handler(self, action: str, handler: ActionHandler) -> None:
         """Register a handler for a specific action type."""
