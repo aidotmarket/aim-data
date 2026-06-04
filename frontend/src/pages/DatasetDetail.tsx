@@ -24,6 +24,11 @@ import {
   DollarSign,
   TrendingUp,
   ChevronRight as ChevronRightIcon,
+  CheckCircle2,
+  Save,
+  ShieldAlert,
+  Store,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,18 +47,26 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   datasetsApi,
+  marketplaceApi,
+  piiApi,
   type ApiDataset,
   type DatasetSampleResponse,
   type DatasetStatisticsResponse,
   type DatasetReadinessResponse,
+  type DatasetListingMetadata,
+  type PIIScanResponse,
 } from "@/lib/api";
 import { type ColumnSchema, type Dataset } from "@/types/mockDatasets";
 import { toast } from "@/hooks/use-toast";
 import PublishModal from "@/components/PublishModal";
-import DatasetPreview from "@/components/DatasetPreview";
 import { useMarketplace } from "@/contexts/MarketplaceContext";
 import { useMode } from "@/contexts/ModeContext";
 import { useChannel } from "@/hooks/useChannel";
+import {
+  filenameToTitle,
+  ListingEditorForm,
+  type ListingEditorValue,
+} from "@/components/ListingEditorForm";
 
 const getFileIcon = (type: Dataset["type"]) => {
   switch (type) {
@@ -124,6 +137,253 @@ const mapApiDatasetToFrontend = (apiDataset: ApiDataset): Dataset => ({
   marketplace: undefined,
 });
 
+type ListingStepState = "pending" | "running" | "passed" | "flagged" | "not_run" | "failed";
+
+function getPrimaryCategory(metadata: DatasetListingMetadata | null): string {
+  const category = metadata?.data_categories?.[0];
+  if (!category) return "tabular";
+  if (category === "geographic") return "geospatial";
+  if (category === "commerce") return "retail";
+  if (category === "people") return "other";
+  return ["tabular", "financial", "healthcare", "retail", "geospatial", "documents", "other"].includes(category)
+    ? category
+    : "other";
+}
+
+function getPiiSignal(scan: PIIScanResponse | null, failed: boolean): ListingStepState {
+  if (failed) return "not_run";
+  if (!scan) return "pending";
+  const risk = String(scan.overall_risk || "none").toLowerCase();
+  return scan.columns_with_pii > 0 || !["none", "low"].includes(risk) ? "flagged" : "passed";
+}
+
+function StepIcon({ state }: { state: ListingStepState }) {
+  if (state === "running") return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
+  if (state === "passed") return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+  if (state === "flagged") return <ShieldAlert className="h-4 w-4 text-yellow-500" />;
+  if (state === "failed" || state === "not_run") return <XCircle className="h-4 w-4 text-muted-foreground" />;
+  return <Clock className="h-4 w-4 text-muted-foreground" />;
+}
+
+function ListingPreparation({
+  dataset,
+  backPath,
+  onDelete,
+  isDeleting,
+}: {
+  dataset: ApiDataset;
+  backPath: string;
+  onDelete: () => void;
+  isDeleting: boolean;
+}) {
+  const navigate = useNavigate();
+  const [piiScan, setPiiScan] = useState<PIIScanResponse | null>(null);
+  const [piiFailed, setPiiFailed] = useState(false);
+  const [metadata, setMetadata] = useState<DatasetListingMetadata | null>(null);
+  const [metadataState, setMetadataState] = useState<ListingStepState>("pending");
+  const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const [form, setForm] = useState<ListingEditorValue>({
+    title: filenameToTitle(dataset.original_filename) || dataset.original_filename,
+    description: "",
+    priceUsd: "25",
+    category: "tabular",
+    tags: [],
+  });
+
+  const piiState = getPiiSignal(piiScan, piiFailed);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runListingFlow() {
+      setPiiFailed(false);
+      setMetadataState("pending");
+
+      try {
+        const scan = await piiApi.scan(dataset.id);
+        if (!cancelled) setPiiScan(scan);
+      } catch {
+        if (!cancelled) setPiiFailed(true);
+      }
+
+      if (cancelled) return;
+      setMetadataState("running");
+      try {
+        const generated = await datasetsApi.getListingMetadata(dataset.id);
+        if (cancelled) return;
+        setMetadata(generated);
+        setForm({
+          title: generated.title || filenameToTitle(dataset.original_filename) || dataset.original_filename,
+          description: generated.description || "",
+          priceUsd: "25",
+          category: getPrimaryCategory(generated),
+          tags: generated.tags || [],
+        });
+        setMetadataState("passed");
+      } catch {
+        if (!cancelled) setMetadataState("failed");
+      }
+    }
+
+    runListingFlow();
+    return () => {
+      cancelled = true;
+    };
+  }, [dataset.id, dataset.original_filename]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await datasetsApi.getListingMetadata(dataset.id);
+      toast({ title: "Draft saved", description: "Listing metadata is ready for publishing." });
+    } catch {
+      toast({ title: "Save failed", description: "Could not refresh listing metadata.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    const price = Number.parseFloat(form.priceUsd);
+    if (!form.title.trim()) {
+      toast({ title: "Title required", description: "Add a title for this listing.", variant: "destructive" });
+      return;
+    }
+    if (!form.description.trim()) {
+      toast({ title: "Description required", description: "Add listing details for buyers.", variant: "destructive" });
+      return;
+    }
+    if (!Number.isFinite(price) || price < 25) {
+      toast({ title: "Price required", description: "Set a price of at least $25.", variant: "destructive" });
+      return;
+    }
+
+    setPublishing(true);
+    try {
+      await marketplaceApi.publish({
+        vz_dataset_id: dataset.id,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        tags: form.tags,
+        category: form.category,
+        price_cents: Math.round(price * 100),
+        row_count: metadata?.row_count ?? dataset.metadata?.row_count ?? null,
+        column_names: metadata?.column_summary?.map((column) => column.name) ?? dataset.metadata?.columns?.map((column) => column.name) ?? null,
+        column_types: metadata?.column_summary?.map((column) => column.type) ?? dataset.metadata?.columns?.map((column) => column.type) ?? null,
+        file_format: metadata?.file_format || dataset.file_type,
+        file_size_bytes: metadata?.size_bytes || dataset.metadata?.size_bytes || null,
+      });
+      toast({ title: "Live on ai.market", description: "Your listing has been published." });
+    } catch (e) {
+      toast({
+        title: "Publish failed",
+        description: e instanceof Error ? e.message : "Failed to publish listing.",
+        variant: "destructive",
+      });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <Button variant="ghost" size="sm" onClick={() => navigate(backPath)} className="gap-2">
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </Button>
+        <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={onDelete} disabled={isDeleting}>
+          <Trash2 className="w-4 h-4 mr-2" />
+          Delete
+        </Button>
+      </div>
+
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">{dataset.original_filename}</h1>
+        <p className="text-sm text-muted-foreground">
+          Listing preparation runs locally before publish.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Listing Flow</CardTitle>
+          <CardDescription>PII scan runs first, then allAI metadata fills the editor.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-md border p-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <StepIcon state={piiState} />
+              PII scan
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {piiState === "passed" && "Passed"}
+              {piiState === "flagged" && `${piiScan?.columns_with_pii ?? 0} column${piiScan?.columns_with_pii === 1 ? "" : "s"} flagged`}
+              {piiState === "not_run" && "Not run"}
+              {piiState === "pending" && "Queued"}
+            </p>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <StepIcon state={metadataState} />
+              allAI metadata
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {metadataState === "running" && "Generating description, tags, classifications, and scores"}
+              {metadataState === "passed" && "Ready"}
+              {metadataState === "failed" && "Failed"}
+              {metadataState === "pending" && "Waiting for PII scan"}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Store className="h-4 w-4 text-primary" />
+            Listing Details
+          </CardTitle>
+          <CardDescription>Edit buyer-facing details and publish when ready</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <ListingEditorForm
+            value={form}
+            onChange={setForm}
+            tagInput={tagInput}
+            onTagInputChange={setTagInput}
+            disabled={saving || publishing || metadataState === "running"}
+          />
+
+          <div className="grid gap-3 text-sm md:grid-cols-2">
+            <div className="rounded-md border p-3">
+              <span className="text-muted-foreground">Privacy score</span>
+              <p className="font-medium">{metadata?.privacy_score == null ? "Not run" : `${metadata.privacy_score}/10`}</p>
+            </div>
+            <div className="rounded-md border p-3">
+              <span className="text-muted-foreground">Quality signal</span>
+              <p className="font-medium">{metadata ? `${Math.round(metadata.freshness_score * 100)} freshness` : "Not ready"}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handlePublish} disabled={saving || publishing || metadataState === "running"} size="sm" className="gap-2">
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
+              {publishing ? "Publishing..." : "Publish to ai.market"}
+            </Button>
+            <Button onClick={handleSave} disabled={saving || publishing || metadataState === "running"} size="sm" variant="outline">
+              {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
+              Save draft
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 const DatasetDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -188,6 +448,26 @@ const DatasetDetail = () => {
     fetchDataset();
   }, [id]);
 
+  useEffect(() => {
+    if (!apiDataset || apiDataset.status === "preview_ready" || apiDataset.status === "error") {
+      return undefined;
+    }
+
+    const timer = window.setInterval(async () => {
+      try {
+        const status = await datasetsApi.getStatus(apiDataset.id);
+        if (status.status === "preview_ready" || status.status === "error") {
+          const refreshed = await datasetsApi.get(apiDataset.id);
+          setApiDataset(refreshed);
+        }
+      } catch {
+        // Keep the current processing view and retry on the next tick.
+      }
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [apiDataset]);
+
   // Show loading skeleton
   if (loading) {
     return (
@@ -228,15 +508,37 @@ const DatasetDetail = () => {
     );
   }
 
+  const handleDelete = async () => {
+    if (!window.confirm("Are you sure you want to delete this dataset? This action cannot be undone.")) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await datasetsApi.delete(apiDataset.id);
+      toast({
+        title: "Dataset deleted",
+        description: "The dataset has been permanently removed",
+      });
+      navigate("/datasets");
+    } catch {
+      toast({
+        title: "Delete failed",
+        description: "Failed to delete dataset. Please try again or check system health.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (apiDataset.status === "preview_ready" && !apiDataset.listing_id) {
     return (
-      <div className="space-y-6">
-        <Button variant="ghost" size="sm" onClick={() => navigate(backPath)} className="gap-2">
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </Button>
-        <DatasetPreview datasetId={apiDataset.id} />
-      </div>
+      <ListingPreparation
+        dataset={apiDataset}
+        backPath={backPath}
+        onDelete={handleDelete}
+        isDeleting={isDeleting}
+      />
     );
   }
 
@@ -288,29 +590,6 @@ const DatasetDetail = () => {
       title: "Dataset unpublished",
       description: "Your dataset has been removed from the marketplace",
     });
-  };
-
-  const handleDelete = async () => {
-    if (!window.confirm("Are you sure you want to delete this dataset? This action cannot be undone.")) {
-      return;
-    }
-    setIsDeleting(true);
-    try {
-      await datasetsApi.delete(dataset.id);
-      toast({
-        title: "Dataset deleted",
-        description: "The dataset has been permanently removed",
-      });
-      navigate("/datasets");
-    } catch (e) {
-      toast({
-        title: "Delete failed",
-        description: "Failed to delete dataset. Please try again or check system health.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsDeleting(false);
-    }
   };
 
   return (

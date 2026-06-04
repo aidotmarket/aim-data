@@ -253,10 +253,14 @@ async def upload_dataset(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
-async def process_dataset_task(dataset_id: str):
-    """Background task to process an uploaded dataset."""
+async def prepare_listing_task(dataset_id: str):
+    """Background task to prepare a dataset for the listing editor."""
     processing = get_processing_service()
     await processing.process_file(dataset_id)
+
+
+# Backward-compatible name for callers/tests that still import it.
+process_dataset_task = prepare_listing_task
 
 
 # ---------------------------------------------------------------------------
@@ -1005,6 +1009,13 @@ async def generate_listing_metadata(
     
     try:
         metadata = await listing_service.generate_listing_metadata(dataset_id)
+        if not hasattr(record, "metadata") or record.metadata is None:
+            record.metadata = {}
+        record.metadata["listing_metadata"] = metadata.model_dump()
+        if hasattr(processing, "_save_record"):
+            upload_path = getattr(record, "upload_path", None)
+            storage_fn = upload_path.name if upload_path else f"{dataset_id}"
+            processing._save_record(record, storage_fn)
         return metadata
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

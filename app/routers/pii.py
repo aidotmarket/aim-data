@@ -116,6 +116,14 @@ async def scan_dataset(
         # Add recommendations
         result["recommendations"] = pii_service.get_recommendations(result)
 
+        if not hasattr(record, "metadata") or record.metadata is None:
+            record.metadata = {}
+        record.metadata["pii_scan"] = result
+        if hasattr(processing, "_save_record"):
+            upload_path = getattr(record, "upload_path", None)
+            storage_fn = upload_path.name if upload_path else f"{dataset_id}"
+            processing._save_record(record, storage_fn)
+
         return {
             "dataset_id": dataset_id,
             "filename": record.original_filename,

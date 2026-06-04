@@ -24,13 +24,16 @@ from app.models.dataset import DatasetRecord
 from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
-from app.routers.datasets import process_dataset_task
+from app.routers.datasets import prepare_listing_task
 from app.services.processing_service import DatasetRecord as ProcessingDatasetRecord
 from app.services.processing_service import get_processing_service
 from app.services.s3_broker_client import S3BrokerClient, S3BrokerError
 from app.services.s3_scan_service import S3ScanService
 
 router = APIRouter()
+
+# Compatibility for older tests/extensions that monkeypatch the prior task name.
+process_dataset_task = prepare_listing_task
 
 ROLE_ARN_RE = re.compile(r"^arn:aws:iam::\d{12}:role/.+$")
 
