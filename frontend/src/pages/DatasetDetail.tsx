@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -192,6 +192,8 @@ const categoryOptions = [
   { value: "other", label: "Other" },
 ];
 
+const autoPiiScanAttemptedDatasetIds = new Set<string>();
+
 function ListingPreparation({
   dataset,
   backPath,
@@ -213,8 +215,11 @@ function ListingPreparation({
   const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
   const [metadata, setMetadata] = useState<DatasetListingMetadata | null>(null);
   const [metadataState, setMetadataState] = useState<ListingStepState>("pending");
+  const [metadataApproved, setMetadataApproved] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [tagInput, setTagInput] = useState("");
+  const autoPiiScanDatasetRef = useRef<string | null>(null);
+  const autoMetadataDatasetRef = useRef<string | null>(null);
   const [form, setForm] = useState<ListingEditorValue>({
     title: filenameToTitle(dataset.original_filename) || dataset.original_filename,
     description: "",
@@ -228,6 +233,27 @@ function ListingPreparation({
   const piiState = piiScanState === "running" ? "running" : getPiiSignal(piiScan, piiFailed);
   const allFlaggedColumnsSaved = flaggedColumns.length === 0 || flaggedColumns.every((column) => Boolean(piiActions[column.column]));
   const canContinuePrivacy = Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
+
+  const runPiiScan = async (showFailureToast = true) => {
+    if (!datasetReady) return;
+    setPiiFailed(false);
+    setPiiScanState("running");
+    try {
+      const scan = await piiApi.scan(dataset.id);
+      setPiiScan(scan);
+      setPiiScanState("passed");
+    } catch (e) {
+      setPiiFailed(true);
+      setPiiScanState("failed");
+      if (showFailureToast) {
+        toast({
+          title: "Privacy scan failed",
+          description: e instanceof Error ? e.message : "Could not scan this dataset for personal data.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -247,10 +273,23 @@ function ListingPreparation({
         const scan = await piiApi.getScan(dataset.id);
         if (!cancelled) {
           setPiiScan(scan);
+          autoPiiScanDatasetRef.current = dataset.id;
+          autoPiiScanAttemptedDatasetIds.add(dataset.id);
           setPiiScanState("passed");
         }
       } catch {
-        if (!cancelled) setPiiScanState("pending");
+        if (cancelled) return;
+        if (
+          datasetReady &&
+          autoPiiScanDatasetRef.current !== dataset.id &&
+          !autoPiiScanAttemptedDatasetIds.has(dataset.id)
+        ) {
+          autoPiiScanDatasetRef.current = dataset.id;
+          autoPiiScanAttemptedDatasetIds.add(dataset.id);
+          await runPiiScan(false);
+          return;
+        }
+        setPiiScanState("pending");
       }
     }
 
@@ -258,7 +297,7 @@ function ListingPreparation({
     return () => {
       cancelled = true;
     };
-  }, [dataset.id]);
+  }, [dataset.id, datasetReady]);
 
   const savePrivacyConfig = async (actions: Record<string, PIIColumnAction>, attested: boolean) => {
     setSavingPrivacy(true);
@@ -280,22 +319,7 @@ function ListingPreparation({
   };
 
   const handleRunPiiScan = async () => {
-    if (!datasetReady) return;
-    setPiiFailed(false);
-    setPiiScanState("running");
-    try {
-      const scan = await piiApi.scan(dataset.id);
-      setPiiScan(scan);
-      setPiiScanState("passed");
-    } catch (e) {
-      setPiiFailed(true);
-      setPiiScanState("failed");
-      toast({
-        title: "Privacy scan failed",
-        description: e instanceof Error ? e.message : "Could not scan this dataset for personal data.",
-        variant: "destructive",
-      });
-    }
+    await runPiiScan();
   };
 
   const handleColumnAction = async (column: string, action: PIIColumnAction) => {
@@ -327,6 +351,7 @@ function ListingPreparation({
     try {
       const generated = await datasetsApi.getListingMetadata(dataset.id);
       setMetadata(generated);
+      setMetadataApproved(false);
       setForm({
         title: generated.title || filenameToTitle(dataset.original_filename) || dataset.original_filename,
         description: generated.description || "",
@@ -345,8 +370,27 @@ function ListingPreparation({
     }
   };
 
+  useEffect(() => {
+    if (
+      activeStep !== 2 ||
+      metadata ||
+      metadataState === "running" ||
+      autoMetadataDatasetRef.current === dataset.id
+    ) {
+      return;
+    }
+
+    autoMetadataDatasetRef.current = dataset.id;
+    handleGenerateMetadata();
+  }, [activeStep, dataset.id, metadata, metadataState]);
+
   const handleApproveMetadata = () => {
     if (!metadata) return;
+    setMetadataApproved(true);
+  };
+
+  const handleContinueMetadata = () => {
+    if (!metadata || !metadataApproved || !form.title.trim() || !form.description.trim()) return;
     setActiveStep(3);
   };
 
@@ -356,6 +400,7 @@ function ListingPreparation({
       setTagInput("");
       return;
     }
+    setMetadataApproved(false);
     setForm({ ...form, tags: [...form.tags, tag] });
     setTagInput("");
   };
@@ -402,7 +447,10 @@ function ListingPreparation({
     }
   };
 
-  const setFormPatch = (patch: Partial<ListingEditorValue>) => setForm({ ...form, ...patch });
+  const setFormPatch = (patch: Partial<ListingEditorValue>) => {
+    setMetadataApproved(false);
+    setForm({ ...form, ...patch });
+  };
 
   return (
     <div className="space-y-6">
@@ -440,7 +488,7 @@ function ListingPreparation({
               {piiState === "passed" && "Passed"}
               {piiState === "flagged" && `${piiScan?.columns_with_pii ?? 0} column${piiScan?.columns_with_pii === 1 ? "" : "s"} flagged`}
               {piiState === "not_run" && "Not run"}
-              {piiState === "pending" && datasetReady && "Ready to scan"}
+              {piiState === "pending" && datasetReady && "Preparing scan"}
               {piiState === "running" && "Scanning"}
             </p>
           </div>
@@ -468,83 +516,93 @@ function ListingPreparation({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ShieldAlert className="h-4 w-4 text-primary" />
-            Step 1: Privacy Review
-          </CardTitle>
-          <CardDescription>Scan for reported personal-data findings and choose how to handle each flagged column.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!datasetReady && (
-            <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-              File registration is complete. Preview preparation is finishing before the privacy scan can run.
+      {activeStep === 1 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldAlert className="h-4 w-4 text-primary" />
+              Step 1: Privacy Review
+            </CardTitle>
+            <CardDescription>Scan for reported personal-data findings and choose how to handle each flagged column.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!datasetReady && (
+              <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                File registration is complete. Preview preparation is finishing before the privacy scan can run.
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              {(piiScan || piiFailed) && (
+                <Button onClick={handleRunPiiScan} disabled={!datasetReady || piiScanState === "running" || savingPrivacy} size="sm" className="gap-2">
+                  {piiScanState === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
+                  Run scan again
+                </Button>
+              )}
+              {!piiScan && piiScanState === "running" && (
+                <Badge variant="secondary" className="gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Running privacy scan
+                </Badge>
+              )}
+              {piiFailed && <Badge variant="secondary">Scan failed</Badge>}
+              {piiScan && flaggedColumns.length === 0 && <Badge className="bg-haven-success/20 text-haven-success border-haven-success/30">No personal data detected</Badge>}
             </div>
-          )}
 
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={handleRunPiiScan} disabled={!datasetReady || piiScanState === "running" || savingPrivacy} size="sm" className="gap-2">
-              {piiScanState === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
-              {piiScan ? "Run scan again" : "Run privacy scan"}
-            </Button>
-            {piiFailed && <Badge variant="secondary">Scan failed</Badge>}
-            {piiScan && flaggedColumns.length === 0 && <Badge className="bg-haven-success/20 text-haven-success border-haven-success/30">No personal data detected</Badge>}
-          </div>
-
-          {flaggedColumns.length > 0 && (
-            <div className="space-y-3">
-              {flaggedColumns.map((column) => (
-                <div key={column.column} className="rounded-md border p-3">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div className="space-y-1">
-                      <div className="font-medium">{column.column}</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {column.pii_types.map((type) => (
-                          <Badge key={type} variant="secondary">{type}</Badge>
+            {flaggedColumns.length > 0 && (
+              <div className="space-y-3">
+                {flaggedColumns.map((column) => (
+                  <div key={column.column} className="rounded-md border p-3">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">{column.column}</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {column.pii_types.map((type) => (
+                            <Badge key={type} variant="secondary">{type}</Badge>
+                          ))}
+                          <Badge variant="outline">{column.risk_level} risk</Badge>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {PII_ACTIONS.map((action) => (
+                          <Button
+                            key={action.value}
+                            type="button"
+                            variant={piiActions[column.column] === action.value ? "default" : "outline"}
+                            size="sm"
+                            disabled={savingPrivacy || activeStep > 1}
+                            onClick={() => handleColumnAction(column.column, action.value)}
+                          >
+                            {action.label}
+                          </Button>
                         ))}
-                        <Badge variant="outline">{column.risk_level} risk</Badge>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {PII_ACTIONS.map((action) => (
-                        <Button
-                          key={action.value}
-                          type="button"
-                          variant={piiActions[column.column] === action.value ? "default" : "outline"}
-                          size="sm"
-                          disabled={savingPrivacy || activeStep > 1}
-                          onClick={() => handleColumnAction(column.column, action.value)}
-                        >
-                          {action.label}
-                        </Button>
-                      ))}
-                    </div>
                   </div>
+                ))}
+
+                <div className="flex items-start gap-3 rounded-md border p-3">
+                  <Checkbox
+                    id="privacy-attestation"
+                    checked={privacyAttested}
+                    disabled={savingPrivacy || activeStep > 1}
+                    onCheckedChange={(checked) => handleAttestationChange(checked === true)}
+                  />
+                  <Label htmlFor="privacy-attestation" className="text-sm font-normal leading-5">
+                    I have reviewed the reported personal-data findings and choose to publish this listing as-is.
+                  </Label>
                 </div>
-              ))}
-
-              <div className="flex items-start gap-3 rounded-md border p-3">
-                <Checkbox
-                  id="privacy-attestation"
-                  checked={privacyAttested}
-                  disabled={savingPrivacy || activeStep > 1}
-                  onCheckedChange={(checked) => handleAttestationChange(checked === true)}
-                />
-                <Label htmlFor="privacy-attestation" className="text-sm font-normal leading-5">
-                  I have reviewed the reported personal-data findings and choose to publish this listing as-is.
-                </Label>
               </div>
-            </div>
-          )}
+            )}
 
-          <Button onClick={handleContinuePrivacy} disabled={activeStep > 1 || !canContinuePrivacy || savingPrivacy} size="sm">
-            Continue to metadata
-          </Button>
-        </CardContent>
-      </Card>
+            <Button onClick={handleContinuePrivacy} disabled={activeStep > 1 || !canContinuePrivacy || savingPrivacy} size="sm">
+              Continue to metadata
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
-      {activeStep >= 2 && (
+      {activeStep === 2 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -633,16 +691,25 @@ function ListingPreparation({
                   </div>
                 </div>
 
-                <Button onClick={handleApproveMetadata} disabled={activeStep > 2 || !form.title.trim() || !form.description.trim()} size="sm">
-                  Approve metadata
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  {!metadataApproved && (
+                    <Button onClick={handleApproveMetadata} disabled={activeStep > 2 || !form.title.trim() || !form.description.trim()} size="sm">
+                      Approve metadata
+                    </Button>
+                  )}
+                  {metadataApproved && (
+                    <Button onClick={handleContinueMetadata} disabled={activeStep > 2 || !form.title.trim() || !form.description.trim()} size="sm">
+                      Continue to publish
+                    </Button>
+                  )}
+                </div>
               </>
             )}
           </CardContent>
         </Card>
       )}
 
-      {activeStep >= 3 && (
+      {activeStep === 3 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
