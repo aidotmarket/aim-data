@@ -171,6 +171,7 @@ class PIIService:
         self,
         dataset_id: str,
         column_actions: Dict[str, str],
+        privacy_attested: bool = False,
     ) -> Dict[str, Any]:
         """
         Persist per-column PII action decisions for a dataset.
@@ -179,6 +180,8 @@ class PIIService:
             dataset_id: The dataset identifier.
             column_actions: Mapping of column_name -> action.
                 Valid actions: "exclude", "redact", "keep".
+            privacy_attested: Whether the seller explicitly acknowledged
+                unresolved PII findings before proceeding.
 
         Returns:
             Saved config dict with metadata.
@@ -201,6 +204,7 @@ class PIIService:
         config = {
             "dataset_id": dataset_id,
             "column_actions": column_actions,
+            "privacy_attested": privacy_attested,
             "updated_at": datetime.utcnow().isoformat(),
         }
 

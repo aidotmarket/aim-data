@@ -25,7 +25,6 @@ import {
   TrendingUp,
   ChevronRight as ChevronRightIcon,
   CheckCircle2,
-  Save,
   ShieldAlert,
   Store,
   XCircle,
@@ -33,8 +32,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -54,6 +64,7 @@ import {
   type DatasetStatisticsResponse,
   type DatasetReadinessResponse,
   type DatasetListingMetadata,
+  type PIIColumnAction,
   type PIIScanResponse,
 } from "@/lib/api";
 import { type ColumnSchema, type Dataset } from "@/types/mockDatasets";
@@ -165,6 +176,22 @@ function StepIcon({ state }: { state: ListingStepState }) {
   return <Clock className="h-4 w-4 text-muted-foreground" />;
 }
 
+const PII_ACTIONS: Array<{ value: PIIColumnAction; label: string }> = [
+  { value: "exclude", label: "Exclude" },
+  { value: "redact", label: "Redact" },
+  { value: "keep", label: "Keep" },
+];
+
+const categoryOptions = [
+  { value: "tabular", label: "Tabular" },
+  { value: "financial", label: "Financial" },
+  { value: "healthcare", label: "Healthcare" },
+  { value: "retail", label: "Retail" },
+  { value: "geospatial", label: "Geospatial" },
+  { value: "documents", label: "Documents" },
+  { value: "other", label: "Other" },
+];
+
 function ListingPreparation({
   dataset,
   backPath,
@@ -179,9 +206,13 @@ function ListingPreparation({
   const navigate = useNavigate();
   const [piiScan, setPiiScan] = useState<PIIScanResponse | null>(null);
   const [piiFailed, setPiiFailed] = useState(false);
+  const [piiScanState, setPiiScanState] = useState<ListingStepState>("pending");
+  const [piiActions, setPiiActions] = useState<Record<string, PIIColumnAction>>({});
+  const [privacyAttested, setPrivacyAttested] = useState(false);
+  const [savingPrivacy, setSavingPrivacy] = useState(false);
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
   const [metadata, setMetadata] = useState<DatasetListingMetadata | null>(null);
   const [metadataState, setMetadataState] = useState<ListingStepState>("pending");
-  const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [form, setForm] = useState<ListingEditorValue>({
@@ -192,57 +223,141 @@ function ListingPreparation({
     tags: [],
   });
 
-  const piiState = getPiiSignal(piiScan, piiFailed);
+  const datasetReady = dataset.status === "preview_ready";
+  const flaggedColumns = piiScan?.column_results ?? [];
+  const piiState = piiScanState === "running" ? "running" : getPiiSignal(piiScan, piiFailed);
+  const allFlaggedColumnsSaved = flaggedColumns.length === 0 || flaggedColumns.every((column) => Boolean(piiActions[column.column]));
+  const canContinuePrivacy = Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function runListingFlow() {
-      setPiiFailed(false);
-      setMetadataState("pending");
-
+    async function loadPrivacyState() {
       try {
-        const scan = await piiApi.scan(dataset.id);
-        if (!cancelled) setPiiScan(scan);
+        const config = await piiApi.getConfig(dataset.id);
+        if (!cancelled) {
+          setPiiActions(config.column_actions || {});
+          setPrivacyAttested(Boolean(config.privacy_attested));
+        }
       } catch {
-        if (!cancelled) setPiiFailed(true);
+        // Config is optional until the seller makes a privacy decision.
       }
 
-      if (cancelled) return;
-      setMetadataState("running");
       try {
-        const generated = await datasetsApi.getListingMetadata(dataset.id);
-        if (cancelled) return;
-        setMetadata(generated);
-        setForm({
-          title: generated.title || filenameToTitle(dataset.original_filename) || dataset.original_filename,
-          description: generated.description || "",
-          priceUsd: "25",
-          category: getPrimaryCategory(generated),
-          tags: generated.tags || [],
-        });
-        setMetadataState("passed");
+        const scan = await piiApi.getScan(dataset.id);
+        if (!cancelled) {
+          setPiiScan(scan);
+          setPiiScanState("passed");
+        }
       } catch {
-        if (!cancelled) setMetadataState("failed");
+        if (!cancelled) setPiiScanState("pending");
       }
     }
 
-    runListingFlow();
+    loadPrivacyState();
     return () => {
       cancelled = true;
     };
-  }, [dataset.id, dataset.original_filename]);
+  }, [dataset.id]);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const savePrivacyConfig = async (actions: Record<string, PIIColumnAction>, attested: boolean) => {
+    setSavingPrivacy(true);
     try {
-      await datasetsApi.getListingMetadata(dataset.id);
-      toast({ title: "Draft saved", description: "Listing metadata is ready for publishing." });
-    } catch {
-      toast({ title: "Save failed", description: "Could not refresh listing metadata.", variant: "destructive" });
+      const saved = await piiApi.saveConfig(dataset.id, actions, attested);
+      setPiiActions(saved.column_actions || {});
+      setPrivacyAttested(Boolean(saved.privacy_attested));
+      return true;
+    } catch (e) {
+      toast({
+        title: "Privacy decision not saved",
+        description: e instanceof Error ? e.message : "Could not save the PII review decision.",
+        variant: "destructive",
+      });
+      return false;
     } finally {
-      setSaving(false);
+      setSavingPrivacy(false);
     }
+  };
+
+  const handleRunPiiScan = async () => {
+    if (!datasetReady) return;
+    setPiiFailed(false);
+    setPiiScanState("running");
+    try {
+      const scan = await piiApi.scan(dataset.id);
+      setPiiScan(scan);
+      setPiiScanState("passed");
+    } catch (e) {
+      setPiiFailed(true);
+      setPiiScanState("failed");
+      toast({
+        title: "Privacy scan failed",
+        description: e instanceof Error ? e.message : "Could not scan this dataset for personal data.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleColumnAction = async (column: string, action: PIIColumnAction) => {
+    const previous = piiActions;
+    const next = { ...piiActions, [column]: action };
+    setPiiActions(next);
+    const saved = await savePrivacyConfig(next, privacyAttested);
+    if (!saved) setPiiActions(previous);
+  };
+
+  const handleAttestationChange = async (checked: boolean) => {
+    const previous = privacyAttested;
+    setPrivacyAttested(checked);
+    const saved = await savePrivacyConfig(piiActions, checked);
+    if (!saved) setPrivacyAttested(previous);
+  };
+
+  const handleContinuePrivacy = async () => {
+    if (!canContinuePrivacy) return;
+    if (privacyAttested) {
+      const saved = await savePrivacyConfig(piiActions, true);
+      if (!saved) return;
+    }
+    setActiveStep(2);
+  };
+
+  const handleGenerateMetadata = async () => {
+    setMetadataState("running");
+    try {
+      const generated = await datasetsApi.getListingMetadata(dataset.id);
+      setMetadata(generated);
+      setForm({
+        title: generated.title || filenameToTitle(dataset.original_filename) || dataset.original_filename,
+        description: generated.description || "",
+        priceUsd: form.priceUsd,
+        category: getPrimaryCategory(generated),
+        tags: generated.tags || [],
+      });
+      setMetadataState("passed");
+    } catch (e) {
+      setMetadataState("failed");
+      toast({
+        title: "Metadata generation failed",
+        description: e instanceof Error ? e.message : "Could not generate listing metadata.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleApproveMetadata = () => {
+    if (!metadata) return;
+    setActiveStep(3);
+  };
+
+  const addTag = () => {
+    const tag = tagInput.trim().toLowerCase();
+    if (!tag || form.tags.includes(tag) || form.tags.length >= 20) {
+      setTagInput("");
+      return;
+    }
+    setForm({ ...form, tags: [...form.tags, tag] });
+    setTagInput("");
   };
 
   const handlePublish = async () => {
@@ -287,6 +402,8 @@ function ListingPreparation({
     }
   };
 
+  const setFormPatch = (patch: Partial<ListingEditorValue>) => setForm({ ...form, ...patch });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -303,38 +420,49 @@ function ListingPreparation({
       <div>
         <h1 className="text-2xl font-bold text-foreground">{dataset.original_filename}</h1>
         <p className="text-sm text-muted-foreground">
-          Listing preparation runs locally before publish.
+          Review privacy findings, approve allAI metadata, then publish.
         </p>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Listing Flow</CardTitle>
-          <CardDescription>PII scan runs first, then allAI metadata fills the editor.</CardDescription>
+          <CardDescription>Each step must be completed before the next one unlocks.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2">
+        <CardContent className="grid gap-3 md:grid-cols-3">
           <div className="rounded-md border p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <StepIcon state={piiState} />
-              PII scan
+              1. Privacy review
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
+              {!datasetReady && "Waiting for dataset preview"}
               {piiState === "passed" && "Passed"}
               {piiState === "flagged" && `${piiScan?.columns_with_pii ?? 0} column${piiScan?.columns_with_pii === 1 ? "" : "s"} flagged`}
               {piiState === "not_run" && "Not run"}
-              {piiState === "pending" && "Queued"}
+              {piiState === "pending" && datasetReady && "Ready to scan"}
+              {piiState === "running" && "Scanning"}
             </p>
           </div>
           <div className="rounded-md border p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <StepIcon state={metadataState} />
-              allAI metadata
+              2. Metadata review
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {metadataState === "running" && "Generating description, tags, classifications, and scores"}
               {metadataState === "passed" && "Ready"}
               {metadataState === "failed" && "Failed"}
-              {metadataState === "pending" && "Waiting for PII scan"}
+              {metadataState === "pending" && "Waiting for privacy review"}
+            </p>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <StepIcon state={activeStep === 3 ? "passed" : "not_run"} />
+              3. Publish
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {activeStep === 3 ? "Editor unlocked" : "Waiting for metadata approval"}
             </p>
           </div>
         </CardContent>
@@ -343,43 +471,202 @@ function ListingPreparation({
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Store className="h-4 w-4 text-primary" />
-            Listing Details
+            <ShieldAlert className="h-4 w-4 text-primary" />
+            Step 1: Privacy Review
           </CardTitle>
-          <CardDescription>Edit buyer-facing details and publish when ready</CardDescription>
+          <CardDescription>Scan for reported personal-data findings and choose how to handle each flagged column.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <ListingEditorForm
-            value={form}
-            onChange={setForm}
-            tagInput={tagInput}
-            onTagInputChange={setTagInput}
-            disabled={saving || publishing || metadataState === "running"}
-          />
-
-          <div className="grid gap-3 text-sm md:grid-cols-2">
-            <div className="rounded-md border p-3">
-              <span className="text-muted-foreground">Privacy score</span>
-              <p className="font-medium">{metadata?.privacy_score == null ? "Not run" : `${metadata.privacy_score}/10`}</p>
+          {!datasetReady && (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+              File registration is complete. Preview preparation is finishing before the privacy scan can run.
             </div>
-            <div className="rounded-md border p-3">
-              <span className="text-muted-foreground">Quality signal</span>
-              <p className="font-medium">{metadata ? `${Math.round(metadata.freshness_score * 100)} freshness` : "Not ready"}</p>
-            </div>
-          </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
-            <Button onClick={handlePublish} disabled={saving || publishing || metadataState === "running"} size="sm" className="gap-2">
+            <Button onClick={handleRunPiiScan} disabled={!datasetReady || piiScanState === "running" || savingPrivacy} size="sm" className="gap-2">
+              {piiScanState === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
+              {piiScan ? "Run scan again" : "Run privacy scan"}
+            </Button>
+            {piiFailed && <Badge variant="secondary">Scan failed</Badge>}
+            {piiScan && flaggedColumns.length === 0 && <Badge className="bg-haven-success/20 text-haven-success border-haven-success/30">No personal data detected</Badge>}
+          </div>
+
+          {flaggedColumns.length > 0 && (
+            <div className="space-y-3">
+              {flaggedColumns.map((column) => (
+                <div key={column.column} className="rounded-md border p-3">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-1">
+                      <div className="font-medium">{column.column}</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {column.pii_types.map((type) => (
+                          <Badge key={type} variant="secondary">{type}</Badge>
+                        ))}
+                        <Badge variant="outline">{column.risk_level} risk</Badge>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {PII_ACTIONS.map((action) => (
+                        <Button
+                          key={action.value}
+                          type="button"
+                          variant={piiActions[column.column] === action.value ? "default" : "outline"}
+                          size="sm"
+                          disabled={savingPrivacy || activeStep > 1}
+                          onClick={() => handleColumnAction(column.column, action.value)}
+                        >
+                          {action.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <Checkbox
+                  id="privacy-attestation"
+                  checked={privacyAttested}
+                  disabled={savingPrivacy || activeStep > 1}
+                  onCheckedChange={(checked) => handleAttestationChange(checked === true)}
+                />
+                <Label htmlFor="privacy-attestation" className="text-sm font-normal leading-5">
+                  I have reviewed the reported personal-data findings and choose to publish this listing as-is.
+                </Label>
+              </div>
+            </div>
+          )}
+
+          <Button onClick={handleContinuePrivacy} disabled={activeStep > 1 || !canContinuePrivacy || savingPrivacy} size="sm">
+            Continue to metadata
+          </Button>
+        </CardContent>
+      </Card>
+
+      {activeStep >= 2 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CheckCircle2 className="h-4 w-4 text-primary" />
+              Step 2: Metadata Review
+            </CardTitle>
+            <CardDescription>Generate, edit, and approve the allAI listing draft.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!metadata && (
+              <Button onClick={handleGenerateMetadata} disabled={metadataState === "running"} size="sm" className="gap-2">
+                {metadataState === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
+                Generate allAI draft
+              </Button>
+            )}
+
+            {metadata && (
+              <>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="metadata-title">Title</Label>
+                    <Input id="metadata-title" value={form.title} onChange={(event) => setFormPatch({ title: event.target.value })} disabled={activeStep > 2} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="metadata-description">Description</Label>
+                    <Textarea id="metadata-description" value={form.description} onChange={(event) => setFormPatch({ description: event.target.value })} rows={5} disabled={activeStep > 2} />
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="metadata-category">Category</Label>
+                      <Select value={form.category} onValueChange={(category) => setFormPatch({ category })} disabled={activeStep > 2}>
+                        <SelectTrigger id="metadata-category" className="bg-background border-border">
+                          <SelectValue placeholder="Choose a category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categoryOptions.map((category) => (
+                            <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="rounded-md border p-3">
+                        <span className="text-muted-foreground">Privacy score</span>
+                        <p className="font-medium">{metadata.privacy_score == null ? "Not available" : `${metadata.privacy_score}/10`}</p>
+                      </div>
+                      <div className="rounded-md border p-3">
+                        <span className="text-muted-foreground">Freshness score</span>
+                        <p className="font-medium">{Math.round(metadata.freshness_score * 100)}%</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="metadata-tags">Tags</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="metadata-tags"
+                        value={tagInput}
+                        onChange={(event) => setTagInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addTag();
+                          }
+                        }}
+                        disabled={activeStep > 2}
+                      />
+                      <Button type="button" variant="outline" onClick={addTag} disabled={activeStep > 2 || !tagInput.trim()}>Add</Button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {form.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="gap-1">
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => setFormPatch({ tags: form.tags.filter((item) => item !== tag) })}
+                            className="hover:text-destructive"
+                            aria-label={`Remove tag ${tag}`}
+                            disabled={activeStep > 2}
+                          >
+                            <XCircle className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <Button onClick={handleApproveMetadata} disabled={activeStep > 2 || !form.title.trim() || !form.description.trim()} size="sm">
+                  Approve metadata
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {activeStep >= 3 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Store className="h-4 w-4 text-primary" />
+              Step 3: Listing Details
+            </CardTitle>
+            <CardDescription>Edit buyer-facing details and publish when ready.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <ListingEditorForm
+              value={form}
+              onChange={setForm}
+              tagInput={tagInput}
+              onTagInputChange={setTagInput}
+              disabled={publishing}
+            />
+
+            <Button onClick={handlePublish} disabled={publishing} size="sm" className="gap-2">
               {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
               {publishing ? "Publishing..." : "Publish to ai.market"}
             </Button>
-            <Button onClick={handleSave} disabled={saving || publishing || metadataState === "running"} size="sm" variant="outline">
-              {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
-              Save draft
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -531,7 +818,7 @@ const DatasetDetail = () => {
     }
   };
 
-  if (apiDataset.status === "preview_ready" && !apiDataset.listing_id) {
+  if (apiDataset.status !== "error" && !apiDataset.listing_id) {
     return (
       <ListingPreparation
         dataset={apiDataset}

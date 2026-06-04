@@ -330,6 +330,15 @@ export interface PIIEntitiesResponse {
   count: number;
 }
 
+export type PIIColumnAction = 'exclude' | 'redact' | 'keep';
+
+export interface PIIConfigResponse {
+  dataset_id: string;
+  column_actions: Record<string, PIIColumnAction>;
+  privacy_attested: boolean;
+  updated_at: string | null;
+}
+
 // BQ-109: Dataset preview types
 export interface DatasetPreviewResponse {
   dataset_id: string;
@@ -710,6 +719,22 @@ export const piiApi = {
   
   getScan: (datasetId: string) =>
     apiFetch<PIIScanResponse>(`/api/pii/scan/${datasetId}`),
+
+  getConfig: (datasetId: string) =>
+    apiFetch<PIIConfigResponse>(`/api/pii/config/${datasetId}`),
+
+  saveConfig: (
+    datasetId: string,
+    columnActions: Record<string, PIIColumnAction>,
+    privacyAttested = false
+  ) =>
+    apiFetch<PIIConfigResponse>(`/api/pii/config/${datasetId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        column_actions: columnActions,
+        privacy_attested: privacyAttested,
+      }),
+    }),
   
   entities: () =>
     apiFetch<PIIEntitiesResponse>('/api/pii/entities'),

@@ -4,9 +4,9 @@ PII Detection API endpoints.
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, Body, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
-from typing import Dict
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,10 @@ class PIIColumnConfig(BaseModel):
         json_schema_extra={
             "example": {"email": "redact", "ssn": "exclude", "city": "keep"}
         },
+    )
+    privacy_attested: bool = Field(
+        False,
+        description="Seller acknowledged unresolved personal-data findings before proceeding.",
     )
 
 
@@ -178,7 +182,7 @@ async def get_pii_scan_result(
 @router.post("/config/{dataset_id}")
 async def save_pii_config(
     dataset_id: str,
-    body: PIIColumnConfig,
+    body: Dict[str, Any] = Body(...),
     processing: ProcessingService = Depends(get_processing_service),
     pii_service: PIIService = Depends(get_pii_service),
     user: AuthenticatedUser = Depends(get_current_user),
@@ -199,10 +203,21 @@ async def save_pii_config(
     if not record:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
 
+    if "column_actions" in body:
+        column_actions = body.get("column_actions") or {}
+        privacy_attested = bool(body.get("privacy_attested", False))
+    else:
+        column_actions = body
+        privacy_attested = False
+
+    if not isinstance(column_actions, dict):
+        raise HTTPException(status_code=422, detail="column_actions must be an object")
+
     try:
         config = pii_service.save_pii_config(
             dataset_id=dataset_id,
-            column_actions=body.column_actions,
+            column_actions=column_actions,
+            privacy_attested=privacy_attested,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -234,6 +249,7 @@ async def get_pii_config(
         return {
             "dataset_id": dataset_id,
             "column_actions": {},
+            "privacy_attested": False,
             "updated_at": None,
         }
 
