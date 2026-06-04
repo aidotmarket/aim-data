@@ -1,9 +1,12 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
@@ -19,6 +22,7 @@ from app.routers import s3_connections
 from app.services.s3_broker_client import S3BrokerError
 from app.services import fulfillment_service, s3_scan_service
 from app.services.fulfillment_service import FulfillmentService
+from app.services.processing_service import ProcessingService
 from app.services.s3_scan_service import S3ScanService
 
 
@@ -41,7 +45,7 @@ def s3_engine():
 
 
 @pytest.fixture
-def session_context(s3_engine, monkeypatch):
+def session_context(s3_engine, monkeypatch, tmp_path):
     @contextmanager
     def _session_context():
         with Session(s3_engine) as session:
@@ -50,6 +54,11 @@ def session_context(s3_engine, monkeypatch):
     monkeypatch.setattr(s3_scan_service, "get_session_context", _session_context)
     monkeypatch.setattr(s3_connections, "get_session_context", _session_context)
     monkeypatch.setattr(fulfillment_service, "get_session_context", _session_context)
+    monkeypatch.setattr(ProcessingService, "_get_session", staticmethod(lambda: _session_context()))
+    monkeypatch.setattr(s3_connections.settings, "upload_directory", str(tmp_path / "uploads"))
+    monkeypatch.setattr(s3_connections.settings, "processed_directory", str(tmp_path / "processed"))
+    processing = ProcessingService()
+    monkeypatch.setattr(s3_connections, "get_processing_service", lambda: processing)
     return _session_context
 
 
@@ -71,6 +80,12 @@ class FakeBroker:
         if kwargs.get("continuation_token"):
             return self.pages[1]
         return self.pages[0]
+
+    def presign_object(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.error:
+            raise self.error
+        return {"status": "ok", "url": "https://presigned.example/report.csv"}
 
 
 def _connection(**overrides) -> S3Connection:
@@ -203,7 +218,7 @@ def test_scan_broker_error_marks_failed_without_raw_aws_internals(session_contex
     assert stored.status == "failed"
 
 
-def test_register_endpoint_links_object_and_creates_dataset(client, session_context):
+def test_register_endpoint_links_object_and_creates_dataset(client, session_context, monkeypatch):
     connection = _add_connection(session_context)
     scan_job = S3ScanJob(id=str(uuid4()), connection_id=connection.id, status="completed")
     metadata = S3ObjectMetadata(
@@ -222,6 +237,49 @@ def test_register_endpoint_links_object_and_creates_dataset(client, session_cont
         session.add(metadata)
         session.commit()
 
+    broker = FakeBroker()
+    object_bytes = b"name,value\nAda,1\n"
+    download_calls = []
+    enqueued = []
+
+    class FakeStreamResponse:
+        def __init__(self, url: str):
+            self.response = httpx.Response(200, request=httpx.Request("GET", url))
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def raise_for_status(self):
+            self.response.raise_for_status()
+
+        async def aiter_bytes(self, chunk_size: int):
+            for start in range(0, len(object_bytes), chunk_size):
+                yield object_bytes[start : start + chunk_size]
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, method: str, url: str):
+            download_calls.append((method, url))
+            return FakeStreamResponse(url)
+
+    async def fake_process_dataset_task(dataset_id: str):
+        enqueued.append(dataset_id)
+
+    monkeypatch.setattr(s3_connections, "S3BrokerClient", lambda: broker)
+    monkeypatch.setattr(s3_connections.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(s3_connections, "process_dataset_task", fake_process_dataset_task)
+
     response = client.post(
         f"/api/s3-connections/{connection.id}/objects/{metadata_id}/register",
         json={"listing_id": "lst_123"},
@@ -231,18 +289,28 @@ def test_register_endpoint_links_object_and_creates_dataset(client, session_cont
     body = response.json()
     assert body["dataset"]["original_filename"] == "report.csv"
     assert body["dataset"]["file_type"] == "csv"
-    assert body["dataset"]["file_size_bytes"] == 789
-    assert body["dataset"]["status"] == "preview_ready"
-    assert body["dataset"]["storage_filename"] == "exports/report.csv"
+    assert body["dataset"]["file_size_bytes"] == len(object_bytes)
+    assert body["dataset"]["status"] == "uploaded"
+    assert body["dataset"]["storage_filename"].endswith("_report.csv")
     assert body["dataset"]["listing_id"] == "lst_123"
     assert body["object"]["dataset_id"] == body["dataset"]["id"]
+    assert broker.calls == [
+        {
+            "role_arn": connection.role_arn,
+            "region": connection.region,
+            "bucket": connection.bucket,
+            "object_key": "exports/report.csv",
+        }
+    ]
+    assert download_calls == [("GET", "https://presigned.example/report.csv")]
+    assert enqueued == [body["dataset"]["id"]]
 
-    second = client.post(
-        f"/api/s3-connections/{connection.id}/objects/{metadata_id}/register",
-        json={"listing_id": "lst_123"},
-    )
-    assert second.status_code == 200
-    assert second.json()["dataset"]["id"] == body["dataset"]["id"]
+    with session_context() as session:
+        dataset = session.get(DatasetRecord, body["dataset"]["id"])
+    metadata_json = json.loads(dataset.metadata_json)
+    assert metadata_json["source_type"] == "s3"
+    assert metadata_json["source_object_key"] == "exports/report.csv"
+    assert Path(s3_connections.settings.upload_directory, dataset.storage_filename).read_bytes() == object_bytes
 
 
 def test_objects_endpoint_paginates_and_filters(client, session_context):
