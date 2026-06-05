@@ -23,7 +23,7 @@ SPEC: BQ-CP-01, Acceptance Criteria 13; BQ-073 AC 9, 10, 11
 import pytest
 import httpx
 from unittest.mock import AsyncMock, patch
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.core.errors import AIMDataError
@@ -883,6 +883,34 @@ class TestBrainMessageMetering:
                         assert gate["type"] == "BALANCE_GATE"
                         assert gate["reason"] == "balance_depleted"
                         assert gate["message"] == "Purchase credits to use Co-Pilot"
+
+    def test_brain_message_monthly_allowance_reached_uses_reason_aware_gate(self, client):
+        """Monthly allowance cutoff should not prompt customers to purchase credits."""
+        with client.websocket_connect("/ws/copilot") as ws:
+            connected = ws.receive_json()
+            assert connected["type"] == "CONNECTED"
+
+            with patch(
+                "app.routers.copilot.copilot_service.process_message_agentic",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("force fallback path"),
+            ), patch(
+                "app.routers.copilot.copilot_service.process_message_streaming",
+                new_callable=AsyncMock,
+                side_effect=HTTPException(
+                    status_code=402,
+                    detail="monthly_allowance_reached",
+                ),
+            ):
+                ws.send_json({
+                    "type": "BRAIN_MESSAGE",
+                    "message": "Hit monthly allowance",
+                })
+
+                gate = ws.receive_json()
+                assert gate["type"] == "BALANCE_GATE"
+                assert gate["reason"] == "monthly_allowance_reached"
+                assert "Purchase" not in gate["message"]
 
 
 # ---------------------------------------------------------------------------
