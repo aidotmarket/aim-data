@@ -472,17 +472,22 @@ export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
         wsRef.current?.send(JSON.stringify({ type: "PONG", nonce: data.nonce }));
         break;
 
-      case "BALANCE_GATE":
+      case "BALANCE_GATE": {
+        const balanceGateMessage =
+          typeof data.message === "string" && data.message.trim().length > 0
+            ? data.message
+            : "You've used your ai.market credits. Purchase more to continue chatting with allAI.";
         setMessages((prev) => [
           ...prev,
           {
             id: `gate_${Date.now()}`,
             role: "system",
-            content: "You've used your ai.market credits. Purchase more to continue chatting with allAI.",
+            content: balanceGateMessage,
             createdAt: new Date().toISOString(),
           },
         ]);
         break;
+      }
 
       case "NUDGE": {
         // BQ-128 Phase 3: Handle proactive nudge

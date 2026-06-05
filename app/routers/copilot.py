@@ -506,10 +506,14 @@ def _balance_info_message(balance_cents: int, reason: Optional[str] = None) -> d
 
 def _balance_gate_message(balance_cents: int, reason: str) -> dict:
     """Build a BALANCE_GATE WebSocket message (402 equivalent for WS)."""
+    messages = {
+        "monthly_allowance_reached": "You've reached this month's free allAI allowance. It resets at the start of next month.",
+        "monthly_allowance_disabled": "Free allAI access is currently turned off for your account. Contact ai.market support to re-enable it.",
+    }
     return {
         "type": "BALANCE_GATE",
         "balance_cents": balance_cents,
-        "message": "Purchase credits to use Co-Pilot",
+        "message": messages.get(reason, "Purchase credits to use Co-Pilot"),
         "reason": reason,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -962,7 +966,11 @@ async def websocket_copilot(websocket: WebSocket):
         except HTTPException as he:
             if he.status_code == 402:
                 try:
-                    await safe_send_json(ws, _balance_gate_message(cached_balance, "insufficient_balance"))
+                    reason = he.detail if he.detail in {
+                        "monthly_allowance_reached",
+                        "monthly_allowance_disabled",
+                    } else "insufficient_balance"
+                    await safe_send_json(ws, _balance_gate_message(cached_balance, reason))
                 except WebSocketSendError:
                     pass
             else:
