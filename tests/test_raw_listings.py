@@ -8,10 +8,14 @@ Phase: BQ-VZ-RAW-LISTINGS
 Created: 2026-03-03
 """
 
+from types import SimpleNamespace
+
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.services import raw_listing_service
 from app.routers.raw_listings import router as raw_listings_router
 
 
@@ -53,6 +57,44 @@ def draft_listing(client, registered_file):
         "price_cents": 999,
     })
     return resp.json()
+
+
+class MockAsyncClient:
+    response = httpx.Response(
+        201,
+        json={"id": "marketplace-listing-1"},
+        request=httpx.Request("POST", "https://ai.market.test/api/v1/listings/"),
+    )
+    calls = []
+
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    async def post(self, url, **kwargs):
+        self.__class__.calls.append({"url": url, **kwargs})
+        return self.__class__.response
+
+
+@pytest.fixture
+def marketplace_publish_mock(monkeypatch):
+    MockAsyncClient.calls = []
+    MockAsyncClient.response = httpx.Response(
+        201,
+        json={"id": "marketplace-listing-1"},
+        request=httpx.Request("POST", "https://ai.market.test/api/v1/listings/"),
+    )
+    store = SimpleNamespace(state=SimpleNamespace(ai_market_access_token="seller-token"))
+    monkeypatch.setattr(raw_listing_service, "get_serial_store", lambda: store)
+    monkeypatch.setattr(raw_listing_service.settings, "ai_market_url", "https://ai.market.test")
+    monkeypatch.setattr(raw_listing_service.httpx, "AsyncClient", MockAsyncClient)
+    return MockAsyncClient
 
 
 class TestRawListingCreate:
@@ -122,7 +164,7 @@ class TestRawListingUpdate:
 class TestRawListingPublish:
     """Test POST /api/raw/listings/{id}/publish — publish lifecycle."""
 
-    def test_publish_draft(self, client, draft_listing):
+    def test_publish_draft(self, client, draft_listing, marketplace_publish_mock):
         """Publishing a draft listing transitions status to 'listed'."""
         listing_id = draft_listing["id"]
         resp = client.post(f"/api/raw/listings/{listing_id}/publish")
@@ -131,7 +173,60 @@ class TestRawListingPublish:
         assert data["status"] == "listed"
         assert data["published_at"] is not None
 
-    def test_publish_already_listed(self, client, draft_listing):
+    def test_publish_creates_marketplace_listing_with_seller_bearer(
+        self,
+        client,
+        draft_listing,
+        marketplace_publish_mock,
+    ):
+        """Publishing posts a raw ListingCreate payload and stores ai.market id."""
+        listing_id = draft_listing["id"]
+        resp = client.post(f"/api/raw/listings/{listing_id}/publish")
+        assert resp.status_code == 200
+        assert resp.json()["marketplace_listing_id"] == "marketplace-listing-1"
+
+        assert len(marketplace_publish_mock.calls) == 1
+        call = marketplace_publish_mock.calls[0]
+        assert call["url"] == "https://ai.market.test/api/v1/listings/"
+        assert call["headers"]["Authorization"] == "Bearer seller-token"
+        payload = call["json"]
+        assert payload["title"] == "Test Dataset"
+        assert payload["description"] == "A test dataset for unit testing."
+        assert payload["price"] == 9.99
+        assert payload["model_provider"] == "local"
+        assert payload["listing_type"] == "raw"
+        assert payload["compliance_status"] == "not_checked"
+        assert payload["pricing_type"] == "one_time"
+        assert payload["category"] == "other"
+        assert payload["file_hash"]
+        assert payload["raw_metadata"]["file_size_bytes"] > 0
+        assert payload["raw_metadata"]["mime_type"] is not None
+        assert payload["raw_metadata"]["content_hash"] == payload["file_hash"]
+        assert payload["raw_metadata"]["preview_snippet"].startswith("col1,col2")
+        assert payload["raw_metadata"]["tags"] == ["test", "csv"]
+
+    def test_publish_marketplace_401_is_not_session_expiry(
+        self,
+        client,
+        draft_listing,
+        marketplace_publish_mock,
+    ):
+        """A marketplace auth rejection surfaces as a local 4xx domain error."""
+        marketplace_publish_mock.response = httpx.Response(
+            401,
+            json={"detail": "Unauthorized"},
+            request=httpx.Request("POST", "https://ai.market.test/api/v1/listings/"),
+        )
+
+        listing_id = draft_listing["id"]
+        resp = client.post(f"/api/raw/listings/{listing_id}/publish")
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "ai.market rejected publish; reconnect your account."
+
+        listed = client.get("/api/raw/listings?status=listed").json()["listings"]
+        assert all(item["id"] != listing_id for item in listed)
+
+    def test_publish_already_listed(self, client, draft_listing, marketplace_publish_mock):
         """Publishing an already-listed listing returns 409."""
         listing_id = draft_listing["id"]
         client.post(f"/api/raw/listings/{listing_id}/publish")
@@ -142,7 +237,7 @@ class TestRawListingPublish:
 class TestRawListingDelist:
     """Test POST /api/raw/listings/{id}/delist — delist lifecycle."""
 
-    def test_delist_listed(self, client, draft_listing):
+    def test_delist_listed(self, client, draft_listing, marketplace_publish_mock):
         """Delisting a listed listing transitions status to 'delisted'."""
         listing_id = draft_listing["id"]
         client.post(f"/api/raw/listings/{listing_id}/publish")

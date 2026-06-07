@@ -117,6 +117,40 @@ async function apiFetch<T>(
   return response.json();
 }
 
+async function apiFetchWithoutAuthRedirect<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${getApiUrl()}${endpoint}`;
+  const accessToken = getStoredAccessToken();
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>),
+  };
+
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    const message = error.detail || error.error?.safe_message || error.error?.title || `API error: ${response.status}`;
+    throw new Error(message);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json();
+}
+
 // Dataset types from API
 export interface ApiDataset {
   id: string;
@@ -929,6 +963,7 @@ export const rawFilesApi = {
     raw_file_id: string;
     title: string;
     description: string;
+    category?: string;
     tags?: string[];
     price_cents?: number;
   }) =>
@@ -939,7 +974,7 @@ export const rawFilesApi = {
 
   /** Publish a draft raw listing to ai.market. */
   publishRawListing: (listingId: string) =>
-    apiFetch<RawListing>(`/api/raw/listings/${listingId}/publish`, {
+    apiFetchWithoutAuthRedirect<RawListing>(`/api/raw/listings/${listingId}/publish`, {
       method: 'POST',
     }),
 
