@@ -31,7 +31,14 @@ from app.schemas.raw_listings import (
     RawListingUpdateRequest,
 )
 from app.services.raw_file_service import RawFileService, get_raw_file_service
-from app.services.raw_listing_service import RawListingService, get_raw_listing_service
+from app.services.raw_listing_service import (
+    MarketplaceAuthError,
+    MarketplaceConnectionError,
+    MarketplaceNotConnectedError,
+    MarketplacePublishError,
+    RawListingService,
+    get_raw_listing_service,
+)
 from app.services.entitlement_service import EntitlementService, get_entitlement_service
 
 logger = logging.getLogger(__name__)
@@ -286,6 +293,7 @@ async def create_raw_listing(
         raw_file_id=req.raw_file_id,
         title=req.title,
         description=req.description,
+        category=req.category,
         tags=req.tags,
         price_cents=req.price_cents,
     )
@@ -306,6 +314,7 @@ async def update_raw_listing(
         listing_id=listing_id,
         title=req.title,
         description=req.description,
+        category=req.category,
         tags=req.tags,
         price_cents=req.price_cents,
     )
@@ -324,11 +333,19 @@ async def publish_raw_listing(
     svc: RawListingService = Depends(get_raw_listing_service),
 ):
     try:
-        listing = svc.publish_listing(listing_id)
+        listing = await svc.publish_listing(listing_id)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Listing not found")
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except MarketplaceNotConnectedError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except MarketplaceAuthError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except MarketplaceConnectionError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except MarketplacePublishError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     return _listing_response(listing)
 
 

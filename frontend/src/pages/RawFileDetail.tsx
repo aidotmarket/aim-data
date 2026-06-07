@@ -19,7 +19,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { marketplaceApi, rawFilesApi, type RawFile } from "@/lib/api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { rawFilesApi, type RawFile } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { useMode } from "@/contexts/ModeContext";
 import {
@@ -204,6 +205,7 @@ export default function RawFileDetail() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [form, setForm] = useState<ListingEditorValue>({
@@ -258,6 +260,7 @@ export default function RawFileDetail() {
 
   const handlePublish = async () => {
     if (!file) return;
+    setPublishError(null);
     const price = Number.parseFloat(form.priceUsd);
     if (!form.title.trim()) {
       toast({ title: "Title required", description: "Add a title for this listing.", variant: "destructive" });
@@ -274,22 +277,23 @@ export default function RawFileDetail() {
 
     setPublishing(true);
     try {
-      await marketplaceApi.publish({
-        vz_dataset_id: file.id,
+      const listing = await rawFilesApi.createRawListing({
+        raw_file_id: file.id,
         title: form.title.trim(),
         description: form.description.trim(),
-        tags: form.tags,
         category: form.category,
+        tags: form.tags,
         price_cents: Math.round(price * 100),
-        file_format: file.mime_type || null,
-        file_size_bytes: file.file_size_bytes,
       });
+      await rawFilesApi.publishRawListing(listing.id);
       setFile({ ...file, listing_status: "listed", price_cents: Math.round(price * 100) });
       toast({ title: "Live on ai.market", description: "Your listing has been published." });
     } catch (e) {
+      const message = e instanceof Error ? e.message : "Failed to publish listing.";
+      setPublishError(message);
       toast({
         title: "Publish failed",
-        description: e instanceof Error ? e.message : "Failed to publish listing.",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -387,6 +391,12 @@ export default function RawFileDetail() {
             onTagInputChange={setTagInput}
             disabled={saving || publishing}
           />
+
+          {publishError && (
+            <Alert variant="destructive">
+              <AlertDescription>{publishError}</AlertDescription>
+            </Alert>
+          )}
 
           {/* Show extracted technical metadata if present */}
           {file.metadata && (file.metadata as Record<string, unknown>).technical_metadata && (

@@ -44,6 +44,7 @@ class RawListingCreateRequest(BaseModel):
     raw_file_id: str = Field(..., description="UUID of the registered raw file")
     title: str = Field(..., max_length=256)
     description: str = Field(..., min_length=1)
+    category: Optional[str] = Field(default=None, description="Marketplace category slug")
     tags: List[str] = Field(default_factory=list, max_length=20)
     price_cents: Optional[int] = Field(default=None, ge=0)
 
@@ -51,6 +52,7 @@ class RawListingCreateRequest(BaseModel):
 class RawListingUpdateRequest(BaseModel):
     title: Optional[str] = Field(default=None, max_length=256)
     description: Optional[str] = Field(default=None, min_length=1)
+    category: Optional[str] = Field(default=None, description="Marketplace category slug")
     tags: Optional[List[str]] = None
     price_cents: Optional[int] = Field(default=None, ge=0)
 

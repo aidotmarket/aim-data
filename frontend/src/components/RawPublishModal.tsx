@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { marketplaceApi, type RawFile } from "@/lib/api";
+import { rawFilesApi, type RawFile } from "@/lib/api";
 
 interface RawPublishModalProps {
   open: boolean;
@@ -71,20 +71,24 @@ const RawPublishModal = ({
         setError("Price must be a non-negative number.");
         return;
       }
+      if (usd > 0 && usd < 25) {
+        setError("Paid listings must be at least $25. Leave price empty or use 0 for a free listing.");
+        return;
+      }
       priceCents = Math.round(usd * 100);
     }
 
     setSubmitting(true);
     try {
-      await marketplaceApi.publish({
-        vz_dataset_id: rawFile.id,
+      const listing = await rawFilesApi.createRawListing({
+        raw_file_id: rawFile.id,
         title: title.trim(),
         description: description.trim(),
+        category: "other",
         tags,
         price_cents: priceCents ?? 0,
-        file_format: rawFile.mime_type || null,
-        file_size_bytes: rawFile.file_size_bytes,
       });
+      await rawFilesApi.publishRawListing(listing.id);
       onPublishSuccess();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Publish failed";
