@@ -519,8 +519,8 @@ async def aim_market_login(
             raise HTTPException(status_code=401, detail="Invalid verification code")
         if r.status_code != 200:
             raise HTTPException(
-                status_code=r.status_code,
-                detail=r.json().get("detail", "ai.market 2FA verification failed"),
+                status_code=502,
+                detail="Two-factor verification failed. Please try again.",
             )
 
         data = r.json()

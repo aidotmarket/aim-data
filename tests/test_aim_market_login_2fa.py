@@ -178,3 +178,33 @@ async def test_aim_market_login_2fa_wrong_code_returns_401_without_clearing_chal
     ]
     assert FakeAsyncClient.get_calls == []
     assert mock_ai_market == []
+
+
+@pytest.mark.asyncio
+async def test_aim_market_login_2fa_unexpected_status_returns_generic_502(mock_ai_market):
+    FakeAsyncClient.post_responses.append(
+        httpx.Response(500, json={"detail": "upstream internal failure"})
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await auth.aim_market_login(
+            {
+                "email": "seller@example.com",
+                "pre_auth_token": "pre-auth-token",
+                "code": "123456",
+            },
+            request=None,
+            db=None,
+        )
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == "Two-factor verification failed. Please try again."
+    assert "upstream internal failure" not in exc.value.detail
+    assert FakeAsyncClient.post_calls == [
+        {
+            "url": "https://ai.market.test/api/v1/auth/2fa/verify",
+            "json": {"pre_auth_token": "pre-auth-token", "code": "123456"},
+        }
+    ]
+    assert FakeAsyncClient.get_calls == []
+    assert mock_ai_market == []
