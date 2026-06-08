@@ -462,6 +462,75 @@ async def aim_market_login(
     """Proxy login to ai.market and pre-warm validation cache."""
     email = payload.get("email")
     password = payload.get("password")
+    pre_auth_token = payload.get("pre_auth_token")
+    code = payload.get("code")
+
+    async def finish_token_login(data: dict) -> dict:
+        access_token = data["access_token"]
+        me = None
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            me_r = await client.get(
+                f"{settings.ai_market_url}/api/v1/auth/me",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if me_r.status_code == 200:
+            me = me_r.json()
+            await _handle_ai_market_token(access_token, user_data=me, db=db)
+            if settings.keystore_passphrase:
+                try:
+                    from app.core.crypto import DeviceCrypto
+                    from app.services.registration_service import ensure_vz_install_registered
+
+                    crypto = DeviceCrypto(
+                        keystore_path=settings.keystore_path,
+                        passphrase=settings.keystore_passphrase,
+                    )
+                    crypto.get_or_create_keypairs()
+                    await ensure_vz_install_registered(
+                        crypto,
+                        access_token=access_token,
+                        seller_id=str(me.get("id") or ""),
+                    )
+                except Exception:
+                    logger.warning("VZ install registration during ai.market login failed", exc_info=True)
+
+        return {
+            "access_token": data["access_token"],
+            "refresh_token": data["refresh_token"],
+            "token_type": data.get("token_type", "bearer"),
+            "onboarding_required": data.get("onboarding_required", False),
+            "onboarding_step": data.get("onboarding_step"),
+            "user": me,
+        }
+
+    if pre_auth_token and code:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            try:
+                r = await client.post(
+                    f"{settings.ai_market_url}/api/v1/auth/2fa/verify",
+                    json={"pre_auth_token": pre_auth_token, "code": code},
+                )
+            except httpx.TimeoutException:
+                raise HTTPException(status_code=504, detail="ai.market auth service timeout")
+            except httpx.RequestError:
+                raise HTTPException(status_code=503, detail="ai.market auth service unreachable")
+
+        if r.status_code == 401:
+            raise HTTPException(status_code=401, detail="Invalid verification code")
+        if r.status_code != 200:
+            raise HTTPException(
+                status_code=r.status_code,
+                detail=r.json().get("detail", "ai.market 2FA verification failed"),
+            )
+
+        data = r.json()
+        if "access_token" not in data:
+            raise HTTPException(
+                status_code=502,
+                detail="ai.market 2FA verification response missing access token",
+            )
+        return await finish_token_login(data)
+
     if not email or not password:
         raise HTTPException(status_code=400, detail="email and password required")
 
@@ -491,6 +560,11 @@ async def aim_market_login(
 
     data = r.json()
     if "access_token" not in data:
+        if data.get("pre_auth_token"):
+            return {
+                "requires_2fa": True,
+                "pre_auth_token": data["pre_auth_token"],
+            }
         raise HTTPException(
             status_code=501,
             detail=(
@@ -499,42 +573,7 @@ async def aim_market_login(
             ),
         )
 
-    access_token = data["access_token"]
-    me = None
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        me_r = await client.get(
-            f"{settings.ai_market_url}/api/v1/auth/me",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-    if me_r.status_code == 200:
-        me = me_r.json()
-        await _handle_ai_market_token(access_token, user_data=me, db=db)
-        if settings.keystore_passphrase:
-            try:
-                from app.core.crypto import DeviceCrypto
-                from app.services.registration_service import ensure_vz_install_registered
-
-                crypto = DeviceCrypto(
-                    keystore_path=settings.keystore_path,
-                    passphrase=settings.keystore_passphrase,
-                )
-                crypto.get_or_create_keypairs()
-                await ensure_vz_install_registered(
-                    crypto,
-                    access_token=access_token,
-                    seller_id=str(me.get("id") or ""),
-                )
-            except Exception:
-                logger.warning("VZ install registration during ai.market login failed", exc_info=True)
-
-    return {
-        "access_token": data["access_token"],
-        "refresh_token": data["refresh_token"],
-        "token_type": data.get("token_type", "bearer"),
-        "onboarding_required": data.get("onboarding_required", False),
-        "onboarding_step": data.get("onboarding_step"),
-        "user": me,
-    }
+    return await finish_token_login(data)
 
 
 @router.post("/aim-market-refresh", response_model=None)

@@ -22,7 +22,9 @@ interface AuthContextType {
   user: UserInfo | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  pending2fa: boolean;
+  login: (email: string, password: string) => Promise<"success" | "requires_2fa">;
+  verify2fa: (code: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -40,6 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [apiKey, setApiKey] = useState<string | null>(() => localStorage.getItem(ACCESS_TOKEN_KEY));
   const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pending2fa, setPending2fa] = useState<{ email: string; preAuthToken: string } | null>(null);
 
   const clearAuth = useCallback(() => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -47,6 +50,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(LEGACY_KEY);
     setApiKey(null);
     setUser(null);
+    setPending2fa(null);
+  }, []);
+
+  const completeLogin = useCallback((data: any) => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
+    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+    setApiKey(data.access_token);
+    setUser(normalizeUser(data.user));
+    setPending2fa(null);
   }, []);
 
   // Validate stored access token on mount.
@@ -125,11 +137,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const data = await res.json();
-    localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
-    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
-    setApiKey(data.access_token);
-    setUser(normalizeUser(data.user));
-  }, []);
+    if (data.requires_2fa && data.pre_auth_token) {
+      setPending2fa({ email, preAuthToken: data.pre_auth_token });
+      return "requires_2fa";
+    }
+
+    completeLogin(data);
+    return "success";
+  }, [completeLogin]);
+
+  const verify2fa = useCallback(async (code: string) => {
+    if (!pending2fa) {
+      throw new Error("No two-factor login is pending");
+    }
+
+    const res = await fetch(`${getApiUrl()}/api/auth/aim-market-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: pending2fa.email,
+        pre_auth_token: pending2fa.preAuthToken,
+        code,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Verification failed" }));
+      throw new Error(err.detail || `Verification failed: ${res.status}`);
+    }
+
+    const data = await res.json();
+    completeLogin(data);
+  }, [completeLogin, pending2fa]);
 
   const logout = useCallback(() => {
     clearAuth();
@@ -142,7 +181,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         isAuthenticated: !!apiKey && !!user,
         isLoading,
+        pending2fa: !!pending2fa,
         login,
+        verify2fa,
         logout,
       }}
     >
