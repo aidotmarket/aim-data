@@ -288,6 +288,15 @@ async def lifespan(app: FastAPI):
         _safe_background_task("activation_manager", _activation_mgr.startup())
     )
 
+    # Dataset processing queue workers consume uploaded datasets for profiling.
+    from app.services.processing_queue import get_processing_queue
+    _processing_queue = get_processing_queue()
+    _processing_queue.start(wrapper=_safe_background_task)
+    logger.info(
+        "Processing queue workers started (concurrency=%d)",
+        _processing_queue._concurrency,
+    )
+
     logger.info("API ready — all background tasks launched")
 
     yield
@@ -326,6 +335,9 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await _activation_mgr.shutdown()
+
+    # Stop dataset processing queue workers
+    await _processing_queue.shutdown()
 
     # BQ-110: Cancel queue processor gracefully
     queue_task.cancel()
