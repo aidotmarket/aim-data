@@ -48,6 +48,7 @@ export interface ChatMessage {
 
 interface CoPilotState {
   isOpen: boolean;
+  embeddedSurfaceActive: boolean;
   sessionId: string | null;
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -65,6 +66,7 @@ interface CoPilotContextValue extends CoPilotState {
   open: () => void;
   close: () => void;
   toggle: () => void;
+  setEmbeddedSurfaceActive: (active: boolean) => void;
   sendMessage: (text: string) => void;
   stopStreaming: () => void;
   setToneMode: (mode: ToneMode) => void;
@@ -112,6 +114,7 @@ export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { channel, hasFeature, isLoading: modeLoading } = useMode();
 
   const [isOpen, setIsOpen] = useState(false);
+  const [embeddedSurfaceActive, setEmbeddedSurfaceActive] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -355,7 +358,7 @@ export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [apiKey, isAuthenticated, configuredAvailable]);
 
-  const handleWsMessage = useCallback((data: any) => {
+  const handleWsMessage = useCallback((data: Record<string, unknown>) => {
     switch (data.type) {
       case "CONNECTED":
         setIsConnected(true);
@@ -765,6 +768,7 @@ export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <CoPilotContext.Provider
       value={{
         isOpen,
+        embeddedSurfaceActive,
         sessionId,
         messages,
         isStreaming,
@@ -779,6 +783,7 @@ export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
         open,
         close,
         toggle,
+        setEmbeddedSurfaceActive,
         sendMessage,
         stopStreaming,
         setToneMode,

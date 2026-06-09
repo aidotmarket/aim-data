@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, type ReactNode } from "react";
 import { Rnd } from "react-rnd";
 import { X } from "lucide-react";
 import { useCoPilot } from "@/contexts/CoPilotContext";
@@ -54,10 +54,19 @@ function saveWindowState(state: WindowState) {
   }
 }
 
-export default function ChatPanel() {
+interface ChatPanelProps {
+  embedded?: boolean;
+  title?: string;
+  subtitle?: string;
+  footer?: ReactNode;
+  className?: string;
+}
+
+export default function ChatPanel({ embedded = false, title, subtitle, footer, className }: ChatPanelProps) {
   const {
     isOpen,
     close,
+    embeddedSurfaceActive,
     messages,
     isStreaming,
     allieAvailable,
@@ -94,7 +103,7 @@ export default function ChatPanel() {
     }
   }, [messages]);
 
-  const handleDragStop = useCallback((_e: any, d: { x: number; y: number }) => {
+  const handleDragStop = useCallback((_e: unknown, d: { x: number; y: number }) => {
     setWindowState((prev) => {
       const next = { ...prev, x: d.x, y: d.y };
       saveWindowState(next);
@@ -103,7 +112,7 @@ export default function ChatPanel() {
   }, []);
 
   const handleResizeStop = useCallback(
-    (_e: any, _dir: any, ref: HTMLElement, _delta: any, position: { x: number; y: number }) => {
+    (_e: unknown, _dir: unknown, ref: HTMLElement, _delta: unknown, position: { x: number; y: number }) => {
       setWindowState(() => {
         const next = {
           x: position.x,
@@ -120,19 +129,29 @@ export default function ChatPanel() {
 
   const disabled = !allieAvailable;
 
-  if (!isOpen) return null;
+  if (!embedded && embeddedSurfaceActive) return null;
+  if (!embedded && !isOpen) return null;
   if (disabled) return null;
 
   const panelContent = (
     <>
       {/* Floating close — absolute top-right */}
-      <button
-        onClick={close}
-        className="absolute top-3 right-3 z-10 p-1 rounded-full text-foreground/40 hover:text-foreground/80 hover:bg-foreground/5 transition-all"
-        title="Close"
-      >
-        <X className="h-4 w-4" />
-      </button>
+      {!embedded && (
+        <button
+          onClick={close}
+          className="absolute top-3 right-3 z-10 p-1 rounded-full text-foreground/40 hover:text-foreground/80 hover:bg-foreground/5 transition-all"
+          title="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+
+      {embedded && (title || subtitle) && (
+        <div className="border-b border-border px-5 py-4">
+          {title && <h3 className="text-sm font-semibold text-foreground">{title}</h3>}
+          {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}
+        </div>
+      )}
 
       {/* Reconnect notice */}
       {connectionStatus === "disconnected" && reconnectCountdown != null && (
@@ -157,8 +176,17 @@ export default function ChatPanel() {
 
       {/* Input */}
       <ChatInput onSend={sendMessage} onStop={stopStreaming} isStreaming={isStreaming} disabled={disabled} />
+      {footer}
     </>
   );
+
+  if (embedded) {
+    return (
+      <div className={`relative flex min-h-[560px] flex-col overflow-hidden rounded-lg border border-border bg-background ${className || ""}`}>
+        {panelContent}
+      </div>
+    );
+  }
 
   // Mobile: full-screen overlay
   if (isMobile) {
