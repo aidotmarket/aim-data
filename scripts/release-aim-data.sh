@@ -11,8 +11,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-IMAGE="ghcr.io/aidotmarket/aim-data"
-TAG_PREFIX="aim-data-"
+IMAGE="ghcr.io/aidotmarket/aim-channel"
+TAG_PREFIX="aim-channel-"
 COMPOSE_FILE="docker-compose.aim-data.yml"
 
 # ---------------------------------------------------------------------------
@@ -77,8 +77,8 @@ latest_stable_tag() {
 
 update_compose() {
   local ver="$1"
-  sed -i '' "s|ghcr.io/aidotmarket/aim-data:\${AIM_DATA_VERSION:-[^}]*}|ghcr.io/aidotmarket/aim-data:\${AIM_DATA_VERSION:-v${ver}}|g" "$COMPOSE_FILE"
-  grep -qF "ghcr.io/aidotmarket/aim-data:\${AIM_DATA_VERSION:-v${ver}}" "$COMPOSE_FILE" || die "sed failed to update $COMPOSE_FILE"
+  sed -i '' "s|ghcr.io/aidotmarket/aim-channel:\${AIM_DATA_VERSION:-[^}]*}|ghcr.io/aidotmarket/aim-channel:\${AIM_DATA_VERSION:-v${ver}}|g" "$COMPOSE_FILE"
+  grep -qF "ghcr.io/aidotmarket/aim-channel:\${AIM_DATA_VERSION:-v${ver}}" "$COMPOSE_FILE" || die "sed failed to update $COMPOSE_FILE"
   pass "Compose updated → v${ver}"
 }
 
