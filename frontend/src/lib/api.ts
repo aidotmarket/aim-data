@@ -400,6 +400,7 @@ export interface DatasetPreviewResponse {
 }
 
 export interface DatasetListingMetadata {
+  listing_id?: string | null;
   title: string;
   description: string;
   tags: string[];

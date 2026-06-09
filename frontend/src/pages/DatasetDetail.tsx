@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -212,16 +212,19 @@ const guidedMetadataFields: Array<{ value: GuidedMetadataField; label: string }>
 
 function FieldReviewCard({
   activeField,
+  draftListingId,
   onLooksGood,
   onChangeIt,
-  changeDisabled,
+  controlsDisabled,
 }: {
   activeField: GuidedMetadataField;
+  draftListingId: string | null;
   onLooksGood: () => void;
   onChangeIt: () => void;
-  changeDisabled?: boolean;
+  controlsDisabled?: boolean;
 }) {
   const label = guidedMetadataFields.find((field) => field.value === activeField)?.label || activeField;
+  const needsDraft = !draftListingId;
 
   return (
     <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-3 text-sm">
@@ -230,13 +233,15 @@ function FieldReviewCard({
         <span className="font-medium text-yellow-700">Review {label}</span>
       </div>
       <p className="text-foreground/70 text-xs mb-3">
-        Confirm this field or ask allAI to change it conversationally.
+        {needsDraft
+          ? "Generate the allAI draft before reviewing fields."
+          : "Confirm this field or ask allAI to change it conversationally."}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" onClick={onLooksGood}>
+        <Button type="button" size="sm" onClick={onLooksGood} disabled={controlsDisabled || needsDraft}>
           Looks good
         </Button>
-        <Button type="button" size="sm" variant="outline" onClick={onChangeIt} disabled={changeDisabled}>
+        <Button type="button" size="sm" variant="outline" onClick={onChangeIt} disabled={controlsDisabled || needsDraft}>
           Change it
         </Button>
       </div>
@@ -249,11 +254,13 @@ function ListingPreparation({
   backPath,
   onDelete,
   isDeleting,
+  draftListingId: initialDraftListingId,
 }: {
   dataset: ApiDataset;
   backPath: string;
   onDelete: () => void;
   isDeleting: boolean;
+  draftListingId: string | null;
 }) {
   const navigate = useNavigate();
   const {
@@ -290,6 +297,7 @@ function ListingPreparation({
   const piiState = piiScanState === "running" ? "running" : getPiiSignal(piiScan, piiFailed);
   const allFlaggedColumnsSaved = flaggedColumns.length === 0 || flaggedColumns.every((column) => Boolean(piiActions[column.column]));
   const canContinuePrivacy = Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
+  const draftListingId = initialDraftListingId ?? metadata?.listing_id ?? null;
 
   useEffect(() => {
     const active = activeStep === 2 && Boolean(metadata);
@@ -297,7 +305,7 @@ function ListingPreparation({
     return () => setEmbeddedSurfaceActive(false);
   }, [activeStep, metadata, setEmbeddedSurfaceActive]);
 
-  const runPiiScan = async (showFailureToast = true) => {
+  const runPiiScan = useCallback(async (showFailureToast = true) => {
     if (!datasetReady) return;
     setPiiFailed(false);
     setPiiScanState("running");
@@ -316,7 +324,7 @@ function ListingPreparation({
         });
       }
     }
-  };
+  }, [dataset.id, datasetReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -360,7 +368,7 @@ function ListingPreparation({
     return () => {
       cancelled = true;
     };
-  }, [dataset.id, datasetReady]);
+  }, [dataset.id, datasetReady, runPiiScan]);
 
   const savePrivacyConfig = async (actions: Record<string, PIIColumnAction>, attested: boolean) => {
     setSavingPrivacy(true);
@@ -409,20 +417,20 @@ function ListingPreparation({
     setActiveStep(2);
   };
 
-  const handleGenerateMetadata = async () => {
+  const handleGenerateMetadata = useCallback(async () => {
     setMetadataState("running");
     try {
       const generated = await datasetsApi.getListingMetadata(dataset.id);
       setMetadata(generated);
       setMetadataApproved(false);
       setActiveMetadataField("title");
-      setForm({
+      setForm((current) => ({
         title: generated.title || filenameToTitle(dataset.original_filename) || dataset.original_filename,
         description: generated.description || "",
-        priceUsd: form.priceUsd,
+        priceUsd: current.priceUsd,
         category: getPrimaryCategory(generated),
         tags: generated.tags || [],
-      });
+      }));
       setMetadataState("passed");
     } catch (e) {
       setMetadataState("failed");
@@ -432,7 +440,7 @@ function ListingPreparation({
         variant: "destructive",
       });
     }
-  };
+  }, [dataset.id, dataset.original_filename]);
 
   useEffect(() => {
     if (
@@ -446,7 +454,7 @@ function ListingPreparation({
 
     autoMetadataDatasetRef.current = dataset.id;
     handleGenerateMetadata();
-  }, [activeStep, dataset.id, metadata, metadataState]);
+  }, [activeStep, dataset.id, metadata, metadataState, handleGenerateMetadata]);
 
   const handleApproveMetadata = () => {
     if (!metadata) return;
@@ -476,14 +484,24 @@ function ListingPreparation({
 
   const handleChangeMetadataField = () => {
     const field = guidedMetadataFields.find((item) => item.value === activeMetadataField);
-    if (!field) return;
+    if (!field || !draftListingId) return;
 
     const currentValue = activeMetadataField === "tags" ? form.tags.join(", ") : String(form[activeMetadataField] || "");
+    const toolInstructionByField: Record<GuidedMetadataField, string> = {
+      title: `After the seller confirms the requested change, call update_listing_title with listing_id "${draftListingId}".`,
+      description: `After the seller confirms the requested change, call update_listing_description with listing_id "${draftListingId}".`,
+      category: `After the seller confirms the requested change, call set_listing_category with listing_id "${draftListingId}".`,
+      tags: `After the seller confirms the requested change, call regenerate_listing_metadata with listing_id "${draftListingId}", fields ["tags"], and apply true.`,
+    };
+
     sendMessage(
       [
-        `I want to change the listing ${field.label.toLowerCase()} for dataset ${dataset.id}.`,
+        `I want to change the listing ${field.label.toLowerCase()} for draft listing ${draftListingId} from dataset ${dataset.id}.`,
+        `Active field: ${activeMetadataField}.`,
         `Current ${field.label.toLowerCase()}: ${currentValue || "(empty)"}`,
-        "Please help me edit this field conversationally. Ask a clarifying question if needed, then apply the agreed update through the existing listing edit engine when a draft listing is available.",
+        "Please keep this conversational: ask a concise clarifying question before applying the edit if the requested change is not already specific.",
+        toolInstructionByField[activeMetadataField],
+        "Apply only this active field through the existing listing edit engine and do not defer because the draft listing id is already available.",
       ].join("\n")
     );
   };
@@ -840,9 +858,10 @@ function ListingPreparation({
                   <div className="space-y-3">
                     <FieldReviewCard
                       activeField={activeMetadataField}
+                      draftListingId={draftListingId}
                       onLooksGood={focusNextMetadataField}
                       onChangeIt={handleChangeMetadataField}
-                      changeDisabled={!allieAvailable}
+                      controlsDisabled={!allieAvailable || activeStep > 2}
                     />
                     {allieAvailable ? (
                       <ChatPanel
@@ -859,7 +878,7 @@ function ListingPreparation({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button onClick={handleAcceptAllMetadata} disabled={activeStep > 2 || !form.title.trim() || !form.description.trim()} size="sm">
+                  <Button onClick={handleAcceptAllMetadata} disabled={activeStep > 2 || !draftListingId || !form.title.trim() || !form.description.trim()} size="sm">
                     Accept all & continue
                   </Button>
                   {metadataApproved && (
@@ -1054,6 +1073,7 @@ const DatasetDetail = () => {
     return (
       <ListingPreparation
         dataset={apiDataset}
+        draftListingId={apiDataset.listing_id ?? null}
         backPath={backPath}
         onDelete={handleDelete}
         isDeleting={isDeleting}
