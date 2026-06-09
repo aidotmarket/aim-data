@@ -45,6 +45,10 @@ AUTO_APPROVE_TOOLS = {
     "prepare_support_bundle",
     "create_artifact",
     "create_artifact_from_query",
+    "update_listing_title",
+    "update_listing_description",
+    "set_listing_category",
+    "regenerate_listing_metadata",
 }
 
 MUTATION_TOOLS: Dict[str, Dict[str, str]] = {
@@ -98,6 +102,10 @@ TOOL_CAPABILITIES: Dict[str, set] = {
     # AUTO_APPROVE — Artifacts
     "create_artifact": {"data:read"},
     "create_artifact_from_query": {"data:read"},
+    "update_listing_title": {"data:write"},
+    "update_listing_description": {"data:write"},
+    "set_listing_category": {"data:write"},
+    "regenerate_listing_metadata": {"data:write"},
     # MUTATION
     "delete_dataset": {"data:delete"},
     "connectivity_enable": {"connectivity:write"},

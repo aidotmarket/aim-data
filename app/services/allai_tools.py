@@ -153,6 +153,92 @@ ALLAI_TOOLS = [
             "required": ["dataset_id"],
         },
     },
+    {
+        "name": "update_listing_title",
+        "description": (
+            "Update the title on an owned draft marketplace listing. "
+            "Use only for reversible draft-copy edits before publishing."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "listing_id": {"type": "string", "description": "Draft raw listing ID"},
+                "title": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "description": "New buyer-facing listing title",
+                },
+            },
+            "required": ["listing_id", "title"],
+        },
+    },
+    {
+        "name": "update_listing_description",
+        "description": (
+            "Update the description on an owned draft marketplace listing. "
+            "Use only for reversible draft-copy edits before publishing."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "listing_id": {"type": "string", "description": "Draft raw listing ID"},
+                "description": {
+                    "type": "string",
+                    "description": "New buyer-facing listing description",
+                },
+            },
+            "required": ["listing_id", "description"],
+        },
+    },
+    {
+        "name": "set_listing_category",
+        "description": (
+            "Set the marketplace category on an owned draft listing. "
+            "The category is stored in auto_metadata.category."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "listing_id": {"type": "string", "description": "Draft raw listing ID"},
+                "category": {
+                    "type": "string",
+                    "description": "Marketplace category slug",
+                },
+            },
+            "required": ["listing_id", "category"],
+        },
+    },
+    {
+        "name": "regenerate_listing_metadata",
+        "description": (
+            "Generate improved title, description, category, or tags for an owned "
+            "draft listing. With apply=false, return suggestions only. With "
+            "apply=true, write the suggestions to the draft immediately."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "listing_id": {"type": "string", "description": "Draft raw listing ID"},
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["title", "description", "category", "tags"],
+                    },
+                    "description": "Fields to regenerate",
+                },
+                "instruction": {
+                    "type": "string",
+                    "description": "Seller instruction for the rewrite",
+                },
+                "apply": {
+                    "type": "boolean",
+                    "description": "If true, write suggestions to the draft. Default false.",
+                },
+            },
+            "required": ["listing_id", "fields", "instruction"],
+        },
+    },
     # ------------------------------------------------------------------
     # BQ-MCP-RAG Phase 2: External Connectivity Tools
     # ------------------------------------------------------------------

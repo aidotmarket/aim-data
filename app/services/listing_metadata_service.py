@@ -11,7 +11,7 @@ import json
 import logging
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from app.models.listing_metadata_schemas import ListingMetadata, ColumnSummary
 from app.services.duckdb_service import ephemeral_duckdb_service
@@ -142,13 +142,27 @@ class ListingMetadataService:
         # Infer data categories
         categories = self._infer_categories(column_profiles, tags)
 
-        # Generate human-readable description
-        description = self._generate_description(
+        fallback_description = self._generate_description(
             column_profiles, row_count, column_count, file_type, categories
         )
 
-        # Generate title from filename + key characteristics
-        title = self._generate_title(dataset_id, filepath, categories, row_count)
+        fallback_title = self._generate_title(dataset_id, filepath, categories, row_count)
+        authored = await self._author_listing_metadata(
+            dataset_id=dataset_id,
+            filepath=filepath,
+            metadata=metadata,
+            categories=categories,
+            tags=tags,
+            fallback_title=fallback_title,
+            fallback_description=fallback_description,
+        )
+
+        title = authored.get("title") or fallback_title
+        description = authored.get("description") or fallback_description
+        if authored.get("category"):
+            categories = [authored["category"]]
+        if authored.get("tags"):
+            tags = authored["tags"]
 
         # Compute freshness score (based on file mod time)
         freshness_score = self._compute_freshness(filepath)
@@ -178,6 +192,147 @@ class ListingMetadataService:
             json.dump(listing.model_dump(), f, indent=2)
 
         return listing
+
+    async def _author_listing_metadata(
+        self,
+        dataset_id: str,
+        filepath: Path,
+        metadata: dict,
+        categories: list,
+        tags: list,
+        fallback_title: str,
+        fallback_description: str,
+    ) -> Dict[str, Any]:
+        """
+        Ask the configured allAI provider to author marketplace metadata.
+
+        This is best-effort by design: empty, invalid, unavailable, or malformed
+        LLM output falls back to the deterministic template fields.
+        """
+        try:
+            prompt = self._build_authoring_prompt(
+                dataset_id=dataset_id,
+                filepath=filepath,
+                metadata=metadata,
+                categories=categories,
+                tags=tags,
+                fallback_title=fallback_title,
+                fallback_description=fallback_description,
+            )
+            from app.services.allie_provider import get_allie_provider
+
+            provider = get_allie_provider()
+            text_parts: List[str] = []
+            async for chunk in provider.stream(
+                prompt,
+                context=(
+                    "You write honest buyer-facing marketplace listing metadata "
+                    "for datasets. Return only valid JSON."
+                ),
+            ):
+                if chunk.text:
+                    text_parts.append(chunk.text)
+
+            authored = self._parse_authored_metadata("".join(text_parts))
+            if not authored:
+                return {}
+            return authored
+        except Exception as e:
+            logger.warning("LLM listing metadata authoring failed; using template fallback: %s", e)
+            return {}
+
+    def _build_authoring_prompt(
+        self,
+        dataset_id: str,
+        filepath: Path,
+        metadata: dict,
+        categories: list,
+        tags: list,
+        fallback_title: str,
+        fallback_description: str,
+    ) -> str:
+        column_profiles = metadata.get("column_profiles", []) or []
+        sample_rows = metadata.get("sample_rows", []) or []
+
+        if not sample_rows:
+            try:
+                with ephemeral_duckdb_service() as duckdb:
+                    sample_rows = duckdb.get_sample_rows(filepath, limit=8)
+            except Exception as e:
+                logger.debug("Sample rows unavailable for LLM listing prompt: %s", e)
+                sample_rows = []
+
+        prompt_payload = {
+            "dataset_id": dataset_id,
+            "filename": filepath.name,
+            "file_type": metadata.get("file_type", filepath.suffix.lstrip(".")),
+            "row_count": metadata.get("row_count", 0),
+            "column_count": metadata.get("column_count", 0),
+            "existing_category_hints": categories,
+            "existing_tag_hints": tags,
+            "fallback_title": fallback_title,
+            "fallback_description": fallback_description,
+            "column_profiles": [
+                {
+                    "name": p.get("name"),
+                    "type": p.get("type"),
+                    "semantic_type": p.get("semantic_type"),
+                    "null_percentage": p.get("null_percentage", 0),
+                    "uniqueness_ratio": p.get("uniqueness_ratio", 0),
+                    "sample_values": [str(v) for v in (p.get("sample_values") or [])[:5]],
+                }
+                for p in column_profiles[:40]
+            ],
+            "sample_rows": sample_rows[:8],
+        }
+
+        return (
+            "Author metadata for this dataset listing. Return JSON with keys "
+            "title, description, category, tags. Title must be <=256 characters. "
+            "Description should be a few concise sentences for buyers. Include an "
+            "honest data-quality note if columns have high null percentages. "
+            "Use 3-8 lowercase tags.\n\n"
+            f"{json.dumps(prompt_payload, default=str)}"
+        )
+
+    def _parse_authored_metadata(self, text: str) -> Dict[str, Any]:
+        raw = (text or "").strip()
+        if not raw:
+            return {}
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            if raw.lower().startswith("json"):
+                raw = raw[4:].strip()
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start >= 0 and end > start:
+            raw = raw[start:end + 1]
+
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return {}
+
+        title = str(data.get("title") or "").strip()[:256]
+        description = str(data.get("description") or "").strip()
+        category = str(data.get("category") or "").strip().lower()
+        tags_raw = data.get("tags") or []
+        tags = []
+        if isinstance(tags_raw, list):
+            for tag in tags_raw:
+                tag_text = str(tag).strip().lower()
+                if tag_text and tag_text not in tags:
+                    tags.append(tag_text[:40])
+
+        result: Dict[str, Any] = {}
+        if title:
+            result["title"] = title
+        if description:
+            result["description"] = description
+        if category:
+            result["category"] = category[:64]
+        if tags:
+            result["tags"] = tags[:8]
+        return result
 
     def _build_column_summaries(self, profiles: list) -> List[ColumnSummary]:
         """Build ColumnSummary objects from DuckDB column profiles."""
