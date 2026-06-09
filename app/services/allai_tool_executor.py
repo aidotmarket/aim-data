@@ -17,9 +17,11 @@ UPDATED: 2026-03-05 — BQ-VZ-CONTROL-PLANE Step 2 (Security Foundation)
 """
 
 import asyncio
+import json
 import logging
 import time as time_mod
-from typing import Awaitable, Callable
+from datetime import datetime
+from typing import Any, Awaitable, Callable, Dict
 
 from app.auth.api_key_auth import AuthenticatedUser
 from app.services.allai_tool_result import ToolResult
@@ -238,6 +240,19 @@ class AllAIToolExecutor:
 
     def _authorize(self, tool_name: str, tool_input: dict) -> tuple:
         """[COUNCIL] Per-tool + per-resource authorization. Returns (ok, error_msg)."""
+        if tool_name in {
+            "update_listing_title",
+            "update_listing_description",
+            "set_listing_category",
+            "regenerate_listing_metadata",
+        }:
+            listing_id = tool_input.get("listing_id")
+            if not listing_id:
+                return False, "listing_id is required"
+            if not self._user_owns_listing(listing_id):
+                return False, f"Listing '{listing_id}' not found or not owned by user"
+            return True, ""
+
         dataset_id = tool_input.get("dataset_id")
         if dataset_id:
             if not self._user_owns_dataset(dataset_id):
@@ -253,6 +268,19 @@ class AllAIToolExecutor:
             # In current arch, all datasets are user-scoped via the instance.
             # Just verify the dataset exists.
             return record is not None
+        except Exception:
+            return False
+
+    def _user_owns_listing(self, listing_id: str) -> bool:
+        """Check if the current user owns the listing.
+
+        Raw listings currently inherit ownership from the single-user local raw
+        file store, so existence is the enforceable ownership boundary until
+        raw_files gets a user_id column.
+        """
+        try:
+            from app.services.raw_listing_service import get_raw_listing_service
+            return get_raw_listing_service().get_listing(listing_id) is not None
         except Exception:
             return False
 
@@ -372,6 +400,10 @@ class AllAIToolExecutor:
             # BQ-VZ-ARTIFACTS: Artifact creation tools
             "create_artifact": self._handle_create_artifact,
             "create_artifact_from_query": self._handle_create_artifact_from_query,
+            "update_listing_title": self._handle_update_listing_title,
+            "update_listing_description": self._handle_update_listing_description,
+            "set_listing_category": self._handle_set_listing_category,
+            "regenerate_listing_metadata": self._handle_regenerate_listing_metadata,
         }
 
         handler = handlers.get(tool_name)
@@ -385,6 +417,219 @@ class AllAIToolExecutor:
     # ------------------------------------------------------------------
     # Tool handlers
     # ------------------------------------------------------------------
+
+    def _serialize_listing(self, listing: Any) -> Dict[str, Any]:
+        def encode(value: Any) -> Any:
+            if isinstance(value, datetime):
+                return value.isoformat()
+            return value
+
+        return {
+            "id": listing.id,
+            "raw_file_id": listing.raw_file_id,
+            "marketplace_listing_id": listing.marketplace_listing_id,
+            "title": listing.title,
+            "description": listing.description,
+            "tags": listing.tags or [],
+            "auto_metadata": listing.auto_metadata,
+            "price_cents": listing.price_cents,
+            "status": listing.status,
+            "published_at": encode(listing.published_at),
+            "created_at": encode(listing.created_at),
+            "updated_at": encode(listing.updated_at),
+        }
+
+    def _get_editable_listing(self, listing_id: str):
+        from app.services.raw_listing_service import get_raw_listing_service
+
+        listing_svc = get_raw_listing_service()
+        listing = listing_svc.get_listing(listing_id)
+        if listing is None:
+            raise ValueError("listing_not_found")
+        if listing.status != "draft":
+            raise ValueError("listing_not_draft")
+        return listing_svc, listing
+
+    async def _emit_listing_draft_updated(self, listing: Any) -> Dict[str, Any]:
+        serialized = self._serialize_listing(listing)
+        await self.send_ws({
+            "type": "LISTING_DRAFT_UPDATED",
+            "listing": serialized,
+        })
+        return serialized
+
+    async def _handle_update_listing_title(self, tool_input: dict) -> ToolResult:
+        listing_svc, _listing = self._get_editable_listing(tool_input["listing_id"])
+        title = str(tool_input.get("title") or "").strip()[:256]
+        if not title:
+            return ToolResult(
+                frontend_data={"error": "title_required"},
+                llm_summary="The listing title was not updated because the title was empty.",
+            )
+
+        updated = listing_svc.update_listing(listing_id=tool_input["listing_id"], title=title)
+        serialized = await self._emit_listing_draft_updated(updated)
+        return ToolResult(
+            frontend_data={"listing": serialized, "updated_fields": ["title"]},
+            llm_summary=f"Updated the draft listing title to: {title}",
+        )
+
+    async def _handle_update_listing_description(self, tool_input: dict) -> ToolResult:
+        listing_svc, _listing = self._get_editable_listing(tool_input["listing_id"])
+        description = str(tool_input.get("description") or "").strip()
+        if not description:
+            return ToolResult(
+                frontend_data={"error": "description_required"},
+                llm_summary="The listing description was not updated because it was empty.",
+            )
+
+        updated = listing_svc.update_listing(
+            listing_id=tool_input["listing_id"],
+            description=description,
+        )
+        serialized = await self._emit_listing_draft_updated(updated)
+        return ToolResult(
+            frontend_data={"listing": serialized, "updated_fields": ["description"]},
+            llm_summary="Updated the draft listing description.",
+        )
+
+    async def _handle_set_listing_category(self, tool_input: dict) -> ToolResult:
+        listing_svc, _listing = self._get_editable_listing(tool_input["listing_id"])
+        category = str(tool_input.get("category") or "").strip().lower()[:64]
+        if not category:
+            return ToolResult(
+                frontend_data={"error": "category_required"},
+                llm_summary="The listing category was not updated because it was empty.",
+            )
+
+        updated = listing_svc.update_listing(listing_id=tool_input["listing_id"], category=category)
+        serialized = await self._emit_listing_draft_updated(updated)
+        return ToolResult(
+            frontend_data={"listing": serialized, "updated_fields": ["category"]},
+            llm_summary=f"Set the draft listing category to {category}.",
+        )
+
+    async def _handle_regenerate_listing_metadata(self, tool_input: dict) -> ToolResult:
+        listing_svc, listing = self._get_editable_listing(tool_input["listing_id"])
+        fields = [
+            field for field in tool_input.get("fields", [])
+            if field in {"title", "description", "category", "tags"}
+        ]
+        if not fields:
+            fields = ["title", "description", "category", "tags"]
+
+        suggestions = await self._suggest_listing_metadata(
+            listing=listing,
+            fields=fields,
+            instruction=str(tool_input.get("instruction") or ""),
+        )
+        if not suggestions:
+            return ToolResult(
+                frontend_data={"error": "suggestions_unavailable"},
+                llm_summary="Could not regenerate listing metadata. Ask the user for a more specific rewrite instruction.",
+            )
+
+        apply = bool(tool_input.get("apply", False))
+        serialized = None
+        if apply:
+            updated = listing_svc.update_listing(
+                listing_id=listing.id,
+                title=suggestions.get("title") if "title" in fields else None,
+                description=suggestions.get("description") if "description" in fields else None,
+                category=suggestions.get("category") if "category" in fields else None,
+                tags=suggestions.get("tags") if "tags" in fields else None,
+            )
+            serialized = await self._emit_listing_draft_updated(updated)
+
+        return ToolResult(
+            frontend_data={
+                "suggestions": suggestions,
+                "applied": apply,
+                "listing": serialized,
+            },
+            llm_summary=(
+                "Generated and applied draft listing metadata."
+                if apply else
+                "Generated draft listing metadata suggestions without applying them."
+            ),
+        )
+
+    async def _suggest_listing_metadata(
+        self,
+        listing: Any,
+        fields: list,
+        instruction: str,
+    ) -> Dict[str, Any]:
+        try:
+            from app.services.allie_provider import get_allie_provider
+            from app.services.raw_file_service import get_raw_file_service
+
+            raw_file = get_raw_file_service().get_file(listing.raw_file_id)
+            file_metadata = raw_file.metadata_ if raw_file else {}
+            payload = {
+                "requested_fields": fields,
+                "instruction": instruction,
+                "current_listing": self._serialize_listing(listing),
+                "raw_file": {
+                    "id": raw_file.id if raw_file else listing.raw_file_id,
+                    "filename": raw_file.filename if raw_file else None,
+                    "mime_type": raw_file.mime_type if raw_file else None,
+                    "file_size_bytes": raw_file.file_size_bytes if raw_file else None,
+                    "metadata": file_metadata,
+                },
+            }
+            prompt = (
+                "Regenerate metadata for this draft marketplace listing. Return only "
+                "valid JSON containing the requested keys among title, description, "
+                "category, tags. Keep title <=256 characters. Description should be "
+                "a few honest buyer-facing sentences. If available metadata shows "
+                "high-null columns or quality issues, mention them honestly.\n\n"
+                f"{json.dumps(payload, default=str)}"
+            )
+
+            provider = get_allie_provider()
+            parts = []
+            async for chunk in provider.stream(
+                prompt,
+                context="You write concise, honest marketplace listing metadata. Return only JSON.",
+            ):
+                if chunk.text:
+                    parts.append(chunk.text)
+            return self._parse_listing_metadata_suggestions("".join(parts), fields)
+        except Exception as e:
+            logger.warning("Listing metadata regeneration failed: %s", e)
+            return {}
+
+    def _parse_listing_metadata_suggestions(self, text: str, fields: list) -> Dict[str, Any]:
+        raw = (text or "").strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            if raw.lower().startswith("json"):
+                raw = raw[4:].strip()
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start >= 0 and end > start:
+            raw = raw[start:end + 1]
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return {}
+
+        suggestions: Dict[str, Any] = {}
+        if "title" in fields and str(data.get("title") or "").strip():
+            suggestions["title"] = str(data["title"]).strip()[:256]
+        if "description" in fields and str(data.get("description") or "").strip():
+            suggestions["description"] = str(data["description"]).strip()
+        if "category" in fields and str(data.get("category") or "").strip():
+            suggestions["category"] = str(data["category"]).strip().lower()[:64]
+        if "tags" in fields and isinstance(data.get("tags"), list):
+            tags = []
+            for tag in data["tags"]:
+                tag_text = str(tag).strip().lower()
+                if tag_text and tag_text not in tags:
+                    tags.append(tag_text[:40])
+            if tags:
+                suggestions["tags"] = tags[:8]
+        return suggestions
 
     async def _handle_list_datasets(self, tool_input: dict) -> ToolResult:
         """List all datasets with metadata."""

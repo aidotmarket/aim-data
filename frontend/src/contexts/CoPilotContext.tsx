@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import { useMode } from "./ModeContext";
 import { datasetsApi } from "@/lib/api";
-import type { ApiDataset } from "@/lib/api";
+import type { ApiDataset, RawListing } from "@/lib/api";
 import { copilotApi } from "@/api/copilotApi";
 import type { S3ConnectionSnapshot } from "@/api/copilotApi";
 import { toast } from "sonner";
@@ -58,6 +58,7 @@ interface CoPilotState {
   reconnectCountdown: number | null;
   allieAvailable: boolean;
   toneMode: ToneMode;
+  listingDraftUpdates: Record<string, RawListing>;
 }
 
 interface CoPilotContextValue extends CoPilotState {
@@ -120,6 +121,7 @@ export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [reconnectCountdown, setReconnectCountdown] = useState<number | null>(null);
   const [allieAvailable, setAllieAvailable] = useState(false);
+  const [listingDraftUpdates, setListingDraftUpdates] = useState<Record<string, RawListing>>({});
   const [toneMode, setToneModeState] = useState<ToneMode>(
     () => (localStorage.getItem(TONE_MODE_KEY) as ToneMode) || "friendly"
   );
@@ -580,6 +582,17 @@ export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
         break;
       }
 
+      case "LISTING_DRAFT_UPDATED": {
+        const listing = data.listing as RawListing | undefined;
+        if (listing?.raw_file_id) {
+          setListingDraftUpdates((prev) => ({
+            ...prev,
+            [listing.raw_file_id]: listing,
+          }));
+        }
+        break;
+      }
+
       // BQ-ALLAI-B: Confirmation request for destructive actions
       case "CONFIRM_REQUEST": {
         const confirmReq: ConfirmRequest = {
@@ -761,6 +774,7 @@ export const CoPilotProvider: React.FC<{ children: React.ReactNode }> = ({ child
         connectionStatus,
         reconnectCountdown,
         allieAvailable,
+        listingDraftUpdates,
         toneMode,
         open,
         close,

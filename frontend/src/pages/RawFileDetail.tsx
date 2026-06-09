@@ -23,6 +23,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { rawFilesApi, type RawFile } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { useMode } from "@/contexts/ModeContext";
+import { useCoPilot } from "@/contexts/CoPilotContext";
 import {
   filenameToTitle,
   ListingEditorForm,
@@ -201,6 +202,7 @@ export default function RawFileDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { isConnected } = useMode();
+  const { listingDraftUpdates } = useCoPilot();
   const [file, setFile] = useState<RawFile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -236,6 +238,25 @@ export default function RawFileDetail() {
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!file) return;
+    const updatedListing = listingDraftUpdates[file.id];
+    if (!updatedListing) return;
+
+    setForm((current) => ({
+      ...current,
+      title: updatedListing.title ?? current.title,
+      description: updatedListing.description ?? current.description,
+      category: (updatedListing.auto_metadata?.category as string) || current.category,
+      tags: Array.isArray(updatedListing.tags) ? updatedListing.tags : current.tags,
+    }));
+    setFile((current) => current ? {
+      ...current,
+      listing_status: updatedListing.status,
+      price_cents: updatedListing.price_cents,
+    } : current);
+  }, [file?.id, listingDraftUpdates]);
 
   const handleSave = async () => {
     if (!id || !file) return;
