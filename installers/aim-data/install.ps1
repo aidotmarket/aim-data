@@ -2,8 +2,8 @@ $ErrorActionPreference = "Stop"
 
 $InstallDir = if ($env:AIM_DATA_INSTALL_DIR) { $env:AIM_DATA_INSTALL_DIR } else { Join-Path $HOME "aim-data" }
 $ComposeFile = "docker-compose.aim-data.yml"
-$ComposeUrl = "https://raw.githubusercontent.com/aidotmarket/aim-data/main/docker-compose.aim-data.yml"
-$Image = "ghcr.io/aidotmarket/aim-data:latest"
+$ComposeUrl = "https://raw.githubusercontent.com/aidotmarket/aim-channel/main/docker-compose.aim-data.yml"
+$Image = "ghcr.io/aidotmarket/aim-channel:latest"
 
 function Write-Banner {
     Write-Host ""

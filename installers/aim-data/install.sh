@@ -13,7 +13,7 @@ pass() { echo -e "  ${GREEN}✔${NC} $*"; }
 warn() { echo -e "  ${YELLOW}!${NC} $*"; }
 die()  { echo -e "\n  ${RED}✘${NC} $*\n"; exit 1; }
 
-REPO_RAW="https://raw.githubusercontent.com/aidotmarket/aim-data/main"
+REPO_RAW="https://raw.githubusercontent.com/aidotmarket/aim-channel/main"
 COMPOSE_URL="${REPO_RAW}/docker-compose.aim-data.yml"
 IMAGE="ghcr.io/aidotmarket/aim-channel:latest"
 INSTALL_DIR="${AIM_DATA_INSTALL_DIR:-$HOME/aim-data}"

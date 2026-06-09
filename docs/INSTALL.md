@@ -17,7 +17,7 @@ A serial and a bootstrap token from me. I send these per customer when you activ
 Grab the docker compose file from GitHub. That is the only file you need from the repo.
 
 ```
-curl -O https://raw.githubusercontent.com/aidotmarket/aim-data/main/docker-compose.aim-data.yml
+curl -O https://raw.githubusercontent.com/aidotmarket/aim-channel/main/docker-compose.aim-data.yml
 ```
 
 ## Set up your .env

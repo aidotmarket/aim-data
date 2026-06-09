@@ -11,6 +11,9 @@ on:
       - 'scripts/release.sh'
       - 'Dockerfile.customer'
       - '.github/workflows/aim-data-release.yml'
+      - 'docker-compose.aim-data.yml'
+      - 'scripts/release-aim-data.sh'
+      - '.github/workflows/ci-release-integrity.yml'
 
 jobs:
   verify-integrity:
