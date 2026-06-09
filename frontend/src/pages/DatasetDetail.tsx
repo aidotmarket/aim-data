@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -28,6 +28,7 @@ import {
   ShieldAlert,
   Store,
   XCircle,
+  MessageSquareText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,9 +71,12 @@ import {
 import { type ColumnSchema, type Dataset } from "@/types/mockDatasets";
 import { toast } from "@/hooks/use-toast";
 import PublishModal from "@/components/PublishModal";
+import ChatPanel from "@/components/copilot/ChatPanel";
 import { useMarketplace } from "@/contexts/MarketplaceContext";
 import { useMode } from "@/contexts/ModeContext";
+import { useCoPilot } from "@/contexts/CoPilotContext";
 import { useChannel } from "@/hooks/useChannel";
+import { cn } from "@/lib/utils";
 import {
   filenameToTitle,
   ListingEditorForm,
@@ -194,18 +198,77 @@ const categoryOptions = [
 
 const autoPiiScanAttemptedDatasetIds = new Set<string>();
 
+const METADATA_REVIEW_INSIGHTS_ENABLED = false;
+// TODO: Wire this shell to the future SEO/discoverability scoring engine.
+
+type GuidedMetadataField = "title" | "description" | "category" | "tags";
+
+const guidedMetadataFields: Array<{ value: GuidedMetadataField; label: string }> = [
+  { value: "title", label: "Title" },
+  { value: "description", label: "Description" },
+  { value: "category", label: "Category" },
+  { value: "tags", label: "Tags" },
+];
+
+function FieldReviewCard({
+  activeField,
+  draftListingId,
+  onLooksGood,
+  onChangeIt,
+  controlsDisabled,
+}: {
+  activeField: GuidedMetadataField;
+  draftListingId: string | null;
+  onLooksGood: () => void;
+  onChangeIt: () => void;
+  controlsDisabled?: boolean;
+}) {
+  const label = guidedMetadataFields.find((field) => field.value === activeField)?.label || activeField;
+  const needsDraft = !draftListingId;
+
+  return (
+    <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-3 text-sm">
+      <div className="flex items-center gap-2 mb-2">
+        <MessageSquareText className="h-4 w-4 text-yellow-600" />
+        <span className="font-medium text-yellow-700">Review {label}</span>
+      </div>
+      <p className="text-foreground/70 text-xs mb-3">
+        {needsDraft
+          ? "Generate the allAI draft before reviewing fields."
+          : "Confirm this field or ask allAI to change it conversationally."}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" onClick={onLooksGood} disabled={controlsDisabled || needsDraft}>
+          Looks good
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onChangeIt} disabled={controlsDisabled || needsDraft}>
+          Change it
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ListingPreparation({
   dataset,
   backPath,
   onDelete,
   isDeleting,
+  draftListingId: initialDraftListingId,
 }: {
   dataset: ApiDataset;
   backPath: string;
   onDelete: () => void;
   isDeleting: boolean;
+  draftListingId: string | null;
 }) {
   const navigate = useNavigate();
+  const {
+    allieAvailable,
+    listingDraftUpdates,
+    sendMessage,
+    setEmbeddedSurfaceActive,
+  } = useCoPilot();
   const [piiScan, setPiiScan] = useState<PIIScanResponse | null>(null);
   const [piiFailed, setPiiFailed] = useState(false);
   const [piiScanState, setPiiScanState] = useState<ListingStepState>("pending");
@@ -216,6 +279,7 @@ function ListingPreparation({
   const [metadata, setMetadata] = useState<DatasetListingMetadata | null>(null);
   const [metadataState, setMetadataState] = useState<ListingStepState>("pending");
   const [metadataApproved, setMetadataApproved] = useState(false);
+  const [activeMetadataField, setActiveMetadataField] = useState<GuidedMetadataField>("title");
   const [publishing, setPublishing] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const autoPiiScanDatasetRef = useRef<string | null>(null);
@@ -233,8 +297,15 @@ function ListingPreparation({
   const piiState = piiScanState === "running" ? "running" : getPiiSignal(piiScan, piiFailed);
   const allFlaggedColumnsSaved = flaggedColumns.length === 0 || flaggedColumns.every((column) => Boolean(piiActions[column.column]));
   const canContinuePrivacy = Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
+  const draftListingId = initialDraftListingId ?? metadata?.listing_id ?? null;
 
-  const runPiiScan = async (showFailureToast = true) => {
+  useEffect(() => {
+    const active = activeStep === 2 && Boolean(metadata);
+    setEmbeddedSurfaceActive(active);
+    return () => setEmbeddedSurfaceActive(false);
+  }, [activeStep, metadata, setEmbeddedSurfaceActive]);
+
+  const runPiiScan = useCallback(async (showFailureToast = true) => {
     if (!datasetReady) return;
     setPiiFailed(false);
     setPiiScanState("running");
@@ -253,7 +324,7 @@ function ListingPreparation({
         });
       }
     }
-  };
+  }, [dataset.id, datasetReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -297,7 +368,7 @@ function ListingPreparation({
     return () => {
       cancelled = true;
     };
-  }, [dataset.id, datasetReady]);
+  }, [dataset.id, datasetReady, runPiiScan]);
 
   const savePrivacyConfig = async (actions: Record<string, PIIColumnAction>, attested: boolean) => {
     setSavingPrivacy(true);
@@ -346,19 +417,20 @@ function ListingPreparation({
     setActiveStep(2);
   };
 
-  const handleGenerateMetadata = async () => {
+  const handleGenerateMetadata = useCallback(async () => {
     setMetadataState("running");
     try {
       const generated = await datasetsApi.getListingMetadata(dataset.id);
       setMetadata(generated);
       setMetadataApproved(false);
-      setForm({
+      setActiveMetadataField("title");
+      setForm((current) => ({
         title: generated.title || filenameToTitle(dataset.original_filename) || dataset.original_filename,
         description: generated.description || "",
-        priceUsd: form.priceUsd,
+        priceUsd: current.priceUsd,
         category: getPrimaryCategory(generated),
         tags: generated.tags || [],
-      });
+      }));
       setMetadataState("passed");
     } catch (e) {
       setMetadataState("failed");
@@ -368,7 +440,7 @@ function ListingPreparation({
         variant: "destructive",
       });
     }
-  };
+  }, [dataset.id, dataset.original_filename]);
 
   useEffect(() => {
     if (
@@ -382,7 +454,7 @@ function ListingPreparation({
 
     autoMetadataDatasetRef.current = dataset.id;
     handleGenerateMetadata();
-  }, [activeStep, dataset.id, metadata, metadataState]);
+  }, [activeStep, dataset.id, metadata, metadataState, handleGenerateMetadata]);
 
   const handleApproveMetadata = () => {
     if (!metadata) return;
@@ -392,6 +464,46 @@ function ListingPreparation({
   const handleContinueMetadata = () => {
     if (!metadata || !metadataApproved || !form.title.trim() || !form.description.trim()) return;
     setActiveStep(3);
+  };
+
+  const focusNextMetadataField = () => {
+    const currentIndex = guidedMetadataFields.findIndex((field) => field.value === activeMetadataField);
+    const nextField = guidedMetadataFields[currentIndex + 1];
+    if (nextField) {
+      setActiveMetadataField(nextField.value);
+      return;
+    }
+    handleApproveMetadata();
+  };
+
+  const handleAcceptAllMetadata = () => {
+    if (!metadata || !form.title.trim() || !form.description.trim()) return;
+    setMetadataApproved(true);
+    setActiveStep(3);
+  };
+
+  const handleChangeMetadataField = () => {
+    const field = guidedMetadataFields.find((item) => item.value === activeMetadataField);
+    if (!field || !draftListingId) return;
+
+    const currentValue = activeMetadataField === "tags" ? form.tags.join(", ") : String(form[activeMetadataField] || "");
+    const toolInstructionByField: Record<GuidedMetadataField, string> = {
+      title: `After the seller confirms the requested change, call update_listing_title with listing_id "${draftListingId}".`,
+      description: `After the seller confirms the requested change, call update_listing_description with listing_id "${draftListingId}".`,
+      category: `After the seller confirms the requested change, call set_listing_category with listing_id "${draftListingId}".`,
+      tags: `After the seller confirms the requested change, call regenerate_listing_metadata with listing_id "${draftListingId}", fields ["tags"], and apply true.`,
+    };
+
+    sendMessage(
+      [
+        `I want to change the listing ${field.label.toLowerCase()} for draft listing ${draftListingId} from dataset ${dataset.id}.`,
+        `Active field: ${activeMetadataField}.`,
+        `Current ${field.label.toLowerCase()}: ${currentValue || "(empty)"}`,
+        "Please keep this conversational: ask a concise clarifying question before applying the edit if the requested change is not already specific.",
+        toolInstructionByField[activeMetadataField],
+        "Apply only this active field through the existing listing edit engine and do not defer because the draft listing id is already available.",
+      ].join("\n")
+    );
   };
 
   const addTag = () => {
@@ -451,6 +563,20 @@ function ListingPreparation({
     setMetadataApproved(false);
     setForm({ ...form, ...patch });
   };
+
+  useEffect(() => {
+    const updatedListing = listingDraftUpdates[dataset.id];
+    if (!updatedListing) return;
+
+    setMetadataApproved(false);
+    setForm((current) => ({
+      ...current,
+      title: updatedListing.title ?? current.title,
+      description: updatedListing.description ?? current.description,
+      category: (updatedListing.auto_metadata?.category as string) || current.category,
+      tags: Array.isArray(updatedListing.tags) ? updatedListing.tags : current.tags,
+    }));
+  }, [dataset.id, listingDraftUpdates]);
 
   return (
     <div className="space-y-6">
@@ -621,84 +747,142 @@ function ListingPreparation({
 
             {metadata && (
               <>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="metadata-title">Title</Label>
-                    <Input id="metadata-title" value={form.title} onChange={(event) => setFormPatch({ title: event.target.value })} disabled={activeStep > 2} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="metadata-description">Description</Label>
-                    <Textarea id="metadata-description" value={form.description} onChange={(event) => setFormPatch({ description: event.target.value })} rows={5} disabled={activeStep > 2} />
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="metadata-category">Category</Label>
-                      <Select value={form.category} onValueChange={(category) => setFormPatch({ category })} disabled={activeStep > 2}>
-                        <SelectTrigger id="metadata-category" className="bg-background border-border">
-                          <SelectValue placeholder="Choose a category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categoryOptions.map((category) => (
-                            <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-md border p-3">
-                        <span className="text-muted-foreground">Privacy score</span>
-                        <p className="font-medium">{metadata.privacy_score == null ? "Not available" : `${metadata.privacy_score}/10`}</p>
-                      </div>
-                      <div className="rounded-md border p-3">
-                        <span className="text-muted-foreground">Freshness score</span>
-                        <p className="font-medium">{Math.round(metadata.freshness_score * 100)}%</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="metadata-tags">Tags</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="metadata-tags"
-                        value={tagInput}
-                        onChange={(event) => setTagInput(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            addTag();
-                          }
-                        }}
-                        disabled={activeStep > 2}
-                      />
-                      <Button type="button" variant="outline" onClick={addTag} disabled={activeStep > 2 || !tagInput.trim()}>Add</Button>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {form.tags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="gap-1">
-                          {tag}
-                          <button
-                            type="button"
-                            onClick={() => setFormPatch({ tags: form.tags.filter((item) => item !== tag) })}
-                            className="hover:text-destructive"
-                            aria-label={`Remove tag ${tag}`}
-                            disabled={activeStep > 2}
-                          >
-                            <XCircle className="h-3 w-3" />
-                          </button>
-                        </Badge>
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {guidedMetadataFields.map((field) => (
+                        <Button
+                          key={field.value}
+                          type="button"
+                          size="sm"
+                          variant={activeMetadataField === field.value ? "default" : "outline"}
+                          onClick={() => setActiveMetadataField(field.value)}
+                        >
+                          {field.label}
+                        </Button>
                       ))}
                     </div>
+
+                    <div className={cn(
+                      "space-y-2 rounded-md border p-3 transition-colors",
+                      activeMetadataField === "title" ? "border-primary bg-primary/5" : "border-transparent"
+                    )}>
+                      <Label htmlFor="metadata-title">Title</Label>
+                      <Input id="metadata-title" value={form.title} onChange={(event) => setFormPatch({ title: event.target.value })} disabled={activeStep > 2} />
+                    </div>
+                    <div className={cn(
+                      "space-y-2 rounded-md border p-3 transition-colors",
+                      activeMetadataField === "description" ? "border-primary bg-primary/5" : "border-transparent"
+                    )}>
+                      <Label htmlFor="metadata-description">Description</Label>
+                      <Textarea id="metadata-description" value={form.description} onChange={(event) => setFormPatch({ description: event.target.value })} rows={5} disabled={activeStep > 2} />
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className={cn(
+                        "space-y-2 rounded-md border p-3 transition-colors",
+                        activeMetadataField === "category" ? "border-primary bg-primary/5" : "border-transparent"
+                      )}>
+                        <Label htmlFor="metadata-category">Category</Label>
+                        <Select value={form.category} onValueChange={(category) => setFormPatch({ category })} disabled={activeStep > 2}>
+                          <SelectTrigger id="metadata-category" className="bg-background border-border">
+                            <SelectValue placeholder="Choose a category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categoryOptions.map((category) => (
+                              <SelectItem key={category.value} value={category.value}>{category.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="rounded-md border p-3">
+                          <span className="text-muted-foreground">Privacy score</span>
+                          <p className="font-medium">{metadata.privacy_score == null ? "Not available" : `${metadata.privacy_score}/10`}</p>
+                        </div>
+                        <div className="rounded-md border p-3">
+                          <span className="text-muted-foreground">Freshness score</span>
+                          <p className="font-medium">{Math.round(metadata.freshness_score * 100)}%</p>
+                        </div>
+                        <div className="rounded-md border border-dashed p-3">
+                          <span className="text-muted-foreground">Discoverability</span>
+                          <p className="font-medium text-muted-foreground">
+                            {METADATA_REVIEW_INSIGHTS_ENABLED ? "Coming soon" : "Coming soon"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className={cn(
+                      "space-y-2 rounded-md border p-3 transition-colors",
+                      activeMetadataField === "tags" ? "border-primary bg-primary/5" : "border-transparent"
+                    )}>
+                      <Label htmlFor="metadata-tags">Tags</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="metadata-tags"
+                          value={tagInput}
+                          onChange={(event) => setTagInput(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addTag();
+                            }
+                          }}
+                          disabled={activeStep > 2}
+                        />
+                        <Button type="button" variant="outline" onClick={addTag} disabled={activeStep > 2 || !tagInput.trim()}>Add</Button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {form.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="gap-1">
+                            {tag}
+                            <button
+                              type="button"
+                              onClick={() => setFormPatch({ tags: form.tags.filter((item) => item !== tag) })}
+                              className="hover:text-destructive"
+                              aria-label={`Remove tag ${tag}`}
+                              disabled={activeStep > 2}
+                            >
+                              <XCircle className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border border-dashed p-3 text-sm">
+                      <span className="text-muted-foreground">Why allAI chose this</span>
+                      <p className="mt-1 text-muted-foreground">Coming soon</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <FieldReviewCard
+                      activeField={activeMetadataField}
+                      draftListingId={draftListingId}
+                      onLooksGood={focusNextMetadataField}
+                      onChangeIt={handleChangeMetadataField}
+                      controlsDisabled={!allieAvailable || activeStep > 2}
+                    />
+                    {allieAvailable ? (
+                      <ChatPanel
+                        embedded
+                        title="allAI review"
+                        subtitle={`Reviewing ${guidedMetadataFields.find((field) => field.value === activeMetadataField)?.label.toLowerCase() || activeMetadataField}`}
+                      />
+                    ) : (
+                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                        allAI is unavailable for this session.
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {!metadataApproved && (
-                    <Button onClick={handleApproveMetadata} disabled={activeStep > 2 || !form.title.trim() || !form.description.trim()} size="sm">
-                      Approve metadata
-                    </Button>
-                  )}
+                  <Button onClick={handleAcceptAllMetadata} disabled={activeStep > 2 || !draftListingId || !form.title.trim() || !form.description.trim()} size="sm">
+                    Accept all & continue
+                  </Button>
                   {metadataApproved && (
-                    <Button onClick={handleContinueMetadata} disabled={activeStep > 2 || !form.title.trim() || !form.description.trim()} size="sm">
+                    <Button onClick={handleContinueMetadata} disabled={activeStep > 2 || !form.title.trim() || !form.description.trim()} size="sm" variant="outline">
                       Continue to publish
                     </Button>
                   )}
@@ -889,6 +1073,7 @@ const DatasetDetail = () => {
     return (
       <ListingPreparation
         dataset={apiDataset}
+        draftListingId={apiDataset.listing_id ?? null}
         backPath={backPath}
         onDelete={handleDelete}
         isDeleting={isDeleting}
