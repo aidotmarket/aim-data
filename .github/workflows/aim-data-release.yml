@@ -20,7 +20,7 @@ jobs:
         id: version
         run: |
           TAG="${GITHUB_REF_NAME}"
-          VER="${TAG#aim-data-}"
+          VER="${TAG#aim-channel-}"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           if echo "$VER" | grep -qE '\-rc\.'; then
