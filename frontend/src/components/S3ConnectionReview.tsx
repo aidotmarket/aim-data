@@ -170,7 +170,7 @@ export function S3ConnectionReview({
           onScanComplete?.();
           fetchObjects(0);
         } else if (scanFailed(data.status)) {
-          setScanError("Scan failed. Verify bucket access and retry.");
+          setScanError(data.error_message || "Scan failed. Verify bucket access and retry.");
         }
       } catch {
         setScanError("Scan status could not be refreshed.");
@@ -197,7 +197,7 @@ export function S3ConnectionReview({
           onScanComplete?.();
           fetchObjects(0);
         } else if (scanFailed(data.status)) {
-          setScanError("Scan failed. Verify bucket access and retry.");
+          setScanError(data.error_message || "Scan failed. Verify bucket access and retry.");
         } else {
           toast({ title: "Scan started", description: "S3 object discovery is running." });
         }
