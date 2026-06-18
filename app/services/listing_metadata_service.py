@@ -13,10 +13,14 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import httpx
+
 from app.models.listing_metadata_schemas import ListingMetadata, ColumnSummary
 from app.services.duckdb_service import ephemeral_duckdb_service
 
 logger = logging.getLogger(__name__)
+
+MAX_README_BYTES = 256 * 1024
 
 
 # Semantic type -> category mappings
@@ -209,27 +213,36 @@ class ListingMetadataService:
         This is best-effort by design: empty, invalid, unavailable, or malformed
         LLM output falls back to the deterministic template fields.
         """
+        prompt = self._build_authoring_prompt(
+            dataset_id=dataset_id,
+            filepath=filepath,
+            metadata=metadata,
+            categories=categories,
+            tags=tags,
+            fallback_title=fallback_title,
+            fallback_description=fallback_description,
+        )
+        return await self._author_via_provider(
+            prompt,
+            context=(
+                "You write honest buyer-facing marketplace listing metadata "
+                "for datasets. Return only valid JSON."
+            ),
+        )
+
+    async def _author_via_provider(self, prompt: str, context: str) -> Dict[str, Any]:
+        """
+        Stream the allAI provider, accumulate text, and parse JSON metadata.
+
+        Best-effort by design: empty, invalid, unavailable, or malformed output
+        falls back to the caller's deterministic template fields.
+        """
         try:
-            prompt = self._build_authoring_prompt(
-                dataset_id=dataset_id,
-                filepath=filepath,
-                metadata=metadata,
-                categories=categories,
-                tags=tags,
-                fallback_title=fallback_title,
-                fallback_description=fallback_description,
-            )
             from app.services.allie_provider import get_allie_provider
 
             provider = get_allie_provider()
             text_parts: List[str] = []
-            async for chunk in provider.stream(
-                prompt,
-                context=(
-                    "You write honest buyer-facing marketplace listing metadata "
-                    "for datasets. Return only valid JSON."
-                ),
-            ):
+            async for chunk in provider.stream(prompt, context=context):
                 if chunk.text:
                     text_parts.append(chunk.text)
 
@@ -240,6 +253,128 @@ class ListingMetadataService:
         except Exception as e:
             logger.warning("LLM listing metadata authoring failed; using template fallback: %s", e)
             return {}
+
+    async def read_s3_readme(
+        self,
+        *,
+        broker: Any,
+        role_arn: str,
+        region: str,
+        bucket: str,
+        prefix: Optional[str],
+    ) -> Optional[str]:
+        """
+        Best-effort README reader for S3 reference listings.
+
+        README bytes are fetched through the broker-presigned URL, bounded in
+        memory, decoded, and never persisted.
+        """
+        try:
+            listing = broker.list_objects(
+                role_arn=role_arn,
+                region=region,
+                bucket=bucket,
+                prefix=prefix,
+                max_keys=100,
+            )
+            readme_key = self._select_root_readme_key(listing.get("objects", []), prefix)
+            if not readme_key:
+                return None
+
+            presigned = broker.presign_object(
+                role_arn=role_arn,
+                region=region,
+                bucket=bucket,
+                object_key=readme_key,
+            )
+            url = presigned.get("url")
+            if not url:
+                return None
+
+            headers = {"Range": f"bytes=0-{MAX_README_BYTES - 1}"}
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                async with client.stream("GET", url, headers=headers) as response:
+                    response.raise_for_status()
+                    data = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        remaining = MAX_README_BYTES - len(data)
+                        if remaining <= 0:
+                            break
+                        data.extend(chunk[:remaining])
+                        if len(data) >= MAX_README_BYTES:
+                            break
+            return bytes(data).decode("utf-8", errors="replace")
+        except Exception as e:
+            logger.debug("S3 README unavailable for listing authoring: %s", e)
+            return None
+
+    def _select_root_readme_key(self, objects: list, prefix: Optional[str]) -> Optional[str]:
+        root = (prefix or "").strip("/")
+        root_prefix = f"{root}/" if root else ""
+        candidates: Dict[str, str] = {}
+
+        for item in objects:
+            key = str(item.get("key") or "")
+            if root_prefix:
+                if not key.startswith(root_prefix):
+                    continue
+                relative_key = key[len(root_prefix):]
+            else:
+                relative_key = key
+            if "/" in relative_key:
+                continue
+            candidates.setdefault(relative_key.lower(), key)
+        for name in ("readme.md", "readme.txt", "readme"):
+            if name in candidates:
+                return candidates[name]
+        return None
+
+    async def author_s3_reference_metadata(
+        self,
+        *,
+        sampled_stats: dict,
+        readme_text: Optional[str],
+        bucket: str,
+        prefix: Optional[str],
+        fallback_title: str,
+        fallback_description: str,
+    ) -> Dict[str, Any]:
+        readme_excerpt = self._truncate_text_bytes(readme_text or "", MAX_README_BYTES)
+        prompt_payload = {
+            "storage": "s3",
+            "bucket": bucket,
+            "prefix": prefix or "",
+            "object_count": sampled_stats.get("object_count", 0),
+            "total_size_bytes": sampled_stats.get("total_size_bytes", 0),
+            "type_histogram": sampled_stats.get("type_histogram", {}) or {},
+            "approximate": sampled_stats.get("approximate"),
+            "sample_coverage": sampled_stats.get("sample_coverage"),
+            "sampled_object_count": sampled_stats.get("sampled_object_count"),
+            "fallback_title": fallback_title,
+            "fallback_description": fallback_description,
+            "readme_text": readme_excerpt,
+        }
+        prompt = (
+            "Author metadata for this cloud dataset listing. The listing is an "
+            "S3 prefix reference, not a copied file manifest. Return JSON with "
+            "keys title, description, category, tags. Title must be <=256 "
+            "characters. Description should be a few concise sentences for "
+            "buyers. Use the seller README when present, but stay honest about "
+            "the sampled object statistics and include a data note when the "
+            "stats are approximate, sparse, or otherwise limited. Use 3-8 "
+            "lowercase tags.\n\n"
+            f"{json.dumps(prompt_payload, default=str)}"
+        )
+        return await self._author_via_provider(
+            prompt,
+            context=(
+                "You write honest buyer-facing marketplace listing metadata "
+                "for cloud datasets. Return only valid JSON."
+            ),
+        )
+
+    def _truncate_text_bytes(self, text: str, max_bytes: int) -> str:
+        return text.encode("utf-8", errors="replace")[:max_bytes].decode("utf-8", errors="replace")
 
     def _build_authoring_prompt(
         self,
