@@ -6,9 +6,9 @@ Tracks paginated S3 object enumeration progress for a connection.
 """
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import Column, ForeignKey, String
+from sqlalchemy import Column, ForeignKey, JSON, String
 from sqlmodel import Field, Relationship, SQLModel, Text
 
 if TYPE_CHECKING:
@@ -31,6 +31,7 @@ class S3ScanJob(SQLModel, table=True):
     continuation_token: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     error_message: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     objects_enumerated: int = Field(default=0, nullable=False)
+    sampled_stats: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -134,7 +134,7 @@ def _object(key: str, size: int = 123):
     }
 
 
-def test_scan_persists_one_row_per_object(session_context, monkeypatch):
+def test_scan_persists_sample_and_exact_stats(session_context, monkeypatch):
     connection = _add_connection(session_context)
     broker = FakeBroker()
     broker.pages = [
@@ -147,6 +147,14 @@ def test_scan_persists_one_row_per_object(session_context, monkeypatch):
 
     assert scan_job.status == "completed"
     assert scan_job.objects_enumerated == 2
+    assert scan_job.sampled_stats == {
+        "object_count": 2,
+        "total_size_bytes": 579,
+        "type_histogram": {"application/json": 1, "text/csv": 1},
+        "approximate": False,
+        "sample_coverage": "full",
+        "sampled_object_count": 2,
+    }
     assert broker.calls[0]["bucket"] == "seller-bucket"
     assert broker.calls[0]["prefix"] == "exports/"
     assert broker.calls[1]["continuation_token"] == "next"
@@ -157,6 +165,49 @@ def test_scan_persists_one_row_per_object(session_context, monkeypatch):
     assert objects[0].content_type == "text/csv"
     assert objects[1].size_bytes == 456
     assert stored_connection.last_scanned_at is not None
+
+
+def test_large_scan_computes_exact_stats_and_caps_sample_rows(session_context, monkeypatch):
+    connection = _add_connection(session_context)
+    broker = FakeBroker()
+    objects = [
+        _object(
+            f"exports/item-{idx:05d}.{'csv' if idx % 2 == 0 else 'json'}",
+            idx + 1,
+        )
+        for idx in range(11_001)
+    ]
+    broker.pages = [
+        _page(*objects[start : start + 1000], truncated=start + 1000 < len(objects), token=str(start + 1000))
+        for start in range(0, len(objects), 1000)
+    ]
+
+    def list_objects(**kwargs):
+        broker.calls.append(kwargs)
+        token = kwargs.get("continuation_token")
+        page_index = int(token or 0) // 1000
+        return broker.pages[page_index]
+
+    broker.list_objects = list_objects
+    monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: pytest.fail("boto3 must not be used"))
+
+    scan_job = S3ScanService(broker).scan_connection(connection.id)
+
+    assert scan_job.status == "completed"
+    assert scan_job.objects_enumerated == 11_001
+    assert scan_job.sampled_stats == {
+        "object_count": 11_001,
+        "total_size_bytes": sum(range(1, 11_002)),
+        "type_histogram": {"application/json": 5500, "text/csv": 5501},
+        "approximate": False,
+        "sample_coverage": "full",
+        "sampled_object_count": 1000,
+    }
+    with session_context() as session:
+        stored_objects = session.exec(select(S3ObjectMetadata)).all()
+    assert len(stored_objects) == 1000
+    assert len(broker.calls) == 12
+
 
 
 def test_rescan_is_idempotent_and_preserves_dataset_id(session_context, monkeypatch):
