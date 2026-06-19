@@ -43,6 +43,7 @@ class TestSerialStoreInit:
         path = os.path.join(tmp_serial_dir, "serial.json")
         data = {
             "serial": "VZ-abcd1234-efgh5678",
+            "serial_id": "11111111-2222-3333-4444-555555555555",
             "install_token": "vzit_test123",
             "bootstrap_token": None,
             "state": "active",
@@ -57,6 +58,7 @@ class TestSerialStoreInit:
 
         store = SerialStore(path=path)
         assert store.state.serial == "VZ-abcd1234-efgh5678"
+        assert store.state.serial_id == "11111111-2222-3333-4444-555555555555"
         assert store.state.state == ACTIVE
         assert store.state.install_token == "vzit_test123"
 
@@ -94,12 +96,14 @@ class TestAtomicWrites:
         path = os.path.join(tmp_serial_dir, "serial.json")
         store1 = SerialStore(path=path)
         store1.state.serial = "VZ-persist-test1234"
+        store1.state.serial_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
         store1.state.state = ACTIVE
         store1.state.install_token = "vzit_abc"
         store1.save()
 
         store2 = SerialStore(path=path)
         assert store2.state.serial == "VZ-persist-test1234"
+        assert store2.state.serial_id == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
         assert store2.state.state == ACTIVE
         assert store2.state.install_token == "vzit_abc"
 
