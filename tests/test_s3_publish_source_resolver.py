@@ -161,6 +161,23 @@ def test_object_key_outside_prefix_fails_closed(resolver_engine):
         _resolve(resolver_engine)
 
 
+@pytest.mark.parametrize(
+    "object_key",
+    [
+        "exports/dataset-1/../other/secret.csv",
+        "/exports/dataset-1/report.csv",
+    ],
+)
+def test_invalid_object_key_fails_closed(resolver_engine, object_key):
+    _add_connection(resolver_engine, prefix="exports/dataset-1")
+    _add_dataset(resolver_engine, object_key=object_key)
+
+    with pytest.raises(S3PublishSourceResolutionError, match="not eligible") as exc_info:
+        _resolve(resolver_engine)
+
+    assert exc_info.value.reason == "invalid_object_key"
+
+
 @pytest.mark.parametrize("prefix", [None, "", "/"])
 def test_empty_or_bucket_root_prefix_fails_closed(resolver_engine, prefix):
     _add_connection(resolver_engine, prefix=prefix)
@@ -223,3 +240,42 @@ def test_non_s3_dataset_returns_not_s3_without_error(resolver_engine):
 def test_missing_dataset_lookup_fails_closed(resolver_engine):
     with pytest.raises(S3PublishSourceResolutionError, match="not eligible"):
         _resolve(resolver_engine, dataset_id="missing-dataset")
+
+
+def test_dataset_lookup_failed_does_not_chain_original_error():
+    class FailingProcessing:
+        def get_dataset(self, _dataset_id):
+            raise RuntimeError("database unavailable")
+
+    with pytest.raises(S3PublishSourceResolutionError, match="not eligible") as exc_info:
+        resolve_s3_publish_source(
+            "dataset-1",
+            USER_A,
+            SERIAL_STATE,
+            processing=FailingProcessing(),
+            session_context=lambda: None,
+        )
+
+    assert exc_info.value.reason == "dataset_lookup_failed"
+    assert exc_info.value.__cause__ is None
+
+
+def test_connection_lookup_failed_does_not_chain_original_error(resolver_engine):
+    _add_dataset(resolver_engine)
+
+    @contextmanager
+    def _failing_session_context():
+        raise RuntimeError("database unavailable")
+        yield
+
+    with pytest.raises(S3PublishSourceResolutionError, match="not eligible") as exc_info:
+        resolve_s3_publish_source(
+            "dataset-1",
+            USER_A,
+            SERIAL_STATE,
+            processing=ProcessingService(),
+            session_context=_failing_session_context,
+        )
+
+    assert exc_info.value.reason == "connection_lookup_failed"
+    assert exc_info.value.__cause__ is None

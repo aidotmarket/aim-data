@@ -85,8 +85,8 @@ def resolve_s3_publish_source(
 
     try:
         record = processing.get_dataset(dataset_id)
-    except Exception as exc:
-        raise S3PublishSourceResolutionError("dataset_lookup_failed") from exc
+    except Exception:
+        raise S3PublishSourceResolutionError("dataset_lookup_failed")
     if record is None:
         raise S3PublishSourceResolutionError("dataset_lookup_failed")
 
@@ -117,8 +117,8 @@ def resolve_s3_publish_source(
             return _validate_connection_resolution(connection, str(object_key), str(serial_id))
     except S3PublishSourceResolutionError:
         raise
-    except Exception as exc:
-        raise S3PublishSourceResolutionError("connection_lookup_failed") from exc
+    except Exception:
+        raise S3PublishSourceResolutionError("connection_lookup_failed")
 
 
 def _validate_connection_resolution(
@@ -133,6 +133,8 @@ def _validate_connection_resolution(
         raise S3PublishSourceResolutionError("invalid_role_arn")
 
     prefix = _validate_prefix(connection.prefix)
+    if ".." in object_key or object_key.startswith("/"):
+        raise S3PublishSourceResolutionError("invalid_object_key")
     if not object_key.startswith(f"{prefix}/"):
         raise S3PublishSourceResolutionError("object_key_outside_prefix")
 
