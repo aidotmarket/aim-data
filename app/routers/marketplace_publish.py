@@ -12,8 +12,9 @@ The Ed25519 private key lives on VZ backend only.
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from uuid import uuid4
 
 import httpx
@@ -26,6 +27,12 @@ from app.config import settings
 from app.core.channel_config import CHANNEL
 from app.core.crypto import DeviceCrypto
 from app.services.registration_service import ensure_vz_install_registered
+from app.services.s3_publish_source_resolver import (
+    NotS3PublishSource,
+    S3PublishSourceResolution,
+    S3PublishSourceResolutionError,
+    resolve_s3_publish_source,
+)
 from app.services.serial_store import get_serial_store
 
 logger = logging.getLogger(__name__)
@@ -59,16 +66,38 @@ class MarketplacePublishResponse(BaseModel):
     error: Optional[str] = None
 
 
+class S3ConnectionPublishEmit(BaseModel):
+    """Strict allowlist for the receiver's S3ConnectionPublish contract."""
+
+    model_config = {"extra": "forbid"}
+
+    bucket: str
+    region: str
+    role_arn: str
+    prefix: str
+    serial_id: str
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _jcs_hash(body: dict) -> str:
-    """RFC 8785 JCS-style canonical hash (sorted keys, compact separators)."""
-    canonical = json.dumps(
+VZ_SERIAL_RE = re.compile(r"\bVZ-[A-Za-z0-9][A-Za-z0-9_-]{6,}\b")
+HMAC_HEX_RE = re.compile(r"\b[0-9a-fA-F]{32,}\b")
+SENSITIVE_TOKEN_RE = re.compile(r"(external[_-]?id|secret|token)", re.IGNORECASE)
+ALLOWED_SENSITIVE_KEY_NAMES = {"pricing_type"}
+
+
+def _jcs_canonical_bytes(body: dict) -> bytes:
+    """RFC 8785 JCS-style canonical bytes used by sender/backend parity tests."""
+    return json.dumps(
         body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
+
+
+def _jcs_hash(body: dict) -> str:
+    """RFC 8785 JCS-style canonical hash (sorted keys, compact separators)."""
+    return hashlib.sha256(_jcs_canonical_bytes(body)).hexdigest()
 
 
 def _build_jwt(seller_id: str, install_id: str, metadata_hash: str, ed_priv) -> str:
@@ -97,6 +126,55 @@ def _get_crypto() -> DeviceCrypto:
         keystore_path=settings.keystore_path,
         passphrase=settings.keystore_passphrase,
     )
+
+
+def _build_s3_connection_emit(resolution: S3PublishSourceResolution) -> dict[str, str]:
+    """Build the exact allowlisted s3_connection block sent to ai.market."""
+    return S3ConnectionPublishEmit(
+        bucket=resolution.bucket,
+        region=resolution.region,
+        role_arn=resolution.role_arn,
+        prefix=resolution.prefix,
+        serial_id=str(resolution.serial_id),
+    ).model_dump(mode="json")
+
+
+def _build_publish_payload(
+    body: MarketplacePublishRequest,
+    s3_source: NotS3PublishSource | S3PublishSourceResolution,
+) -> dict[str, Any]:
+    """Build the single canonical publish payload used for wire body and hash."""
+    payload = body.model_dump(exclude_none=True)
+    payload["vz_raw_listing_id"] = payload.pop("vz_dataset_id")
+    payload["download_channel"] = CHANNEL.value
+    if isinstance(s3_source, S3PublishSourceResolution):
+        payload["s3_connection"] = _build_s3_connection_emit(s3_source)
+    return payload
+
+
+def _assert_no_sensitive_publish_values(value: Any, path: tuple[str, ...] = ()) -> None:
+    """Reject accidental secret/serial material before signing the publish payload."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key)
+            normalized_key = key_text.lower()
+            if normalized_key not in ALLOWED_SENSITIVE_KEY_NAMES and SENSITIVE_TOKEN_RE.search(key_text):
+                raise HTTPException(status_code=409, detail="Publish payload contains sensitive material")
+            _assert_no_sensitive_publish_values(child, (*path, key_text))
+        return
+
+    if isinstance(value, (list, tuple)):
+        for idx, child in enumerate(value):
+            _assert_no_sensitive_publish_values(child, (*path, str(idx)))
+        return
+
+    if isinstance(value, str):
+        if (
+            VZ_SERIAL_RE.search(value)
+            or HMAC_HEX_RE.search(value)
+            or SENSITIVE_TOKEN_RE.search(value)
+        ):
+            raise HTTPException(status_code=409, detail="Publish payload contains sensitive material")
 
 
 # ---------------------------------------------------------------------------
@@ -141,12 +219,20 @@ async def publish_to_marketplace(
             detail="VZ install registration not available — sign in with ai.market and try publishing again",
         )
 
-    # 3. Build payload for ai.market
-    payload = body.model_dump(exclude_none=True)
-    # Map vz_dataset_id -> vz_raw_listing_id for ai.market
-    payload["vz_raw_listing_id"] = payload.pop("vz_dataset_id")
-    # Attribution: informational only, tells ai.market how VZ was installed
-    payload["download_channel"] = CHANNEL.value
+    # 3. Resolve S3 provenance, then build the canonical payload for ai.market.
+    try:
+        s3_source = resolve_s3_publish_source(body.vz_dataset_id, user, store.state)
+    except S3PublishSourceResolutionError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "S3-sourced dataset is not eligible for scoped-credential publish yet; "
+                f"verify the S3 connection and dataset source, then retry. reason={exc.reason}"
+            ),
+        )
+
+    payload = _build_publish_payload(body, s3_source)
+    _assert_no_sensitive_publish_values(payload)
 
     # 4. JCS hash + JWT
     metadata_hash = _jcs_hash(payload)
