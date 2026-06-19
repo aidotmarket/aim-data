@@ -1,3 +1,4 @@
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -271,6 +272,55 @@ async def test_non_s3_publish_attaches_no_s3_connection(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_non_s3_publish_allows_sensitive_words_in_user_free_text(monkeypatch):
+    _store, capture = _patch_publish_dependencies(monkeypatch, s3_source=NotS3PublishSource())
+
+    await marketplace_publish.publish_to_marketplace(
+        _publish_body(
+            description="Tokenizer notes include secret handling and checksum "
+            "0123456789abcdef0123456789abcdef.",
+            column_names=["tokenizer_secret_checksum_0123456789abcdef0123456789abcdef"],
+            column_types=["string"],
+        ),
+        _publish_request(),
+        user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+    )
+
+    payload = capture["kwargs"]["json"]
+    assert payload["description"].startswith("Tokenizer notes")
+    assert payload["column_names"] == ["tokenizer_secret_checksum_0123456789abcdef0123456789abcdef"]
+    assert "s3_connection" not in payload
+
+
+@pytest.mark.asyncio
+async def test_s3_publish_allows_sensitive_words_in_user_free_text(monkeypatch):
+    s3_source = S3PublishSourceResolution(
+        bucket="seller-bucket",
+        region="us-east-1",
+        role_arn="arn:aws:iam::123456789012:role/aim-data-delivery",
+        prefix="exports/dataset-1",
+        serial_id="11111111-2222-3333-4444-555555555555",
+    )
+    _store, capture = _patch_publish_dependencies(monkeypatch, s3_source=s3_source)
+
+    await marketplace_publish.publish_to_marketplace(
+        _publish_body(
+            description="Tokenizer notes include secret handling and checksum "
+            "0123456789abcdef0123456789abcdef.",
+            tags=["tokenizer", "secret"],
+            column_names=["tokenizer_secret_checksum_0123456789abcdef0123456789abcdef"],
+            column_types=["string"],
+        ),
+        _publish_request(),
+        user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+    )
+
+    payload = capture["kwargs"]["json"]
+    assert payload["s3_connection"]["bucket"] == "seller-bucket"
+    assert payload["description"].startswith("Tokenizer notes")
+
+
+@pytest.mark.asyncio
 async def test_resolver_error_fails_closed_without_publish(monkeypatch):
     store = _Store()
     capture: dict = {}
@@ -325,15 +375,37 @@ def test_s3_connection_emit_allowlist_rejects_extra_field():
 @pytest.mark.parametrize(
     "payload",
     [
-        {"title": "A file", "s3_connection": {"external_id": "not-allowed"}},
-        {"title": "A file", "description": "source serial VZ-ABCDEFGH"},
+        {"title": "A file", "s3_connection": {"prefix": "external_id=not-allowed"}},
+        {"title": "A file", "s3_connection": {"prefix": "source serial VZ-ABCDEFGH"}},
     ],
 )
-def test_recursive_sensitive_assertion_rejects_planted_values(payload):
+def test_sensitive_assertion_rejects_planted_values_inside_s3_connection(payload):
     with pytest.raises(HTTPException) as exc_info:
         marketplace_publish._assert_no_sensitive_publish_values(payload)
 
     assert exc_info.value.status_code == 409
+
+
+def test_sensitive_assertion_rejects_sensitive_key_name_globally():
+    with pytest.raises(HTTPException) as exc_info:
+        marketplace_publish._assert_no_sensitive_publish_values(
+            {"title": "A file", "metadata": [{"auth_token": "buyer-facing text"}]}
+        )
+
+    assert exc_info.value.status_code == 409
+
+
+def test_sensitive_assertion_is_read_only_and_allows_non_s3_free_text_values():
+    payload = {
+        "title": "A file",
+        "description": "Tokenizer secret checksum 0123456789abcdef0123456789abcdef",
+        "column_names": ["VZ-ABCDEFGH", "tokenizer_secret_checksum"],
+    }
+    original = deepcopy(payload)
+
+    marketplace_publish._assert_no_sensitive_publish_values(payload)
+
+    assert payload == original
 
 
 def test_jcs_hash_parity_golden_with_s3_connection():
