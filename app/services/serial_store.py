@@ -36,6 +36,7 @@ FAILURE_THRESHOLD = 3
 @dataclass
 class SerialState:
     serial: str = ""
+    serial_id: Optional[str] = None
     install_token: Optional[str] = None
     bootstrap_token: Optional[str] = None
     vz_install_id: Optional[str] = None
@@ -82,6 +83,7 @@ class SerialStore:
             raw = json.loads(self._path.read_text())
             self._state = SerialState(
                 serial=raw.get("serial", ""),
+                serial_id=raw.get("serial_id"),
                 install_token=raw.get("install_token"),
                 bootstrap_token=raw.get("bootstrap_token"),
                 vz_install_id=raw.get("vz_install_id"),
@@ -184,6 +186,12 @@ class SerialStore:
         if seller_id:
             self._state.ai_market_seller_id = seller_id
         self.save()
+
+    def persist_serial_id(self, serial_id: Optional[str]) -> None:
+        """Persist backend serial row UUID when present in serial responses."""
+        if serial_id:
+            self._state.serial_id = serial_id
+            self.save()
 
     def persist_vz_install(self, install_id: str, install_token: Optional[str] = None) -> None:
         """Persist ai.market VZ install credentials."""

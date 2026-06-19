@@ -19,6 +19,7 @@ from app.services.serial_client import (
     ActivateResult,
     RefreshResult,
     SerialClient,
+    StatusResult,
 )
 
 
@@ -88,6 +89,43 @@ class TestStartupProvisioned:
         assert mock_store.state.state == ACTIVE
         assert mock_store.state.install_token == "vzit_new"
         assert mock_store.state.bootstrap_token is None
+
+    @pytest.mark.asyncio
+    async def test_activation_persists_serial_id(self, mock_store, mock_client, tmp_path):
+        path = str(tmp_path / "serial.json")
+        mock_store.state.state = PROVISIONED
+        mock_store.state.serial = "VZ-test1234-test5678"
+        mock_store.state.bootstrap_token = "vzbt_boot"
+        mock_store.save()
+
+        mock_client.activate = AsyncMock(return_value=ActivateResult(
+            success=True,
+            install_token="vzit_new",
+            serial_id="11111111-2222-3333-4444-555555555555",
+            status_code=200,
+        ))
+
+        mgr = ActivationManager(store=mock_store, client=mock_client)
+        await mgr._attempt_activation()
+
+        reloaded = SerialStore(path=path)
+        assert reloaded.state.serial_id == "11111111-2222-3333-4444-555555555555"
+
+    @pytest.mark.asyncio
+    async def test_activation_without_serial_id_leaves_none(self, mock_store, mock_client):
+        mock_store.state.state = PROVISIONED
+        mock_store.state.serial = "VZ-test"
+        mock_store.state.bootstrap_token = "vzbt_boot"
+        mock_store.save()
+
+        mock_client.activate = AsyncMock(return_value=ActivateResult(
+            success=True, install_token="vzit_new", status_code=200,
+        ))
+
+        mgr = ActivationManager(store=mock_store, client=mock_client)
+        await mgr._attempt_activation()
+
+        assert mock_store.state.serial_id is None
 
     @pytest.mark.asyncio
     async def test_activation_failure_stays_provisioned(self, mock_store, mock_client):
@@ -161,6 +199,45 @@ class TestStartupActive:
 
         mock_client.refresh.assert_called_once()
         assert mock_store.state.install_token == "vzit_new_v2"
+
+    @pytest.mark.asyncio
+    async def test_status_poll_persists_serial_id(self, mock_store, mock_client, tmp_path):
+        path = str(tmp_path / "serial.json")
+        mock_store.state.state = ACTIVE
+        mock_store.state.serial = "VZ-test"
+        mock_store.state.install_token = "vzit_existing"
+        mock_store.save()
+
+        mock_client.status = AsyncMock(return_value=StatusResult(
+            success=True,
+            data={"setup_remaining_usd": "8.00", "migrated": False},
+            serial_id="22222222-3333-4444-5555-666666666666",
+            status_code=200,
+        ))
+
+        mgr = ActivationManager(store=mock_store, client=mock_client)
+        await mgr._poll_status()
+
+        reloaded = SerialStore(path=path)
+        assert reloaded.state.serial_id == "22222222-3333-4444-5555-666666666666"
+
+    @pytest.mark.asyncio
+    async def test_status_poll_without_serial_id_leaves_none(self, mock_store, mock_client):
+        mock_store.state.state = ACTIVE
+        mock_store.state.serial = "VZ-test"
+        mock_store.state.install_token = "vzit_existing"
+        mock_store.save()
+
+        mock_client.status = AsyncMock(return_value=StatusResult(
+            success=True,
+            data={"setup_remaining_usd": "8.00", "migrated": False},
+            status_code=200,
+        ))
+
+        mgr = ActivationManager(store=mock_store, client=mock_client)
+        await mgr._poll_status()
+
+        assert mock_store.state.serial_id is None
 
 
 class TestStartupMigrated:

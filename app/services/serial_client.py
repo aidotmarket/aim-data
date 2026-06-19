@@ -29,6 +29,7 @@ DEFAULT_TIMEOUT = 10.0
 class ActivateResult:
     success: bool
     install_token: Optional[str] = None
+    serial_id: Optional[str] = None
     error: Optional[str] = None
     status_code: int = 0
 
@@ -50,6 +51,7 @@ class MeterResult:
 class StatusResult:
     success: bool
     data: Optional[dict] = None
+    serial_id: Optional[str] = None
     migrated: bool = False
     error: Optional[str] = None
     status_code: int = 0
@@ -132,6 +134,7 @@ class SerialClient:
             return ActivateResult(
                 success=True,
                 install_token=data.get("install_token"),
+                serial_id=data.get("serial_id"),
                 status_code=status_code,
             )
         error = data.get("detail", str(data)) if data else f"HTTP {status_code}"
@@ -185,6 +188,7 @@ class SerialClient:
             return StatusResult(
                 success=True,
                 data=data,
+                serial_id=data.get("serial_id"),
                 migrated=data.get("migrated", False),
                 status_code=status_code,
             )

@@ -149,6 +149,7 @@ class ActivationManager:
         )
         if result.success and result.install_token:
             self._store.transition_to_active(result.install_token)
+            self._store.persist_serial_id(result.serial_id)
             self._store.update_app_version(settings.app_version)
             # Auto-configure allAI copilot with activation credentials
             try:
@@ -210,6 +211,7 @@ class ActivationManager:
         result = await self._client.status(state.serial, state.install_token)
         if result.success and result.data:
             self._store.record_success()
+            self._store.persist_serial_id(result.serial_id)
             now = datetime.now(timezone.utc).isoformat()
             self._store.update_status_cache(result.data, now)
             if (

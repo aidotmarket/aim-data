@@ -25,6 +25,34 @@ class TestActivate:
     async def test_activate_success(self, client):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "install_token": "vzit_new_token",
+            "serial_id": "11111111-2222-3333-4444-555555555555",
+        }
+
+        with patch("httpx.AsyncClient") as MockClient:
+            mock_instance = AsyncMock()
+            mock_instance.request = AsyncMock(return_value=mock_resp)
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = mock_instance
+
+            result = await client.activate(
+                serial="VZ-test1234-test5678",
+                bootstrap_token="vzbt_boot",
+                instance_id="vz-testhost",
+                hostname="testhost",
+                version="1.0.0",
+            )
+
+        assert result.success is True
+        assert result.install_token == "vzit_new_token"
+        assert result.serial_id == "11111111-2222-3333-4444-555555555555"
+
+    @pytest.mark.asyncio
+    async def test_activate_success_without_serial_id(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
         mock_resp.json.return_value = {"install_token": "vzit_new_token"}
 
         with patch("httpx.AsyncClient") as MockClient:
@@ -44,6 +72,7 @@ class TestActivate:
 
         assert result.success is True
         assert result.install_token == "vzit_new_token"
+        assert result.serial_id is None
 
     @pytest.mark.asyncio
     async def test_activate_401(self, client):
@@ -156,6 +185,7 @@ class TestStatus:
         mock_resp.json.return_value = {
             "setup_remaining_usd": "8.00",
             "data_remaining_usd": "3.50",
+            "serial_id": "22222222-3333-4444-5555-666666666666",
             "migrated": False,
         }
 
@@ -170,6 +200,29 @@ class TestStatus:
 
         assert result.success is True
         assert result.data["setup_remaining_usd"] == "8.00"
+        assert result.serial_id == "22222222-3333-4444-5555-666666666666"
+
+    @pytest.mark.asyncio
+    async def test_status_success_without_serial_id(self, client):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "setup_remaining_usd": "8.00",
+            "data_remaining_usd": "3.50",
+            "migrated": False,
+        }
+
+        with patch("httpx.AsyncClient") as MockClient:
+            mock_instance = AsyncMock()
+            mock_instance.request = AsyncMock(return_value=mock_resp)
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=False)
+            MockClient.return_value = mock_instance
+
+            result = await client.status("VZ-test", "vzit_test")
+
+        assert result.success is True
+        assert result.serial_id is None
 
     @pytest.mark.asyncio
     async def test_status_migrated(self, client):
