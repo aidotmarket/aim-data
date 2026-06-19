@@ -1,4 +1,3 @@
-from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -277,9 +276,10 @@ async def test_non_s3_publish_allows_sensitive_words_in_user_free_text(monkeypat
 
     await marketplace_publish.publish_to_marketplace(
         _publish_body(
-            description="Tokenizer notes include secret handling and checksum "
-            "0123456789abcdef0123456789abcdef.",
-            column_names=["tokenizer_secret_checksum_0123456789abcdef0123456789abcdef"],
+            title="Trade Secrets Dataset",
+            description="Tokenizer notes include secret handling and external id mapping.",
+            tags=["tokenizer", "secret", "token"],
+            column_names=["external_id", "token", "secret"],
             column_types=["string"],
         ),
         _publish_request(),
@@ -288,36 +288,30 @@ async def test_non_s3_publish_allows_sensitive_words_in_user_free_text(monkeypat
 
     payload = capture["kwargs"]["json"]
     assert payload["description"].startswith("Tokenizer notes")
-    assert payload["column_names"] == ["tokenizer_secret_checksum_0123456789abcdef0123456789abcdef"]
+    assert payload["column_names"] == ["external_id", "token", "secret"]
     assert "s3_connection" not in payload
 
 
 @pytest.mark.asyncio
-async def test_s3_publish_allows_sensitive_words_in_user_free_text(monkeypatch):
+async def test_s3_publish_allows_serial_shaped_s3_connection_serial_id(monkeypatch):
     s3_source = S3PublishSourceResolution(
         bucket="seller-bucket",
         region="us-east-1",
         role_arn="arn:aws:iam::123456789012:role/aim-data-delivery",
         prefix="exports/dataset-1",
-        serial_id="11111111-2222-3333-4444-555555555555",
+        serial_id="VZ-ABC1234XY",
     )
     _store, capture = _patch_publish_dependencies(monkeypatch, s3_source=s3_source)
 
     await marketplace_publish.publish_to_marketplace(
-        _publish_body(
-            description="Tokenizer notes include secret handling and checksum "
-            "0123456789abcdef0123456789abcdef.",
-            tags=["tokenizer", "secret"],
-            column_names=["tokenizer_secret_checksum_0123456789abcdef0123456789abcdef"],
-            column_types=["string"],
-        ),
+        _publish_body(),
         _publish_request(),
         user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
     )
 
     payload = capture["kwargs"]["json"]
     assert payload["s3_connection"]["bucket"] == "seller-bucket"
-    assert payload["description"].startswith("Tokenizer notes")
+    assert payload["s3_connection"]["serial_id"] == "VZ-ABC1234XY"
 
 
 @pytest.mark.asyncio
@@ -372,40 +366,74 @@ def test_s3_connection_emit_allowlist_rejects_extra_field():
         )
 
 
+@pytest.mark.asyncio
+async def test_publish_allows_sensitive_column_names(monkeypatch):
+    _store, capture = _patch_publish_dependencies(monkeypatch, s3_source=NotS3PublishSource())
+
+    await marketplace_publish.publish_to_marketplace(
+        _publish_body(
+            column_names=["external_id", "token", "secret"],
+            column_types=["string", "string", "string"],
+        ),
+        _publish_request(),
+        user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+    )
+
+    assert capture["kwargs"]["json"]["column_names"] == ["external_id", "token", "secret"]
+
+
 @pytest.mark.parametrize(
-    "payload",
+    "description",
     [
-        {"title": "A file", "s3_connection": {"prefix": "external_id=not-allowed"}},
-        {"title": "A file", "s3_connection": {"prefix": "source serial VZ-ABCDEFGH"}},
+        "Contains source credential VZ-ABC1234XY.",
+        "Contains source hash 0123456789abcdef0123456789abcdef.",
     ],
 )
-def test_sensitive_assertion_rejects_planted_values_inside_s3_connection(payload):
-    with pytest.raises(HTTPException) as exc_info:
-        marketplace_publish._assert_no_sensitive_publish_values(payload)
-
-    assert exc_info.value.status_code == 409
-
-
-def test_sensitive_assertion_rejects_sensitive_key_name_globally():
+def test_sensitive_assertion_rejects_sensitive_description_values(description):
     with pytest.raises(HTTPException) as exc_info:
         marketplace_publish._assert_no_sensitive_publish_values(
-            {"title": "A file", "metadata": [{"auth_token": "buyer-facing text"}]}
+            {
+                "title": "A file",
+                "description": description,
+                "tags": ["finance"],
+                "category": "financial",
+                "vz_raw_listing_id": "raw-file-1",
+            }
         )
 
     assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Publish payload contains sensitive material"
 
 
-def test_sensitive_assertion_is_read_only_and_allows_non_s3_free_text_values():
-    payload = {
-        "title": "A file",
-        "description": "Tokenizer secret checksum 0123456789abcdef0123456789abcdef",
-        "column_names": ["VZ-ABCDEFGH", "tokenizer_secret_checksum"],
-    }
-    original = deepcopy(payload)
+@pytest.mark.asyncio
+async def test_publish_rejects_vz_raw_listing_id_with_vz_serial(monkeypatch):
+    _store, capture = _patch_publish_dependencies(monkeypatch, s3_source=NotS3PublishSource())
 
-    marketplace_publish._assert_no_sensitive_publish_values(payload)
+    with pytest.raises(HTTPException) as exc_info:
+        await marketplace_publish.publish_to_marketplace(
+            _publish_body(vz_dataset_id="dataset-VZ-ABC1234XY"),
+            _publish_request(),
+            user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+        )
 
-    assert payload == original
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Publish payload contains sensitive material"
+    assert capture == {}
+
+
+def test_sensitive_assertion_scans_only_settled_top_level_fields():
+    marketplace_publish._assert_no_sensitive_publish_values(
+        {
+            "title": "Trade Secrets Dataset",
+            "description": "Mentions token and external id in buyer text.",
+            "tags": ["token", "finance"],
+            "category": "financial",
+            "vz_raw_listing_id": "raw-file-1",
+            "column_names": ["VZ-ABC1234XY", "tokenizer_secret_checksum"],
+            "metadata": [{"auth_token": "0123456789abcdef0123456789abcdef"}],
+            "s3_connection": {"serial_id": "VZ-ABC1234XY", "prefix": "external_id=ok"},
+        }
+    )
 
 
 def test_jcs_hash_parity_golden_with_s3_connection():

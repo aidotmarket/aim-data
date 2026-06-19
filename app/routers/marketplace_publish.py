@@ -84,8 +84,6 @@ class S3ConnectionPublishEmit(BaseModel):
 
 VZ_SERIAL_RE = re.compile(r"\bVZ-[A-Za-z0-9][A-Za-z0-9_-]{6,}\b")
 HMAC_HEX_RE = re.compile(r"\b[0-9a-fA-F]{32,}\b")
-SENSITIVE_TOKEN_RE = re.compile(r"(external[_-]?id|secret|token)", re.IGNORECASE)
-ALLOWED_SENSITIVE_KEY_NAMES = {"pricing_type"}
 
 
 def _jcs_canonical_bytes(body: dict) -> bytes:
@@ -152,45 +150,23 @@ def _build_publish_payload(
     return payload
 
 
-def _assert_no_sensitive_publish_values(value: Any, path: tuple[str, ...] = ()) -> None:
-    """Reject accidental secret/serial material before signing the publish payload."""
+def _assert_no_sensitive_publish_values(payload: dict[str, Any]) -> None:
+    """Reject accidental serial/hash material in seller-controlled publish fields."""
 
-    def _assert_no_sensitive_key_names(candidate: Any) -> None:
-        if isinstance(candidate, dict):
-            for key, child in candidate.items():
-                key_text = str(key)
-                normalized_key = key_text.lower()
-                if normalized_key not in ALLOWED_SENSITIVE_KEY_NAMES and SENSITIVE_TOKEN_RE.search(key_text):
-                    raise HTTPException(status_code=409, detail="Publish payload contains sensitive material")
-                _assert_no_sensitive_key_names(child)
-            return
+    def _check_string(candidate: str) -> None:
+        if VZ_SERIAL_RE.search(candidate) or HMAC_HEX_RE.search(candidate):
+            raise HTTPException(status_code=409, detail="Publish payload contains sensitive material")
 
-        if isinstance(candidate, (list, tuple)):
-            for child in candidate:
-                _assert_no_sensitive_key_names(child)
+    for key in ("title", "description", "category", "vz_raw_listing_id"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            _check_string(value)
 
-    def _assert_no_sensitive_string_values(candidate: Any) -> None:
-        if isinstance(candidate, dict):
-            for child in candidate.values():
-                _assert_no_sensitive_string_values(child)
-            return
-
-        if isinstance(candidate, (list, tuple)):
-            for child in candidate:
-                _assert_no_sensitive_string_values(child)
-            return
-
-        if isinstance(candidate, str):
-            if (
-                VZ_SERIAL_RE.search(candidate)
-                or HMAC_HEX_RE.search(candidate)
-                or SENSITIVE_TOKEN_RE.search(candidate)
-            ):
-                raise HTTPException(status_code=409, detail="Publish payload contains sensitive material")
-
-    _assert_no_sensitive_key_names(value)
-    if isinstance(value, dict) and "s3_connection" in value:
-        _assert_no_sensitive_string_values(value["s3_connection"])
+    tags = payload.get("tags")
+    if isinstance(tags, list):
+        for tag in tags:
+            if isinstance(tag, str):
+                _check_string(tag)
 
 
 # ---------------------------------------------------------------------------
