@@ -38,7 +38,7 @@ def test_aim_data_compose_uses_aim_data_image_and_env():
     service = data["services"]["app"]
     env = set(service["environment"])
 
-    assert service["image"].startswith("ghcr.io/aidotmarket/aim-channel:${AIM_DATA_VERSION:-")
+    assert service["image"].startswith("ghcr.io/aidotmarket/aim-data:${AIM_DATA_VERSION:-")
     assert REQUIRED_ENV.issubset(env)
     assert "AIM_DATA_AI_MARKET_URL=${AIM_DATA_AI_MARKET_URL:-https://api.ai.market}" in env
     assert "VECTORAIZ_AI_MARKET_URL=${VECTORAIZ_AI_MARKET_URL:-https://api.ai.market}" in env

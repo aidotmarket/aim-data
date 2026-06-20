@@ -96,7 +96,7 @@ Source available under [Elastic License 2.0](LICENSE).
 
 - [ai.market](https://ai.market) — the marketplace this product serves
 - [vectorAIz](https://github.com/aidotmarket/vectoraiz) — sister product for customer-hosted private data
-- [Issues](https://github.com/aidotmarket/aim-channel/issues) — bug reports
+- [Issues](https://github.com/aidotmarket/aim-data/issues) — bug reports
 
 ---
 
