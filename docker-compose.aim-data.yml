@@ -13,7 +13,7 @@
 
 services:
   app:
-    image: ghcr.io/aidotmarket/aim-data:${AIM_DATA_VERSION:-v1.20.59-rc.2}
+    image: ghcr.io/aidotmarket/aim-data:${AIM_DATA_VERSION:-v1.21.0-rc.1}
     ports:
       - "${AIM_DATA_PORT:-8080}:80"
     volumes:
