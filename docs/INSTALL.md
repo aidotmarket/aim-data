@@ -93,9 +93,10 @@ Once green, you can point AIM Data at any bucket and prefix you have read access
 
 ## Updating
 
-When I release a new version, you pull and recreate.
+When I release a new version, grab the latest compose file first, then pull and recreate. The compose file pins the version you run, so pulling without refreshing it first just keeps you on your current version.
 
 ```
+curl -O https://raw.githubusercontent.com/aidotmarket/aim-data/main/docker-compose.aim-data.yml
 docker compose -f docker-compose.aim-data.yml pull
 docker compose -f docker-compose.aim-data.yml up -d
 ```
