@@ -4,11 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'docker-compose.customer.yml'
       - 'installers/**'
-      - 'install.sh'
-      - 'install.ps1'
-      - 'scripts/release.sh'
       - 'Dockerfile.customer'
       - '.github/workflows/aim-data-release.yml'
       - 'docker-compose.aim-data.yml'
@@ -26,7 +22,7 @@ jobs:
       - name: Check compose version matches latest tag
         run: |
           # Get latest release tag
-          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          LATEST_TAG=$(git tag -l 'aim-data-v*' --sort=-v:refname | grep -E '^aim-data-v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
           
           if [ -z "$LATEST_TAG" ]; then
             echo "No release tags found — skipping version check"
@@ -36,10 +32,12 @@ jobs:
           echo "Latest tag: $LATEST_TAG"
           
           # Check compose file references this tag
-          if grep -q "VECTORAIZ_VERSION:-${LATEST_TAG}" docker-compose.customer.yml; then
+          VERSION="${LATEST_TAG#aim-data-}"
+
+          if grep -q "AIM_DATA_VERSION:-${VERSION}" docker-compose.aim-data.yml; then
             echo "✅ Compose file references ${LATEST_TAG}"
           else
-            COMPOSE_VERSION=$(grep -o 'VECTORAIZ_VERSION:-[^}]*' docker-compose.customer.yml | head -1)
+            COMPOSE_VERSION=$(grep -o 'AIM_DATA_VERSION:-[^}]*' docker-compose.aim-data.yml | head -1)
             echo "::warning::Compose file has ${COMPOSE_VERSION} but latest tag is ${LATEST_TAG}"
             echo "This is OK if a new release is in progress."
           fi
@@ -95,7 +93,7 @@ jobs:
       - name: Shell script syntax check
         run: |
           ERRORS=0
-          for script in install.sh installers/mac/install-mac.sh installers/linux/install-linux.sh scripts/release.sh; do
+          for script in installers/aim-data/install.sh scripts/release-aim-data.sh; do
             if [ -f "$script" ]; then
               if bash -n "$script" 2>&1; then
                 echo "✅ $script"
@@ -133,10 +131,10 @@ jobs:
       - name: Verify v-prefix convention
         run: |
           # Compose file must use v-prefixed version
-          VERSION_REF=$(grep -o 'VECTORAIZ_VERSION:-[^}]*' docker-compose.customer.yml | head -1)
-          if echo "$VERSION_REF" | grep -qE 'VECTORAIZ_VERSION:-v[0-9]'; then
+          VERSION_REF=$(grep -o 'AIM_DATA_VERSION:-[^}]*' docker-compose.aim-data.yml | head -1)
+          if echo "$VERSION_REF" | grep -qE 'AIM_DATA_VERSION:-v[0-9]'; then
             echo "✅ Compose uses v-prefixed version: $VERSION_REF"
-          elif echo "$VERSION_REF" | grep -qE 'VECTORAIZ_VERSION:-[0-9]'; then
+          elif echo "$VERSION_REF" | grep -qE 'AIM_DATA_VERSION:-[0-9]'; then
             echo "::error::Compose uses non-v-prefixed version: $VERSION_REF — GHCR tags require v prefix"
             exit 1
           else

@@ -2,7 +2,7 @@ name: AIM Data Release
 
 on:
   push:
-    tags: ['aim-channel-v*']
+    tags: ['aim-data-v*']
 
 permissions:
   contents: write
@@ -20,7 +20,7 @@ jobs:
         id: version
         run: |
           TAG="${GITHUB_REF_NAME}"
-          VER="${TAG#aim-channel-}"
+          VER="${TAG#aim-data-}"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           if echo "$VER" | grep -qE '\-rc\.'; then
@@ -43,9 +43,9 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           IS_RC="${{ steps.version.outputs.is_rc }}"
-          TAGS="ghcr.io/aidotmarket/aim-channel:${VERSION}"
+          TAGS="ghcr.io/aidotmarket/aim-data:${VERSION}"
           if [ "$IS_RC" != "true" ]; then
-            TAGS="$(printf '%s\nghcr.io/aidotmarket/aim-channel:latest' "$TAGS")"
+            TAGS="$(printf '%s\nghcr.io/aidotmarket/aim-data:latest' "$TAGS")"
           fi
           {
             echo "tags<<EOF"
@@ -80,15 +80,15 @@ jobs:
       - name: Verify multi-arch manifest
         run: |
           TAG="${{ needs.build-push.outputs.version }}"
-          MANIFEST=$(docker manifest inspect "ghcr.io/aidotmarket/aim-channel:${TAG}")
+          MANIFEST=$(docker manifest inspect "ghcr.io/aidotmarket/aim-data:${TAG}")
           echo "$MANIFEST" | grep -q '"architecture": "amd64"' || { echo "::error::amd64 missing"; exit 1; }
           echo "$MANIFEST" | grep -q '"architecture": "arm64"' || { echo "::error::arm64 missing"; exit 1; }
           echo "Multi-arch manifest verified"
       - name: Pull and run smoke test
         run: |
           TAG="${{ needs.build-push.outputs.version }}"
-          docker pull "ghcr.io/aidotmarket/aim-channel:${TAG}"
-          CID=$(docker run -d -p 8080:80 "ghcr.io/aidotmarket/aim-channel:${TAG}")
+          docker pull "ghcr.io/aidotmarket/aim-data:${TAG}"
+          CID=$(docker run -d -p 8080:80 "ghcr.io/aidotmarket/aim-data:${TAG}")
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:8080/api/health >/dev/null 2>&1; then
               echo "Health check passed"
