@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { getApiUrl, type AuthLoginResponse } from "@/lib/api";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { authApi, getApiUrl, type AuthLoginResponse } from "@/lib/api";
 
 const ACCESS_TOKEN_KEY = "aim_data_access_token";
 const REFRESH_TOKEN_KEY = "aim_data_refresh_token";
@@ -29,6 +29,7 @@ interface AuthContextType {
   pending2fa: boolean;
   login: (email: string, password: string) => Promise<"success" | "requires_2fa">;
   verify2fa: (code: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
   logout: () => void;
 }
 
@@ -68,6 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pending2fa, setPending2fa] = useState<{ email: string; preAuthToken: string } | null>(null);
+  const refreshUserInFlight = useRef(false);
 
   const clearAuth = useCallback(() => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -89,6 +91,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
     setPending2fa(null);
   }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!apiKey || refreshUserInFlight.current) {
+      return;
+    }
+
+    refreshUserInFlight.current = true;
+    try {
+      const data = await authApi.me();
+      setApiKey(localStorage.getItem(ACCESS_TOKEN_KEY));
+      setUser(normalizeUser(data));
+    } catch {
+      // Keep the current session state on transient refresh failures.
+    } finally {
+      refreshUserInFlight.current = false;
+    }
+  }, [apiKey]);
 
   // Validate stored access token on mount.
   useEffect(() => {
@@ -153,6 +172,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     validate();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!apiKey || !user) {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshUser();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [apiKey, refreshUser, user]);
+
   const login = useCallback(async (email: string, password: string) => {
     const res = await fetch(`${getApiUrl()}/api/auth/aim-market-login`, {
       method: "POST",
@@ -215,6 +251,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         pending2fa: !!pending2fa,
         login,
         verify2fa,
+        refreshUser,
         logout,
       }}
     >

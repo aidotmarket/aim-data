@@ -148,6 +148,7 @@ export default function DatasetPreview({ datasetId }: DatasetPreviewProps) {
           title: "Live on ai.market",
           description: sellerSetupRequiredDescription,
           action: sellerSetupToastAction(),
+          duration: 15000,
         });
         openSellerSetup();
       } else {

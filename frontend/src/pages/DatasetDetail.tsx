@@ -1129,6 +1129,7 @@ const DatasetDetail = () => {
         title: "Dataset published",
         description: sellerSetupRequiredDescription,
         action: sellerSetupToastAction(),
+        duration: 15000,
       });
       openSellerSetup();
       return;

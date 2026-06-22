@@ -113,6 +113,7 @@ const RawListingsPage = () => {
         title: "Listed on ai.market",
         description: sellerSetupRequiredDescription,
         action: sellerSetupToastAction(),
+        duration: 15000,
       });
       openSellerSetup();
     } else {
