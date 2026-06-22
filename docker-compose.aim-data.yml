@@ -25,6 +25,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - VECTORAIZ_CHANNEL=aim-data
+      - AIM_DATA_VERSION=${AIM_DATA_VERSION:-}
       - VECTORAIZ_SECRET_KEY=${VECTORAIZ_SECRET_KEY:-}
       - AIM_DATA_APIKEY_HMAC_SECRET=${AIM_DATA_APIKEY_HMAC_SECRET:-}
       - DATABASE_URL=postgresql://aim_data:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/aim_data
