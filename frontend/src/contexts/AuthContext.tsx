@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { getApiUrl } from "@/lib/api";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { authApi, getApiUrl, type AuthLoginResponse } from "@/lib/api";
 
 const ACCESS_TOKEN_KEY = "aim_data_access_token";
 const REFRESH_TOKEN_KEY = "aim_data_refresh_token";
@@ -15,26 +15,52 @@ interface UserInfo {
   role: string;
   status?: string;
   is_active?: boolean;
+  onboarding_required?: boolean;
+  onboarding_step?: string | null;
 }
 
 interface AuthContextType {
   apiKey: string | null;
   user: UserInfo | null;
+  onboarding_required: boolean;
+  onboarding_step: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   pending2fa: boolean;
   login: (email: string, password: string) => Promise<"success" | "requires_2fa">;
   verify2fa: (code: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function normalizeUser(data: any): UserInfo {
+type NormalizableUserInfo = Partial<UserInfo> & {
+  id?: string;
+  email?: string;
+};
+
+type TwoFactorLoginResponse = {
+  requires_2fa: true;
+  pre_auth_token: string;
+};
+
+function isTwoFactorLoginResponse(data: unknown): data is TwoFactorLoginResponse {
+  const maybeResponse = data as { requires_2fa?: unknown; pre_auth_token?: unknown };
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    maybeResponse.requires_2fa === true &&
+    typeof maybeResponse.pre_auth_token === "string"
+  );
+}
+
+function normalizeUser(data: NormalizableUserInfo): UserInfo {
   return {
     ...data,
-    user_id: data.user_id ?? data.id,
+    user_id: data.user_id ?? data.id ?? "",
     username: data.username ?? data.email,
+    role: data.role ?? "user",
   };
 }
 
@@ -43,6 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pending2fa, setPending2fa] = useState<{ email: string; preAuthToken: string } | null>(null);
+  const refreshUserInFlight = useRef(false);
 
   const clearAuth = useCallback(() => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -53,13 +80,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPending2fa(null);
   }, []);
 
-  const completeLogin = useCallback((data: any) => {
+  const completeLogin = useCallback((data: AuthLoginResponse) => {
     localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
     localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
     setApiKey(data.access_token);
-    setUser(normalizeUser(data.user));
+    setUser(normalizeUser({
+      ...data.user,
+      onboarding_required: data.onboarding_required,
+      onboarding_step: data.onboarding_step ?? null,
+    }));
     setPending2fa(null);
   }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!apiKey || refreshUserInFlight.current) {
+      return;
+    }
+
+    refreshUserInFlight.current = true;
+    try {
+      const data = await authApi.me();
+      setApiKey(localStorage.getItem(ACCESS_TOKEN_KEY));
+      setUser(normalizeUser(data));
+    } catch {
+      // Keep the current session state on transient refresh failures.
+    } finally {
+      refreshUserInFlight.current = false;
+    }
+  }, [apiKey]);
 
   // Validate stored access token on mount.
   useEffect(() => {
@@ -124,6 +172,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     validate();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!apiKey || !user) {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshUser();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [apiKey, refreshUser, user]);
+
   const login = useCallback(async (email: string, password: string) => {
     const res = await fetch(`${getApiUrl()}/api/auth/aim-market-login`, {
       method: "POST",
@@ -136,13 +201,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(err.detail || `Login failed: ${res.status}`);
     }
 
-    const data = await res.json();
-    if (data.requires_2fa && data.pre_auth_token) {
+    const data: unknown = await res.json();
+    if (isTwoFactorLoginResponse(data)) {
       setPending2fa({ email, preAuthToken: data.pre_auth_token });
       return "requires_2fa";
     }
 
-    completeLogin(data);
+    completeLogin(data as AuthLoginResponse);
     return "success";
   }, [completeLogin]);
 
@@ -166,7 +231,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(err.detail || `Verification failed: ${res.status}`);
     }
 
-    const data = await res.json();
+    const data = await res.json() as AuthLoginResponse;
     completeLogin(data);
   }, [completeLogin, pending2fa]);
 
@@ -179,11 +244,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         apiKey,
         user,
+        onboarding_required: !!user?.onboarding_required,
+        onboarding_step: user?.onboarding_step ?? null,
         isAuthenticated: !!apiKey && !!user,
         isLoading,
         pending2fa: !!pending2fa,
         login,
         verify2fa,
+        refreshUser,
         logout,
       }}
     >

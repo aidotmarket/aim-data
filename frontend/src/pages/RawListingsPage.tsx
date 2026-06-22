@@ -26,6 +26,12 @@ import { useBrand } from "@/contexts/BrandContext";
 import { useToast } from "@/hooks/use-toast";
 import { rawFilesApi, type RawFile } from "@/lib/api";
 import RawPublishModal from "@/components/RawPublishModal";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  openSellerSetup,
+  sellerSetupRequiredDescription,
+  sellerSetupToastAction,
+} from "@/lib/sellerOnboarding";
 
 const formatBytes = (bytes: number): string => {
   if (!bytes) return "0 B";
@@ -72,6 +78,7 @@ const RawListingsPage = () => {
   const brand = useBrand();
   const { openModal, setOnSuccess } = useUpload();
   const { toast } = useToast();
+  const { onboarding_required } = useAuth();
 
   const [rawFiles, setRawFiles] = useState<RawFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,10 +108,20 @@ const RawListingsPage = () => {
   }, [setOnSuccess, fetchRawFiles]);
 
   const handlePublishSuccess = (file: RawFile) => {
-    toast({
-      title: "Listed on ai.market",
-      description: `${file.filename} is now visible to buyers.`,
-    });
+    if (onboarding_required) {
+      toast({
+        title: "Listed on ai.market",
+        description: sellerSetupRequiredDescription,
+        action: sellerSetupToastAction(),
+        duration: 15000,
+      });
+      openSellerSetup();
+    } else {
+      toast({
+        title: "Listed on ai.market",
+        description: `${file.filename} is now visible to buyers.`,
+      });
+    }
     setPublishTarget(null);
     fetchRawFiles();
   };

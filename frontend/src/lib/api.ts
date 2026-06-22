@@ -1090,6 +1090,8 @@ export interface AuthMeResponse {
   username: string;
   role: string;
   is_active: boolean;
+  onboarding_required?: boolean;
+  onboarding_step?: string | null;
 }
 
 export interface AuthKeyInfo {
