@@ -34,6 +34,12 @@ import {
 } from "@/components/ListingEditorForm";
 import { datasetsApi, marketplaceApi, type DatasetPreviewResponse } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  openSellerSetup,
+  sellerSetupRequiredDescription,
+  sellerSetupToastAction,
+} from "@/lib/sellerOnboarding";
 
 const DataTypeColors: Record<string, string> = {
   string: "bg-blue-500/10 text-blue-700 border-blue-500/20",
@@ -65,6 +71,7 @@ interface DatasetPreviewProps {
 
 export default function DatasetPreview({ datasetId }: DatasetPreviewProps) {
   const navigate = useNavigate();
+  const { onboarding_required } = useAuth();
   const [preview, setPreview] = useState<DatasetPreviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,8 +143,17 @@ export default function DatasetPreview({ datasetId }: DatasetPreviewProps) {
         vz_dataset_id: datasetId,
       });
       setPublished(true);
-      toast({ title: "Live on ai.market", description: "Your listing has been published." });
-      navigate("/datasets");
+      if (onboarding_required) {
+        toast({
+          title: "Live on ai.market",
+          description: sellerSetupRequiredDescription,
+          action: sellerSetupToastAction(),
+        });
+        openSellerSetup();
+      } else {
+        toast({ title: "Live on ai.market", description: "Your listing has been published." });
+        navigate("/datasets");
+      }
     } catch (e) {
       toast({
         title: "Publish failed",

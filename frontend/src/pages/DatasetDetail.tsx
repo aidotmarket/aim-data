@@ -73,10 +73,16 @@ import { toast } from "@/hooks/use-toast";
 import PublishModal from "@/components/PublishModal";
 import ChatPanel from "@/components/copilot/ChatPanel";
 import { useMarketplace } from "@/contexts/MarketplaceContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useMode } from "@/contexts/ModeContext";
 import { useCoPilot } from "@/contexts/CoPilotContext";
 import { useChannel } from "@/hooks/useChannel";
 import { cn } from "@/lib/utils";
+import {
+  openSellerSetup,
+  sellerSetupRequiredDescription,
+  sellerSetupToastAction,
+} from "@/lib/sellerOnboarding";
 import {
   filenameToTitle,
   ListingEditorForm,
@@ -928,6 +934,7 @@ const DatasetDetail = () => {
   const location = useLocation();
   const backPath = location.state?.from === "/list-data" ? "/list-data" : "/datasets";
   const { isPublished, getPublishedData, unpublishDataset } = useMarketplace();
+  const { onboarding_required } = useAuth();
   const { hasFeature } = useMode();
   const channel = useChannel();
   const [currentPage, setCurrentPage] = useState(1);
@@ -1117,6 +1124,16 @@ const DatasetDetail = () => {
   const marketplaceData = publishedData || dataset.marketplace;
 
   const handlePublishSuccess = () => {
+    if (onboarding_required) {
+      toast({
+        title: "Dataset published",
+        description: sellerSetupRequiredDescription,
+        action: sellerSetupToastAction(),
+      });
+      openSellerSetup();
+      return;
+    }
+
     toast({
       title: "Dataset published",
       description: "Your dataset is now live on the marketplace",
