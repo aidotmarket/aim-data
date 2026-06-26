@@ -134,6 +134,65 @@ def _object(key: str, size: int = 123):
     }
 
 
+def test_start_scan_creates_running_job_without_broker_calls(session_context):
+    connection = _add_connection(session_context)
+    broker = FakeBroker()
+
+    scan_job = S3ScanService(broker).start_scan(connection.id)
+
+    assert scan_job.status == "running"
+    assert scan_job.connection_id == connection.id
+    assert scan_job.objects_enumerated == 0
+    assert broker.calls == []
+    with session_context() as session:
+        stored = session.get(S3ScanJob, scan_job.id)
+    assert stored.status == "running"
+
+
+def test_run_scan_completes_existing_job(session_context):
+    connection = _add_connection(session_context)
+    scan_job_id = str(uuid4())
+    scan_job = S3ScanJob(id=scan_job_id, connection_id=connection.id, status="running")
+    with session_context() as session:
+        session.add(scan_job)
+        session.commit()
+
+    broker = FakeBroker()
+    broker.pages = [_page(_object("exports/a.csv"))]
+
+    S3ScanService(broker).run_scan(scan_job_id)
+
+    with session_context() as session:
+        stored = session.get(S3ScanJob, scan_job_id)
+        stored_connection = session.get(S3Connection, connection.id)
+
+    assert stored.status == "completed"
+    assert stored.objects_enumerated == 1
+    assert stored.completed_at is not None
+    assert stored.error_message is None
+    assert stored_connection.last_scanned_at is not None
+
+
+def test_run_scan_broker_error_marks_existing_job_failed(session_context):
+    connection = _add_connection(session_context)
+    scan_job_id = str(uuid4())
+    scan_job = S3ScanJob(id=scan_job_id, connection_id=connection.id, status="running")
+    with session_context() as session:
+        session.add(scan_job)
+        session.commit()
+
+    broker = FakeBroker(S3BrokerError("Confirm the trust policy and ExternalId."))
+
+    S3ScanService(broker).run_scan(scan_job_id)
+
+    with session_context() as session:
+        stored = session.get(S3ScanJob, scan_job_id)
+
+    assert stored.status == "failed"
+    assert "Confirm the trust policy" in stored.error_message
+    assert stored.completed_at is not None
+
+
 def test_scan_persists_sample_and_exact_stats(session_context, monkeypatch):
     connection = _add_connection(session_context)
     broker = FakeBroker()
