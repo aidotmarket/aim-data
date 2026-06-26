@@ -45,7 +45,7 @@ export const AIM_DATA_BRAND: BrandConfig = {
   externalUrl: "https://ai.market",
   installDirectoryName: "aim-data",
   dockerComposeServiceName: "vectoraiz",
-  documentationUrl: "https://ai.market/docs",
+  documentationUrl: "https://ai.market/aim-data",
   githubUrl: "https://github.com/aidotmarket/aim-data",
   issueTrackerUrl: "https://github.com/aidotmarket/aim-data/issues",
   importDir: "~/aim-data-imports/",

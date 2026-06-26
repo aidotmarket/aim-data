@@ -4,7 +4,6 @@ import {
   Eye,
   EyeOff,
   FolderOpen,
-  Trash2,
   ExternalLink,
   RefreshCw,
   CheckCircle,
@@ -36,17 +35,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -163,6 +151,12 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
         const data: VersionInfo = await res.json();
         setVersionInfo(data);
         setLastChecked(new Date());
+        if (force && !data.update_available && !data.error) {
+          toast({
+            title: "Up to date",
+            description: `You're on the latest version (${data.latest ?? data.current}).`,
+          });
+        }
       }
     } catch {
       // Silently fail
@@ -409,13 +403,6 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
     });
   };
 
-  const handleClearCache = () => {
-    toast({
-      title: "Cache cleared",
-      description: "All cached data has been removed.",
-    });
-  };
-
   return (
     <div className="space-y-6 max-w-3xl pb-20">
       <div>
@@ -577,30 +564,6 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
             </div>
             <Progress value={2.4} max={100} className="h-2" />
           </div>
-
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" className="gap-2 text-destructive hover:text-destructive">
-                <Trash2 className="w-4 h-4" />
-                Clear Cache
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Clear Cache</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will remove all cached data including temporary files and processed data. 
-                  Your original datasets will not be affected. This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleClearCache} className="bg-destructive hover:bg-destructive/90">
-                  Clear Cache
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </CardContent>
       </Card>
 
