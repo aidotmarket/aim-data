@@ -138,10 +138,10 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
   const fetchLocalKeys = useCallback(async () => {
     setKeysLoading(true);
     try {
-      const storedKey = localStorage.getItem('vectoraiz_api_key');
+      const storedKey = localStorage.getItem('aim_data_access_token');
       if (!storedKey) return;
       const res = await fetch(`${getApiUrl()}/api/auth/keys`, {
-        headers: { 'X-API-Key': storedKey },
+        headers: { 'Authorization': `Bearer ${storedKey}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -175,7 +175,7 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
     setUpdateStatus("updating");
     setUpdateMessage("Pulling latest image... This may take a minute.");
     try {
-      const storedKey = localStorage.getItem("vectoraiz_api_key");
+      const storedKey = localStorage.getItem('aim_data_access_token');
       if (!storedKey) {
         setUpdateStatus("error");
         setUpdateMessage("Authentication required. Please sign in.");
@@ -183,7 +183,7 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
       }
       const res = await fetch(`${getApiUrl()}/api/version/update`, {
         method: "POST",
-        headers: { "X-API-Key": storedKey },
+        headers: { 'Authorization': `Bearer ${storedKey}` },
       });
       const data = await res.json();
       if (data.status === "updating") {
@@ -209,11 +209,11 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
 
   const createLocalKey = async () => {
     try {
-      const storedKey = localStorage.getItem('vectoraiz_api_key');
+      const storedKey = localStorage.getItem('aim_data_access_token');
       if (!storedKey) return;
       const res = await fetch(`${getApiUrl()}/api/auth/keys`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': storedKey },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${storedKey}` },
         body: JSON.stringify({ label: newKeyLabel.trim() || 'My API Key' }),
       });
       if (res.ok) {
@@ -233,11 +233,11 @@ docker compose -f docker-compose.customer.yml up -d ${brand.dockerComposeService
 
   const revokeLocalKey = async (keyId: string) => {
     try {
-      const storedKey = localStorage.getItem('vectoraiz_api_key');
+      const storedKey = localStorage.getItem('aim_data_access_token');
       if (!storedKey) return;
       const res = await fetch(`${getApiUrl()}/api/auth/keys/${keyId}`, {
         method: 'DELETE',
-        headers: { 'X-API-Key': storedKey },
+        headers: { 'Authorization': `Bearer ${storedKey}` },
       });
       if (res.ok) {
         toast({ title: "Key revoked", description: `API key ${keyId} has been revoked.` });
