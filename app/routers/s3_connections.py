@@ -8,7 +8,7 @@ Customer-facing S3 STS connection setup and verification endpoints.
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import aiofiles
@@ -406,14 +406,26 @@ async def verify_connection(
 @router.post("/{connection_id}/scan", summary="Scan S3 connection objects")
 async def scan_connection(
     connection_id: str,
+    background_tasks: BackgroundTasks,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> S3ScanJobResponse:
     with get_session_context() as session:
         _get_connection_for_user(session, connection_id, user)
+        stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+        running_scan_job = session.exec(
+            select(S3ScanJob)
+            .where(S3ScanJob.connection_id == connection_id)
+            .where(S3ScanJob.status == "running")
+            .where(S3ScanJob.updated_at >= stale_cutoff)
+            .order_by(S3ScanJob.updated_at.desc())
+        ).first()
+        if running_scan_job is not None:
+            return _scan_job_response(running_scan_job)
     try:
-        scan_job = S3ScanService().scan_connection(connection_id)
+        scan_job = S3ScanService().start_scan(connection_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="S3 connection not found") from None
+    background_tasks.add_task(S3ScanService().run_scan, scan_job.id)
     return _scan_job_response(scan_job)
 
 

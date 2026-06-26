@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.pool import StaticPool
-from sqlmodel import SQLModel, Session
+from sqlmodel import SQLModel, Session, select
 
 from app.auth.api_key_auth import AuthenticatedUser, get_current_user
 from app.main import app
@@ -320,6 +320,31 @@ def test_verify_broker_error_result_sets_error(client, s3_engine):
     assert response.status_code == 200
     assert response.json()["status"] == "error"
     assert "s3:AccessDenied" in response.json()["error_message"]
+
+
+def test_scan_start_returns_running_and_reuses_recent_running_job(client, s3_engine, monkeypatch):
+    connection = _configured_row(s3_engine, status="verified")
+    enqueued = []
+
+    def _run_scan(_self, scan_job_id):
+        enqueued.append(scan_job_id)
+
+    monkeypatch.setattr(s3_connections.S3ScanService, "run_scan", _run_scan)
+
+    first_response = client.post(f"/api/s3-connections/{connection.id}/scan")
+    second_response = client.post(f"/api/s3-connections/{connection.id}/scan")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    first_body = first_response.json()
+    second_body = second_response.json()
+    assert first_body["status"] == "running"
+    assert second_body["status"] == "running"
+    assert second_body["id"] == first_body["id"]
+    assert enqueued == [first_body["id"]]
+    with Session(s3_engine) as session:
+        scan_jobs = session.exec(select(S3ScanJob).where(S3ScanJob.connection_id == connection.id)).all()
+    assert [job.id for job in scan_jobs] == [first_body["id"]]
 
 
 def test_user_cannot_get_scan_or_list_objects_on_foreign_connection(client, s3_engine, monkeypatch):
