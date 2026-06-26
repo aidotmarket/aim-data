@@ -22,6 +22,14 @@ class S3BrokerError(RuntimeError):
     """Raised when the S3 broker rejects or cannot complete a request."""
 
 
+class S3BrokerRateLimited(S3BrokerError):
+    """Raised when the S3 broker asks the caller to retry later."""
+
+    def __init__(self, *, retry_after: float) -> None:
+        self.retry_after = retry_after
+        super().__init__("S3 broker rate limited bucket reads.")
+
+
 class S3BrokerNotActivatedError(S3BrokerError):
     """Raised when AIM Data has no serial/install token for broker auth."""
 
@@ -77,7 +85,7 @@ class S3BrokerClient:
                 "bucket": bucket,
                 "prefix": prefix,
                 "continuation_token": continuation_token,
-                "max_keys": max_keys,
+                "max_keys": 1000 if max_keys is None else max_keys,
             },
         )
 
@@ -130,6 +138,12 @@ class S3BrokerClient:
 
         if response.status_code in (401, 403):
             raise S3BrokerError("S3 broker authentication failed. Re-activate AIM Data and retry.")
+        if response.status_code == 429:
+            try:
+                retry_after = int(response.headers.get("Retry-After", ""))
+            except ValueError:
+                retry_after = 5
+            raise S3BrokerRateLimited(retry_after=float(min(max(retry_after, 0), 60)))
         if response.status_code >= 400:
             detail = data.get("detail") if isinstance(data, dict) else None
             raise S3BrokerError(str(detail or f"S3 broker request failed with HTTP {response.status_code}."))

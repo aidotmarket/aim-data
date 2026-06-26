@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -16,11 +17,17 @@ from app.core.database import get_session_context
 from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
-from app.services.s3_broker_client import S3BrokerClient, S3BrokerError
+from app.services.s3_broker_client import S3BrokerClient, S3BrokerError, S3BrokerRateLimited
 
 logger = logging.getLogger(__name__)
 
 SAMPLE_MAX_OBJECTS = 1000
+MAX_RATE_LIMIT_RETRIES = 5
+RATE_LIMIT_RETRY_CAP_SECONDS = 60.0
+INTER_PAGE_PACING_SECONDS = 0.05
+RATE_LIMIT_EXHAUSTED_MESSAGE = (
+    "Scan paused: the marketplace is rate-limiting bucket reads; it will resume automatically, retry shortly."
+)
 
 
 def _now() -> datetime:
@@ -100,13 +107,24 @@ class S3ScanService:
                 approximate = False
                 continuation_token: Optional[str] = None
                 while True:
-                    response = self.broker.list_objects(
-                        role_arn=connection.role_arn,
-                        region=connection.region,
-                        bucket=connection.bucket,
-                        prefix=connection.prefix,
-                        continuation_token=continuation_token,
-                    )
+                    rate_limit_retries = 0
+                    while True:
+                        try:
+                            response = self.broker.list_objects(
+                                role_arn=connection.role_arn,
+                                region=connection.region,
+                                bucket=connection.bucket,
+                                prefix=connection.prefix,
+                                continuation_token=continuation_token,
+                                max_keys=1000,
+                            )
+                            break
+                        except S3BrokerRateLimited as exc:
+                            rate_limit_retries += 1
+                            if rate_limit_retries > MAX_RATE_LIMIT_RETRIES:
+                                raise S3BrokerError(RATE_LIMIT_EXHAUSTED_MESSAGE) from exc
+                            time.sleep(min(exc.retry_after, RATE_LIMIT_RETRY_CAP_SECONDS))
+
                     if response.get("status") != "listed":
                         raise S3BrokerError(str(response.get("error_message") or "S3 broker object listing failed."))
 
@@ -163,6 +181,7 @@ class S3ScanService:
 
                     if not response.get("is_truncated"):
                         break
+                    time.sleep(INTER_PAGE_PACING_SECONDS)
 
                 completed_at = _now()
                 scan_job.status = "completed"

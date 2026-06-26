@@ -19,7 +19,7 @@ from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
 from app.routers import s3_connections
-from app.services.s3_broker_client import S3BrokerError
+from app.services.s3_broker_client import S3BrokerError, S3BrokerRateLimited
 from app.services import fulfillment_service, s3_scan_service
 from app.services.fulfillment_service import FulfillmentService
 from app.services.processing_service import ProcessingService
@@ -165,6 +165,116 @@ def test_scan_persists_sample_and_exact_stats(session_context, monkeypatch):
     assert objects[0].content_type == "text/csv"
     assert objects[1].size_bytes == 456
     assert stored_connection.last_scanned_at is not None
+
+
+def test_scan_retries_rate_limit_once_then_completes(session_context, monkeypatch):
+    connection = _add_connection(session_context)
+    broker = FakeBroker()
+    broker.pages = [_page(_object("exports/a.csv"))]
+    responses = [S3BrokerRateLimited(retry_after=2), broker.pages[0]]
+    sleeps = []
+
+    def list_objects(**kwargs):
+        broker.calls.append(kwargs)
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    broker.list_objects = list_objects
+    monkeypatch.setattr(s3_scan_service.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    scan_job = S3ScanService(broker).scan_connection(connection.id)
+
+    assert scan_job.status == "completed"
+    assert scan_job.objects_enumerated == 1
+    assert sleeps == [2]
+    assert len(broker.calls) == 2
+    assert broker.calls[0]["continuation_token"] is None
+    assert broker.calls[1]["continuation_token"] is None
+    assert broker.calls[0]["max_keys"] == 1000
+    with session_context() as session:
+        objects = session.exec(select(S3ObjectMetadata)).all()
+    assert [obj.object_key for obj in objects] == ["exports/a.csv"]
+
+
+def test_scan_persistent_rate_limit_fails_with_friendly_message(session_context, monkeypatch):
+    connection = _add_connection(session_context)
+    raw_rate_limit = "{'error': 'rate_limit_exceeded', 'retry_after': 1}"
+    broker = FakeBroker()
+    sleeps = []
+
+    def list_objects(**kwargs):
+        broker.calls.append(kwargs)
+        raise S3BrokerRateLimited(retry_after=1)
+
+    broker.list_objects = list_objects
+    monkeypatch.setattr(s3_scan_service.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    scan_job = S3ScanService(broker).scan_connection(connection.id)
+
+    assert scan_job.status == "failed"
+    assert scan_job.error_message == s3_scan_service.RATE_LIMIT_EXHAUSTED_MESSAGE
+    assert "rate_limit_exceeded" not in scan_job.error_message
+    assert raw_rate_limit not in scan_job.error_message
+    assert len(broker.calls) == s3_scan_service.MAX_RATE_LIMIT_RETRIES + 1
+    assert sleeps == [1] * s3_scan_service.MAX_RATE_LIMIT_RETRIES
+    with session_context() as session:
+        stored = session.get(S3ScanJob, scan_job.id)
+    assert stored.status == "failed"
+    assert stored.error_message == s3_scan_service.RATE_LIMIT_EXHAUSTED_MESSAGE
+
+
+def test_scan_rate_limit_sleep_uses_capped_retry_after(session_context, monkeypatch):
+    connection = _add_connection(session_context)
+    broker = FakeBroker()
+    broker.pages = [_page(_object("exports/a.csv"))]
+    responses = [S3BrokerRateLimited(retry_after=90), broker.pages[0]]
+    sleeps = []
+
+    def list_objects(**kwargs):
+        broker.calls.append(kwargs)
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    broker.list_objects = list_objects
+    monkeypatch.setattr(s3_scan_service.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    scan_job = S3ScanService(broker).scan_connection(connection.id)
+
+    assert scan_job.status == "completed"
+    assert sleeps == [s3_scan_service.RATE_LIMIT_RETRY_CAP_SECONDS]
+
+
+def test_scan_retried_page_reuses_persisted_continuation_token(session_context, monkeypatch):
+    connection = _add_connection(session_context)
+    broker = FakeBroker()
+    first_page = _page(_object("exports/a.csv"), truncated=True, token="next-page")
+    second_page = _page(_object("exports/b.csv"))
+    responses = [first_page, S3BrokerRateLimited(retry_after=3), second_page]
+    sleeps = []
+
+    def list_objects(**kwargs):
+        broker.calls.append(kwargs)
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    broker.list_objects = list_objects
+    monkeypatch.setattr(s3_scan_service.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    scan_job = S3ScanService(broker).scan_connection(connection.id)
+
+    assert scan_job.status == "completed"
+    assert scan_job.objects_enumerated == 2
+    assert [call["continuation_token"] for call in broker.calls] == [None, "next-page", "next-page"]
+    assert sleeps == [s3_scan_service.INTER_PAGE_PACING_SECONDS, 3]
+    with session_context() as session:
+        objects = session.exec(select(S3ObjectMetadata).order_by(S3ObjectMetadata.object_key)).all()
+    assert [obj.object_key for obj in objects] == ["exports/a.csv", "exports/b.csv"]
 
 
 def test_large_scan_computes_exact_stats_and_caps_sample_rows(session_context, monkeypatch):
