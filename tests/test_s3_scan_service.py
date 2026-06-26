@@ -134,6 +134,41 @@ def _object(key: str, size: int = 123):
     }
 
 
+def _run_scan(service: S3ScanService, connection_id: str) -> S3ScanJob:
+    scan_job = service.create_scan_job(connection_id)
+    service.run_scan_job(scan_job.id)
+    with s3_scan_service.get_session_context() as session:
+        stored = session.get(S3ScanJob, scan_job.id)
+        session.expunge(stored)
+        return stored
+
+
+def test_create_scan_job_returns_running_without_listing_objects(session_context):
+    connection = _add_connection(session_context)
+    broker = FakeBroker()
+
+    scan_job = S3ScanService(broker).create_scan_job(connection.id)
+
+    assert scan_job.status == "running"
+    assert scan_job.connection_id == connection.id
+    assert scan_job.objects_enumerated == 0
+    assert broker.calls == []
+
+
+def test_create_scan_job_always_creates_new_running_job(session_context):
+    connection = _add_connection(session_context)
+    service = S3ScanService(FakeBroker())
+    scan_job = service.create_scan_job(connection.id)
+
+    next_job = service.create_scan_job(connection.id)
+
+    assert next_job.id != scan_job.id
+    assert next_job.status == "running"
+    with session_context() as session:
+        jobs = session.exec(select(S3ScanJob).where(S3ScanJob.connection_id == connection.id)).all()
+    assert {job.id for job in jobs} == {scan_job.id, next_job.id}
+
+
 def test_scan_persists_sample_and_exact_stats(session_context, monkeypatch):
     connection = _add_connection(session_context)
     broker = FakeBroker()
@@ -143,7 +178,7 @@ def test_scan_persists_sample_and_exact_stats(session_context, monkeypatch):
     ]
     monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: pytest.fail("boto3 must not be used"))
 
-    scan_job = S3ScanService(broker).scan_connection(connection.id)
+    scan_job = _run_scan(S3ScanService(broker), connection.id)
 
     assert scan_job.status == "completed"
     assert scan_job.objects_enumerated == 2
@@ -184,7 +219,7 @@ def test_scan_retries_rate_limit_once_then_completes(session_context, monkeypatc
     broker.list_objects = list_objects
     monkeypatch.setattr(s3_scan_service.time, "sleep", lambda seconds: sleeps.append(seconds))
 
-    scan_job = S3ScanService(broker).scan_connection(connection.id)
+    scan_job = _run_scan(S3ScanService(broker), connection.id)
 
     assert scan_job.status == "completed"
     assert scan_job.objects_enumerated == 1
@@ -211,7 +246,7 @@ def test_scan_persistent_rate_limit_fails_with_friendly_message(session_context,
     broker.list_objects = list_objects
     monkeypatch.setattr(s3_scan_service.time, "sleep", lambda seconds: sleeps.append(seconds))
 
-    scan_job = S3ScanService(broker).scan_connection(connection.id)
+    scan_job = _run_scan(S3ScanService(broker), connection.id)
 
     assert scan_job.status == "failed"
     assert scan_job.error_message == s3_scan_service.RATE_LIMIT_EXHAUSTED_MESSAGE
@@ -242,7 +277,7 @@ def test_scan_rate_limit_sleep_uses_capped_retry_after(session_context, monkeypa
     broker.list_objects = list_objects
     monkeypatch.setattr(s3_scan_service.time, "sleep", lambda seconds: sleeps.append(seconds))
 
-    scan_job = S3ScanService(broker).scan_connection(connection.id)
+    scan_job = _run_scan(S3ScanService(broker), connection.id)
 
     assert scan_job.status == "completed"
     assert sleeps == [s3_scan_service.RATE_LIMIT_RETRY_CAP_SECONDS]
@@ -266,7 +301,7 @@ def test_scan_retried_page_reuses_persisted_continuation_token(session_context, 
     broker.list_objects = list_objects
     monkeypatch.setattr(s3_scan_service.time, "sleep", lambda seconds: sleeps.append(seconds))
 
-    scan_job = S3ScanService(broker).scan_connection(connection.id)
+    scan_job = _run_scan(S3ScanService(broker), connection.id)
 
     assert scan_job.status == "completed"
     assert scan_job.objects_enumerated == 2
@@ -301,7 +336,7 @@ def test_large_scan_computes_exact_stats_and_caps_sample_rows(session_context, m
     broker.list_objects = list_objects
     monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: pytest.fail("boto3 must not be used"))
 
-    scan_job = S3ScanService(broker).scan_connection(connection.id)
+    scan_job = _run_scan(S3ScanService(broker), connection.id)
 
     assert scan_job.status == "completed"
     assert scan_job.objects_enumerated == 11_001
@@ -354,7 +389,7 @@ def test_rescan_is_idempotent_and_preserves_dataset_id(session_context, monkeypa
     broker = FakeBroker()
     broker.pages = [_page(_object("exports/a.csv", 999))]
 
-    S3ScanService(broker).scan_connection(connection.id)
+    _run_scan(S3ScanService(broker), connection.id)
 
     with session_context() as session:
         objects = session.exec(select(S3ObjectMetadata)).all()
@@ -369,7 +404,7 @@ def test_scan_broker_error_marks_failed_without_raw_aws_internals(session_contex
     raw = "An error occurred (AccessDenied) when calling the AssumeRole operation"
     broker = FakeBroker(S3BrokerError("Confirm the trust policy and ExternalId."))
 
-    scan_job = S3ScanService(broker).scan_connection(connection.id)
+    scan_job = _run_scan(S3ScanService(broker), connection.id)
 
     assert scan_job.status == "failed"
     assert "Confirm the trust policy" in scan_job.error_message

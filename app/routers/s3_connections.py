@@ -8,7 +8,7 @@ Customer-facing S3 STS connection setup and verification endpoints.
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import aiofiles
@@ -34,6 +34,8 @@ router = APIRouter()
 
 # Compatibility for older tests/extensions that monkeypatch the prior task name.
 process_dataset_task = prepare_listing_task
+
+RUNNING_SCAN_REUSE_WINDOW_SECONDS = 120
 
 ROLE_ARN_RE = re.compile(r"^arn:aws:iam::\d{12}:role/.+$")
 
@@ -223,6 +225,12 @@ def _scan_job_response(scan_job: S3ScanJob) -> S3ScanJobResponse:
     )
 
 
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _object_response(metadata: S3ObjectMetadata) -> S3ObjectMetadataResponse:
     return S3ObjectMetadataResponse(
         id=metadata.id,
@@ -406,14 +414,27 @@ async def verify_connection(
 @router.post("/{connection_id}/scan", summary="Scan S3 connection objects")
 async def scan_connection(
     connection_id: str,
+    background_tasks: BackgroundTasks,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> S3ScanJobResponse:
     with get_session_context() as session:
         _get_connection_for_user(session, connection_id, user)
+        fresh_after = datetime.now(timezone.utc) - timedelta(seconds=RUNNING_SCAN_REUSE_WINDOW_SECONDS)
+        running_job = session.exec(
+            select(S3ScanJob)
+            .where(S3ScanJob.connection_id == connection_id)
+            .where(S3ScanJob.status == "running")
+            .order_by(S3ScanJob.updated_at.desc())
+        ).first()
+        if running_job is not None and _as_utc(running_job.updated_at) >= fresh_after:
+            return _scan_job_response(running_job)
+
+    service = S3ScanService()
     try:
-        scan_job = S3ScanService().scan_connection(connection_id)
+        scan_job = service.create_scan_job(connection_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="S3 connection not found") from None
+    background_tasks.add_task(S3ScanService().run_scan_job, scan_job.id)
     return _scan_job_response(scan_job)
 
 

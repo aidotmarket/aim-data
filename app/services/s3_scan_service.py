@@ -29,7 +29,6 @@ RATE_LIMIT_EXHAUSTED_MESSAGE = (
     "Scan paused: the marketplace is rate-limiting bucket reads; it will resume automatically, retry shortly."
 )
 
-
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -79,24 +78,39 @@ class S3ScanService:
     def __init__(self, broker: Optional[S3BrokerClient] = None) -> None:
         self.broker = broker or S3BrokerClient()
 
-    def scan_connection(self, connection_id: str) -> S3ScanJob:
+    def create_scan_job(self, connection_id: str) -> S3ScanJob:
+        """Create a running scan job without touching the broker."""
         with get_session_context() as session:
             connection = session.get(S3Connection, connection_id)
             if connection is None:
                 raise ValueError("S3 connection not found")
 
+            started_at = _now()
             scan_job = S3ScanJob(
                 id=str(uuid.uuid4()),
                 connection_id=connection.id,
                 status="running",
-                started_at=_now(),
-                updated_at=_now(),
+                started_at=started_at,
+                updated_at=started_at,
             )
             session.add(scan_job)
             session.commit()
             session.refresh(scan_job)
+            session.expunge(scan_job)
+            return scan_job
 
+    def run_scan_job(self, scan_job_id: str) -> None:
+        with get_session_context() as session:
+            scan_job = session.get(S3ScanJob, scan_job_id)
+            if scan_job is None:
+                logger.warning("s3_scan_job_not_found", extra={"scan_job_id": scan_job_id})
+                return
+            connection = session.get(S3Connection, scan_job.connection_id)
+
+            connection_id = scan_job.connection_id
             try:
+                if connection is None:
+                    raise ValueError("S3 connection not found")
                 if not connection.role_arn:
                     raise S3BrokerError("S3 connection role ARN is not configured.")
 
@@ -196,7 +210,7 @@ class S3ScanService:
                 session.commit()
                 session.refresh(scan_job)
                 session.expunge(scan_job)
-                return scan_job
+                return
             except S3BrokerError as exc:
                 failed_at = _now()
                 scan_job.status = "failed"
@@ -207,7 +221,7 @@ class S3ScanService:
                 session.commit()
                 session.refresh(scan_job)
                 session.expunge(scan_job)
-                return scan_job
+                return
             except Exception as exc:  # any other failure must fail-closed, not stick "running"
                 logger.warning(
                     "s3_scan_failed",
@@ -228,4 +242,17 @@ class S3ScanService:
                 session.commit()
                 session.refresh(scan_job)
                 session.expunge(scan_job)
-                return scan_job
+                return
+
+    def run_scan(self, scan_job_id: str) -> None:
+        self.run_scan_job(scan_job_id)
+
+    def scan_connection(self, connection_id: str) -> S3ScanJob:
+        scan_job = self.create_scan_job(connection_id)
+        self.run_scan_job(scan_job.id)
+        with get_session_context() as session:
+            completed_job = session.get(S3ScanJob, scan_job.id)
+            if completed_job is None:
+                raise ValueError("S3 scan job not found")
+            session.expunge(completed_job)
+            return completed_job

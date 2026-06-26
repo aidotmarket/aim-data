@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.pool import StaticPool
@@ -322,6 +323,128 @@ def test_verify_broker_error_result_sets_error(client, s3_engine):
     assert "s3:AccessDenied" in response.json()["error_message"]
 
 
+@pytest.mark.asyncio
+async def test_scan_post_returns_running_job_before_background_scan_runs(client, s3_engine, monkeypatch):
+    connection = _configured_row(s3_engine, status="verified")
+    run_calls = []
+
+    class FakeScanService:
+        def __init__(self):
+            pass
+
+        def create_scan_job(self, connection_id: str) -> S3ScanJob:
+            assert connection_id == connection.id
+            now = datetime.now(timezone.utc)
+            return S3ScanJob(
+                id=str(uuid4()),
+                connection_id=connection_id,
+                status="running",
+                started_at=now,
+                updated_at=now,
+                created_at=now,
+            )
+
+        def run_scan_job(self, scan_job_id: str) -> None:
+            run_calls.append(scan_job_id)
+
+    monkeypatch.setattr(s3_connections, "S3ScanService", FakeScanService)
+    background_tasks = BackgroundTasks()
+
+    response = await s3_connections.scan_connection(
+        connection.id,
+        background_tasks,
+        user=USER_A,
+    )
+
+    assert response.status == "running"
+    assert response.connection_id == connection.id
+    assert run_calls == []
+    assert len(background_tasks.tasks) == 1
+
+
+@pytest.mark.asyncio
+async def test_scan_post_reuses_fresh_running_job_without_background_task(client, s3_engine, monkeypatch):
+    connection = _configured_row(s3_engine, status="verified")
+    now = datetime.now(timezone.utc)
+    scan_job = S3ScanJob(
+        id=str(uuid4()),
+        connection_id=connection.id,
+        status="running",
+        started_at=now,
+        updated_at=now,
+    )
+    scan_job_id = scan_job.id
+    with Session(s3_engine) as session:
+        session.add(scan_job)
+        session.commit()
+
+    def _create_scan_job(_self, _connection_id):
+        raise AssertionError("fresh running scan should be reused")
+
+    monkeypatch.setattr(s3_connections.S3ScanService, "create_scan_job", _create_scan_job)
+    background_tasks = BackgroundTasks()
+
+    response = await s3_connections.scan_connection(
+        connection.id,
+        background_tasks,
+        user=USER_A,
+    )
+
+    assert response.id == scan_job_id
+    assert response.status == "running"
+    assert len(background_tasks.tasks) == 0
+
+
+@pytest.mark.asyncio
+async def test_scan_post_starts_new_job_after_stale_running_job(client, s3_engine, monkeypatch):
+    connection = _configured_row(s3_engine, status="verified")
+    stale_at = datetime.now(timezone.utc) - timedelta(
+        seconds=s3_connections.RUNNING_SCAN_REUSE_WINDOW_SECONDS + 1
+    )
+    with Session(s3_engine) as session:
+        session.add(
+            S3ScanJob(
+                id=str(uuid4()),
+                connection_id=connection.id,
+                status="running",
+                started_at=stale_at,
+                updated_at=stale_at,
+            )
+        )
+        session.commit()
+
+    new_job_id = str(uuid4())
+
+    class FakeScanService:
+        def create_scan_job(self, connection_id: str) -> S3ScanJob:
+            assert connection_id == connection.id
+            now = datetime.now(timezone.utc)
+            return S3ScanJob(
+                id=new_job_id,
+                connection_id=connection_id,
+                status="running",
+                started_at=now,
+                updated_at=now,
+                created_at=now,
+            )
+
+        def run_scan_job(self, _scan_job_id: str) -> None:
+            raise AssertionError("background task should not run in this direct router test")
+
+    monkeypatch.setattr(s3_connections, "S3ScanService", FakeScanService)
+    background_tasks = BackgroundTasks()
+
+    response = await s3_connections.scan_connection(
+        connection.id,
+        background_tasks,
+        user=USER_A,
+    )
+
+    assert response.id == new_job_id
+    assert response.status == "running"
+    assert len(background_tasks.tasks) == 1
+
+
 def test_user_cannot_get_scan_or_list_objects_on_foreign_connection(client, s3_engine, monkeypatch):
     connection = _configured_row(s3_engine, owner_id="user-b")
     scan_job = S3ScanJob(id=str(uuid4()), connection_id=connection.id, status="completed")
@@ -343,12 +466,12 @@ def test_user_cannot_get_scan_or_list_objects_on_foreign_connection(client, s3_e
 
     scan_called = False
 
-    def _scan_connection(_self, _connection_id):
+    def _create_scan_job(_self, _connection_id):
         nonlocal scan_called
         scan_called = True
         raise AssertionError("foreign connection should be rejected before scan")
 
-    monkeypatch.setattr(s3_connections.S3ScanService, "scan_connection", _scan_connection)
+    monkeypatch.setattr(s3_connections.S3ScanService, "create_scan_job", _create_scan_job)
 
     assert client.get(f"/api/s3-connections/{connection.id}").status_code == 403
     assert client.post(f"/api/s3-connections/{connection.id}/scan").status_code == 403
