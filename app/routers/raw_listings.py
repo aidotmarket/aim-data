@@ -19,7 +19,11 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
 
+from app.auth.api_key_auth import AuthenticatedUser, get_current_user
 from app.config import settings
+from app.models.raw_file import RawFile
+from app.models.raw_listing import RawListing
+from app.routers.marketplace_publish import MarketplacePublishRequest, publish_via_signed_proxy
 from app.schemas.raw_listings import (
     MetadataResponse,
     RawFileRegisterRequest,
@@ -36,6 +40,9 @@ from app.services.raw_listing_service import (
     MarketplaceConnectionError,
     MarketplaceNotConnectedError,
     MarketplacePublishError,
+    RAW_MARKETPLACE_CATEGORY_DEFAULT,
+    RAW_MARKETPLACE_COMPLIANCE_STATUS,
+    RAW_MARKETPLACE_PRICING_TYPE,
     RawListingService,
     get_raw_listing_service,
 )
@@ -79,6 +86,35 @@ def _listing_response(listing) -> RawListingResponse:
         published_at=listing.published_at,
         created_at=listing.created_at,
         updated_at=listing.updated_at,
+    )
+
+
+def _build_publish_request_from_raw_listing(listing: RawListing, raw_file: RawFile) -> MarketplacePublishRequest:
+    """Map a local raw listing to the canonical signed publish request."""
+    pricing_type = RAW_MARKETPLACE_PRICING_TYPE
+    if pricing_type not in ("one_time", "subscription"):
+        pricing_type = "one_time"
+    category = (listing.auto_metadata or {}).get("category") or (raw_file.metadata_ or {}).get("category")
+    if not isinstance(category, str) or not category.strip():
+        category = RAW_MARKETPLACE_CATEGORY_DEFAULT
+
+    return MarketplacePublishRequest(
+        title=listing.title,
+        description=listing.description,
+        tags=listing.tags or [],
+        category=category.strip(),
+        pricing_type=pricing_type,
+        price_cents=listing.price_cents or 0,
+        file_format=raw_file.mime_type or "application/octet-stream",
+        file_size_bytes=raw_file.file_size_bytes,
+        schema_info={
+            "type": "raw_file",
+            "filename": raw_file.filename,
+            "mime_type": raw_file.mime_type,
+            "file_size_bytes": raw_file.file_size_bytes,
+        },
+        compliance_status=RAW_MARKETPLACE_COMPLIANCE_STATUS,
+        vz_dataset_id=listing.id,
     )
 
 
@@ -330,14 +366,28 @@ async def update_raw_listing(
 )
 async def publish_raw_listing(
     listing_id: str,
+    request: Request,
     svc: RawListingService = Depends(get_raw_listing_service),
+    user: AuthenticatedUser = Depends(get_current_user),
 ):
     try:
-        listing = await svc.publish_listing(listing_id)
+        listing, raw_file = svc.get_publishable_listing(listing_id)
+        publish_body = _build_publish_request_from_raw_listing(listing, raw_file)
+        result = await publish_via_signed_proxy(publish_body, request, user)
+        marketplace_listing_id = result.get("listing_id") or result.get("id")
+        if not marketplace_listing_id:
+            raise MarketplacePublishError("ai.market created the listing but did not return a listing id.")
+        listing = svc.mark_listing_published(listing_id, str(marketplace_listing_id))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Listing not found")
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except HTTPException as e:
+        if e.status_code in (401, 403):
+            raise HTTPException(status_code=403, detail=str(e.detail))
+        if e.status_code == 504:
+            raise HTTPException(status_code=502, detail=str(e.detail))
+        raise
     except MarketplaceNotConnectedError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except MarketplaceAuthError as e:

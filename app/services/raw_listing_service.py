@@ -181,6 +181,44 @@ class RawListingService:
                 select(RawListing).where(RawListing.id == listing_id)
             ).first()
 
+    def get_publishable_listing(self, listing_id: str) -> Tuple[RawListing, RawFile]:
+        with _get_db_session() as session:
+            listing = session.exec(
+                select(RawListing).where(RawListing.id == listing_id)
+            ).first()
+            if listing is None:
+                raise FileNotFoundError(f"Listing not found: {listing_id}")
+            if listing.status == "listed":
+                raise ValueError("Listing is already published")
+            if listing.status == "delisted":
+                raise ValueError("Cannot publish a delisted listing")
+
+            raw_file = session.exec(
+                select(RawFile).where(RawFile.id == listing.raw_file_id)
+            ).first()
+            if raw_file is None:
+                raise FileNotFoundError(f"Raw file not found: {listing.raw_file_id}")
+
+            return listing, raw_file
+
+    def mark_listing_published(self, listing_id: str, marketplace_listing_id: str) -> RawListing:
+        with _get_db_session() as session:
+            listing = session.exec(
+                select(RawListing).where(RawListing.id == listing_id)
+            ).first()
+            if listing is None:
+                raise FileNotFoundError(f"Listing not found: {listing_id}")
+
+            listing.marketplace_listing_id = marketplace_listing_id
+            listing.status = "listed"
+            listing.published_at = datetime.now(timezone.utc)
+            listing.updated_at = datetime.now(timezone.utc)
+            session.add(listing)
+            session.commit()
+            session.refresh(listing)
+            logger.info("Published raw listing %s", listing_id)
+            return listing
+
     def _build_marketplace_payload(self, listing: RawListing, raw_file: RawFile) -> Dict[str, Any]:
         price_cents = listing.price_cents or 0
         price = round(price_cents / 100, 2)
