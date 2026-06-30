@@ -56,6 +56,11 @@ class MarketplacePublishRequest(BaseModel):
     column_types: Optional[list[str]] = None
     file_format: Optional[str] = None
     file_size_bytes: Optional[int] = None
+    schema_info: Optional[dict[str, Any]] = None
+    compliance_details: Optional[dict[str, Any]] = None
+    privacy_score: Optional[float] = Field(None, ge=0, le=10)
+    secondary_categories: Optional[list[str]] = None
+    model_provider: Optional[str] = None
     vz_dataset_id: str  # local VZ dataset ID, becomes vz_raw_listing_id
 
 
@@ -84,6 +89,11 @@ class S3ConnectionPublishEmit(BaseModel):
 
 VZ_SERIAL_RE = re.compile(r"\bVZ-[A-Za-z0-9][A-Za-z0-9_-]{6,}\b")
 HMAC_HEX_RE = re.compile(r"\b[0-9a-fA-F]{32,}\b")
+ATTESTATION_HASH_RE = re.compile(r"^(?:[a-fA-F0-9]{64}|[a-fA-F0-9]{128})$")
+ATTESTATION_HASH_PATHS = {
+    ("schema_info", "attestation", "data_hash"),
+    ("schema_info", "attestation", "attestation_hash"),
+}
 
 
 def _jcs_canonical_bytes(body: dict) -> bytes:
@@ -157,16 +167,38 @@ def _assert_no_sensitive_publish_values(payload: dict[str, Any]) -> None:
         if VZ_SERIAL_RE.search(candidate) or HMAC_HEX_RE.search(candidate):
             raise HTTPException(status_code=409, detail="Publish payload contains sensitive material")
 
-    for key in ("title", "description", "category", "vz_raw_listing_id"):
-        value = payload.get(key)
+    def _check_attestation_hash(value: Any) -> None:
+        if not isinstance(value, str) or not ATTESTATION_HASH_RE.fullmatch(value):
+            raise HTTPException(status_code=409, detail="Publish payload contains invalid attestation hash")
+
+    def _walk(value: Any, path: tuple[str, ...]) -> None:
+        if path in ATTESTATION_HASH_PATHS:
+            _check_attestation_hash(value)
+            return
         if isinstance(value, str):
             _check_string(value)
+            return
+        if isinstance(value, dict):
+            for key, child in value.items():
+                _walk(child, (*path, str(key)))
+            return
+        if isinstance(value, list):
+            for child in value:
+                _walk(child, path)
 
-    tags = payload.get("tags")
-    if isinstance(tags, list):
-        for tag in tags:
-            if isinstance(tag, str):
-                _check_string(tag)
+    for key in (
+        "title",
+        "description",
+        "category",
+        "vz_raw_listing_id",
+        "tags",
+        "schema_info",
+        "compliance_details",
+        "secondary_categories",
+        "model_provider",
+    ):
+        if key in payload:
+            _walk(payload[key], (key,))
 
 
 # ---------------------------------------------------------------------------

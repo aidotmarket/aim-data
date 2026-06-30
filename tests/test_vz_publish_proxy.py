@@ -180,6 +180,48 @@ def _publish_body(**overrides) -> marketplace_publish.MarketplacePublishRequest:
     return marketplace_publish.MarketplacePublishRequest(**data)
 
 
+def _rich_listing_fields() -> dict:
+    return {
+        "schema_info": {
+            "columns": [
+                {
+                    "name": "customer_segment",
+                    "type": "string",
+                    "null_percentage": 0.0,
+                    "uniqueness_ratio": 0.92,
+                },
+                {
+                    "name": "monthly_spend",
+                    "type": "float",
+                    "null_percentage": 1.2,
+                    "uniqueness_ratio": 0.87,
+                },
+            ],
+            "row_count": 1200,
+            "column_count": 2,
+            "file_format": "csv",
+            "size_bytes": 4096,
+            "attestation": {
+                "data_hash": "a" * 64,
+                "attestation_hash": "B" * 128,
+                "completeness_score": 0.99,
+                "type_consistency_score": 0.98,
+                "freshness_score": 0.97,
+                "quality_grade": "A",
+                "generated_at": "2026-06-30T12:00:00Z",
+            },
+        },
+        "compliance_details": {
+            "score": 9.1,
+            "pii_entities": [],
+            "flags": ["aggregated", "deidentified"],
+        },
+        "privacy_score": 8.7,
+        "secondary_categories": ["analytics", "retail"],
+        "model_provider": "open-source-tabular-model",
+    }
+
+
 def _patch_publish_dependencies(monkeypatch, *, store=None, capture=None, s3_source=None):
     private_key = Ed25519PrivateKey.generate()
     store = store or _Store()
@@ -212,6 +254,77 @@ def _patch_publish_dependencies(monkeypatch, *, store=None, capture=None, s3_sou
         ),
     )
     return store, capture
+
+
+def test_build_publish_payload_includes_rich_listing_fields_without_privacy_status():
+    rich_fields = _rich_listing_fields()
+
+    payload = marketplace_publish._build_publish_payload(
+        _publish_body(**rich_fields),
+        NotS3PublishSource(),
+    )
+
+    for key, value in rich_fields.items():
+        assert payload[key] == value
+    assert payload["vz_raw_listing_id"] == "raw-file-1"
+    assert "privacy_scan_status" not in payload
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema_info", {"columns": [{"name": "VZ-ABC1234XY", "type": "string"}]}),
+        ("compliance_details", {"flags": ["0123456789abcdef0123456789abcdef"]}),
+    ],
+)
+def test_sensitive_assertion_recurses_into_rich_listing_fields(field, value):
+    payload = marketplace_publish._build_publish_payload(
+        _publish_body(**{field: value}),
+        NotS3PublishSource(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        marketplace_publish._assert_no_sensitive_publish_values(payload)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Publish payload contains sensitive material"
+
+
+def test_sensitive_assertion_allows_valid_attestation_hashes():
+    payload = marketplace_publish._build_publish_payload(
+        _publish_body(schema_info=_rich_listing_fields()["schema_info"]),
+        NotS3PublishSource(),
+    )
+
+    marketplace_publish._assert_no_sensitive_publish_values(payload)
+
+
+@pytest.mark.parametrize(
+    "attestation",
+    [
+        {"data_hash": "a" * 63, "attestation_hash": "b" * 128},
+        {"data_hash": "g" * 64, "attestation_hash": "b" * 128},
+        {"data_hash": "a" * 64, "attestation_hash": "b" * 127},
+    ],
+)
+def test_sensitive_assertion_rejects_malformed_attestation_hash(attestation):
+    schema_info = {
+        **_rich_listing_fields()["schema_info"],
+        "attestation": {
+            **_rich_listing_fields()["schema_info"]["attestation"],
+            **attestation,
+        },
+    }
+    payload = marketplace_publish._build_publish_payload(
+        _publish_body(schema_info=schema_info),
+        NotS3PublishSource(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        marketplace_publish._assert_no_sensitive_publish_values(payload)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Publish payload contains invalid attestation hash"
 
 
 @pytest.mark.asyncio
@@ -268,6 +381,28 @@ async def test_non_s3_publish_attaches_no_s3_connection(monkeypatch):
     )
 
     assert "s3_connection" not in capture["kwargs"]["json"]
+
+
+@pytest.mark.asyncio
+async def test_publish_accepts_clean_realistic_full_payload(monkeypatch):
+    _store, capture = _patch_publish_dependencies(monkeypatch, s3_source=NotS3PublishSource())
+
+    response = await marketplace_publish.publish_to_marketplace(
+        _publish_body(**_rich_listing_fields()),
+        _publish_request(),
+        user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+    )
+
+    payload = capture["kwargs"]["json"]
+    assert response.status == "published"
+    assert payload["schema_info"]["columns"][0]["name"] == "customer_segment"
+    assert payload["schema_info"]["attestation"]["data_hash"] == "a" * 64
+    assert payload["schema_info"]["attestation"]["attestation_hash"] == "B" * 128
+    assert payload["compliance_details"]["flags"] == ["aggregated", "deidentified"]
+    assert payload["privacy_score"] == 8.7
+    assert payload["secondary_categories"] == ["analytics", "retail"]
+    assert payload["model_provider"] == "open-source-tabular-model"
+    assert "privacy_scan_status" not in payload
 
 
 @pytest.mark.asyncio
