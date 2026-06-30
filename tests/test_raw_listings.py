@@ -14,6 +14,8 @@ from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from app.core.database import get_session_context
+from app.models.raw_listing import RawListing
 from app.routers import raw_listings
 from app.routers.raw_listings import router as raw_listings_router
 
@@ -225,6 +227,42 @@ class TestRawListingPublish:
         client.post(f"/api/raw/listings/{listing_id}/publish")
         resp = client.post(f"/api/raw/listings/{listing_id}/publish")
         assert resp.status_code == 409
+
+    def test_publish_atomic_recheck_blocks_late_listed_transition(
+        self,
+        client,
+        draft_listing,
+        monkeypatch,
+    ):
+        """A listing marked listed after the proxy call returns 409 without overwriting."""
+        listing_id = draft_listing["id"]
+        calls = []
+
+        async def _publish(body, request, user):
+            calls.append({"body": body, "request": request, "user": user})
+            with get_session_context() as session:
+                listing = session.get(RawListing, listing_id)
+                listing.status = "listed"
+                listing.marketplace_listing_id = "existing-listing-1"
+                session.add(listing)
+                session.commit()
+            return {"listing_id": "new-listing-2"}
+
+        monkeypatch.setattr(raw_listings, "publish_via_signed_proxy", _publish)
+
+        resp = client.post(f"/api/raw/listings/{listing_id}/publish")
+
+        assert resp.status_code == 409
+        assert resp.json()["detail"] == "Listing is already published"
+        assert len(calls) == 1
+        with get_session_context() as session:
+            persisted = session.get(RawListing, listing_id)
+            assert persisted.status == "listed"
+            assert persisted.marketplace_listing_id == "existing-listing-1"
+
+        resp = client.post(f"/api/raw/listings/{listing_id}/publish")
+        assert resp.status_code == 409
+        assert len(calls) == 1
 
 
 class TestRawListingDelist:

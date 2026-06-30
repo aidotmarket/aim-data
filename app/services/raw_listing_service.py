@@ -181,7 +181,7 @@ class RawListingService:
                 select(RawListing).where(RawListing.id == listing_id)
             ).first()
 
-    def get_publishable_listing(self, listing_id: str) -> Tuple[RawListing, RawFile]:
+    def get_publishable_listing(self, listing_id: str) -> Dict[str, Any]:
         with _get_db_session() as session:
             listing = session.exec(
                 select(RawListing).where(RawListing.id == listing_id)
@@ -199,7 +199,17 @@ class RawListingService:
             if raw_file is None:
                 raise FileNotFoundError(f"Raw file not found: {listing.raw_file_id}")
 
-            return listing, raw_file
+            return {
+                "listing_id": listing.id,
+                "title": listing.title,
+                "description": listing.description,
+                "tags": listing.tags or [],
+                "category": _resolve_category(listing, raw_file).strip(),
+                "price_cents": listing.price_cents or 0,
+                "mime_type": raw_file.mime_type,
+                "filename": raw_file.filename,
+                "file_size_bytes": raw_file.file_size_bytes,
+            }
 
     def mark_listing_published(self, listing_id: str, marketplace_listing_id: str) -> RawListing:
         with _get_db_session() as session:
@@ -208,6 +218,10 @@ class RawListingService:
             ).first()
             if listing is None:
                 raise FileNotFoundError(f"Listing not found: {listing_id}")
+            if listing.status == "listed":
+                raise ValueError("Listing is already published")
+            if listing.status == "delisted":
+                raise ValueError("Cannot publish a delisted listing")
 
             listing.marketplace_listing_id = marketplace_listing_id
             listing.status = "listed"
