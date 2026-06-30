@@ -41,6 +41,49 @@ class MarketplacePushError(Exception):
         self.detail = detail
 
 
+def load_listing_metadata(base_path: Path) -> ListingMetadata:
+    """Load listing metadata from processing output."""
+    meta_path = base_path / "listing_metadata.json"
+    if not meta_path.exists():
+        raise MarketplacePushError(
+            f"Listing metadata not found at {meta_path}. "
+            "Run the processing pipeline first."
+        )
+    with open(meta_path) as f:
+        data = json.load(f)
+    return ListingMetadata(**data)
+
+
+def load_compliance_report(base_path: Path) -> Optional[ComplianceReport]:
+    """Load compliance report if available."""
+    report_path = base_path / "compliance_report.json"
+    if not report_path.exists():
+        logger.info("No compliance report found — pushing without compliance data")
+        return None
+    try:
+        with open(report_path) as f:
+            data = json.load(f)
+        return ComplianceReport(**data)
+    except Exception as e:
+        logger.warning(f"Failed to load compliance report: {e}")
+        return None
+
+
+def load_attestation(base_path: Path) -> Optional[QualityAttestation]:
+    """Load quality attestation if available."""
+    att_path = base_path / "attestation.json"
+    if not att_path.exists():
+        logger.info("No attestation found — pushing without attestation data")
+        return None
+    try:
+        with open(att_path) as f:
+            data = json.load(f)
+        return QualityAttestation(**data)
+    except Exception as e:
+        logger.warning(f"Failed to load attestation: {e}")
+        return None
+
+
 class MarketplacePushService:
     """
     Pushes processed dataset metadata to ai.market.
@@ -109,43 +152,15 @@ class MarketplacePushService:
 
     def _load_listing_metadata(self, base_path: Path) -> ListingMetadata:
         """Load listing metadata from processing output."""
-        meta_path = base_path / "listing_metadata.json"
-        if not meta_path.exists():
-            raise MarketplacePushError(
-                f"Listing metadata not found at {meta_path}. "
-                "Run the processing pipeline first."
-            )
-        with open(meta_path) as f:
-            data = json.load(f)
-        return ListingMetadata(**data)
+        return load_listing_metadata(base_path)
 
     def _load_compliance_report(self, base_path: Path) -> Optional[ComplianceReport]:
         """Load compliance report if available."""
-        report_path = base_path / "compliance_report.json"
-        if not report_path.exists():
-            logger.info("No compliance report found — pushing without compliance data")
-            return None
-        try:
-            with open(report_path) as f:
-                data = json.load(f)
-            return ComplianceReport(**data)
-        except Exception as e:
-            logger.warning(f"Failed to load compliance report: {e}")
-            return None
+        return load_compliance_report(base_path)
 
     def _load_attestation(self, base_path: Path) -> Optional[QualityAttestation]:
         """Load quality attestation if available."""
-        att_path = base_path / "attestation.json"
-        if not att_path.exists():
-            logger.info("No attestation found — pushing without attestation data")
-            return None
-        try:
-            with open(att_path) as f:
-                data = json.load(f)
-            return QualityAttestation(**data)
-        except Exception as e:
-            logger.warning(f"Failed to load attestation: {e}")
-            return None
+        return load_attestation(base_path)
 
     # ---- Payload Building ----
 

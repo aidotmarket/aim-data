@@ -58,6 +58,7 @@ class MarketplacePublishRequest(BaseModel):
     file_size_bytes: Optional[int] = None
     schema_info: Optional[dict[str, Any]] = None
     compliance_details: Optional[dict[str, Any]] = None
+    compliance_status: Optional[str] = None
     privacy_score: Optional[float] = Field(None, ge=0, le=10)
     secondary_categories: Optional[list[str]] = None
     model_provider: Optional[str] = None
@@ -194,6 +195,7 @@ def _assert_no_sensitive_publish_values(payload: dict[str, Any]) -> None:
         "tags",
         "schema_info",
         "compliance_details",
+        "compliance_status",
         "secondary_categories",
         "model_provider",
     ):
@@ -212,6 +214,20 @@ async def publish_to_marketplace(
     user=Depends(get_current_user),
 ):
     """Publish a dataset listing to ai.market via signed JWT proxy."""
+    data = await publish_via_signed_proxy(body, request, user)
+    return MarketplacePublishResponse(
+        status="published",
+        listing_id=data.get("listing_id"),
+        marketplace_url=data.get("marketplace_url"),
+    )
+
+
+async def publish_via_signed_proxy(
+    body: MarketplacePublishRequest,
+    request: Request,
+    user,
+) -> dict[str, Any]:
+    """Publish a dataset listing to ai.market via the canonical signed proxy."""
     # 1. Load crypto + keypairs
     crypto = _get_crypto()
     ed_priv, _ed_pub, _x_priv, _x_pub = crypto.get_or_create_keypairs()
@@ -281,12 +297,7 @@ async def publish_to_marketplace(
 
     # 6. Return response
     if resp.status_code in (200, 201):
-        data = resp.json()
-        return MarketplacePublishResponse(
-            status="published",
-            listing_id=data.get("listing_id"),
-            marketplace_url=data.get("marketplace_url"),
-        )
+        return resp.json()
 
     # Error passthrough
     try:
