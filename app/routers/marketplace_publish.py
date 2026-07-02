@@ -206,12 +206,12 @@ def _build_publish_payload(
     return payload
 
 
-def _manifest_hash_for_scan_job(session, scan_job: S3ScanJob) -> str:
-    rows = session.exec(
-        select(S3ObjectMetadata)
-        .where(S3ObjectMetadata.scan_job_id == scan_job.id)
-        .order_by(S3ObjectMetadata.object_key)
-    ).all()
+def _manifest_hash_for_scan_rows(rows: list[S3ObjectMetadata]) -> str:
+    """Scan-snapshot digest including scan-time last_modified/etag metadata.
+
+    Receivers treat this as an opaque immutability key for the version label,
+    not as a digest of current live S3 state.
+    """
     manifest = [
         {
             "etag": row.etag,
@@ -222,6 +222,15 @@ def _manifest_hash_for_scan_job(session, scan_job: S3ScanJob) -> str:
         for row in rows
     ]
     return _jcs_hash({"objects": manifest})
+
+
+def _manifest_hash_for_scan_job(session, scan_job: S3ScanJob) -> str:
+    rows = session.exec(
+        select(S3ObjectMetadata)
+        .where(S3ObjectMetadata.scan_job_id == scan_job.id)
+        .order_by(S3ObjectMetadata.object_key)
+    ).all()
+    return _manifest_hash_for_scan_rows(rows)
 
 
 def _version_emit_from_scan(
@@ -247,21 +256,21 @@ def _version_emit_from_scan(
             raise HTTPException(status_code=404, detail="S3 version scan job not found")
         if scan_job.status != "completed":
             raise HTTPException(status_code=409, detail="S3 version scan must complete before publish")
-        outside_prefix = session.exec(
-            select(S3ObjectMetadata.id)
+        rows = session.exec(
+            select(S3ObjectMetadata)
             .where(S3ObjectMetadata.scan_job_id == scan_job.id)
-            .where(~S3ObjectMetadata.object_key.startswith(version_prefix))
-            .limit(1)
-        ).first()
-        if outside_prefix is not None:
+            .order_by(S3ObjectMetadata.object_key)
+        ).all()
+        if not rows:
+            raise HTTPException(status_code=409, detail="S3 version scan found no objects under the version prefix")
+        if any(not row.object_key.startswith(version_prefix) for row in rows):
             raise HTTPException(status_code=409, detail="S3 version scan does not match the requested version prefix")
 
-        stats = scan_job.sampled_stats or {}
         return VersionPublishEmit(
             version_label=version_label,
-            object_count=int(stats.get("object_count") or scan_job.objects_enumerated or 0),
-            total_size_bytes=int(stats.get("total_size_bytes") or 0),
-            manifest_hash=_manifest_hash_for_scan_job(session, scan_job),
+            object_count=len(rows),
+            total_size_bytes=sum(row.size_bytes for row in rows),
+            manifest_hash=_manifest_hash_for_scan_rows(rows),
         )
 
 

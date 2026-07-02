@@ -406,3 +406,135 @@ def test_version_publish_rejects_scan_rows_outside_requested_prefix(s3_engine) -
         )
 
     assert exc_info.value.status_code == 409
+
+
+def test_version_publish_rejects_scan_rows_outside_literal_underscore_prefix(s3_engine) -> None:
+    now = datetime.now(timezone.utc)
+    connection = S3Connection(
+        id="connection-underscore",
+        owner_id="user-a",
+        name="Seller bucket",
+        bucket="seller-bucket",
+        region="us-east-1",
+        prefix="exports/dataset-1",
+        role_arn="arn:aws:iam::123456789012:role/aim-data",
+        external_id="external-id",
+        status="verified",
+    )
+    scan_job = S3ScanJob(
+        id="scan-underscore",
+        connection_id=connection.id,
+        status="completed",
+        started_at=now,
+        completed_at=now,
+    )
+    rows = [
+        S3ObjectMetadata(
+            id="object-v1_0",
+            connection_id=connection.id,
+            scan_job_id=scan_job.id,
+            object_key="exports/dataset-1/v1_0/a.csv",
+            size_bytes=10,
+            content_type="text/csv",
+            last_modified=now,
+            etag="etag-a",
+        ),
+        S3ObjectMetadata(
+            id="object-v1x0",
+            connection_id=connection.id,
+            scan_job_id=scan_job.id,
+            object_key="exports/dataset-1/v1X0/b.csv",
+            size_bytes=20,
+            content_type="text/csv",
+            last_modified=now,
+            etag="etag-b",
+        ),
+    ]
+    with Session(s3_engine) as session:
+        session.add(connection)
+        session.add(scan_job)
+        for row in rows:
+            session.add(row)
+        session.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        marketplace_publish._version_emit_from_scan(
+            connection_id="connection-underscore",
+            scan_job_id="scan-underscore",
+            version_label="v1_0",
+            user=SimpleNamespace(user_id="user-a"),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "S3 version scan does not match the requested version prefix"
+
+
+def test_version_publish_rejects_completed_scan_with_zero_rows(s3_engine) -> None:
+    now = datetime.now(timezone.utc)
+    connection = S3Connection(
+        id="connection-empty",
+        owner_id="user-a",
+        name="Seller bucket",
+        bucket="seller-bucket",
+        region="us-east-1",
+        prefix="exports/dataset-1",
+        role_arn="arn:aws:iam::123456789012:role/aim-data",
+        external_id="external-id",
+        status="verified",
+    )
+    scan_job = S3ScanJob(
+        id="scan-empty",
+        connection_id=connection.id,
+        status="completed",
+        started_at=now,
+        completed_at=now,
+        objects_enumerated=7,
+        sampled_stats={"object_count": 7, "total_size_bytes": 70},
+    )
+    with Session(s3_engine) as session:
+        session.add(connection)
+        session.add(scan_job)
+        session.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        marketplace_publish._version_emit_from_scan(
+            connection_id="connection-empty",
+            scan_job_id="scan-empty",
+            version_label="v2",
+            user=SimpleNamespace(user_id="user-a"),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "S3 version scan found no objects under the version prefix"
+
+
+def test_version_publish_counts_and_sizes_derive_from_manifest_rows(s3_engine) -> None:
+    _connection, _scan_job = _add_completed_version_scan(s3_engine)
+    now = datetime.now(timezone.utc)
+    with Session(s3_engine) as session:
+        scan_job = session.get(S3ScanJob, "scan-1")
+        scan_job.objects_enumerated = 99
+        scan_job.sampled_stats = {"object_count": 99, "total_size_bytes": 999}
+        session.add(
+            S3ObjectMetadata(
+                id="object-3",
+                connection_id="connection-1",
+                scan_job_id="scan-1",
+                object_key="exports/dataset-1/v2/c.csv",
+                size_bytes=7,
+                content_type="text/csv",
+                last_modified=now,
+                etag="etag-c",
+            )
+        )
+        session.commit()
+
+    version = marketplace_publish._version_emit_from_scan(
+        connection_id="connection-1",
+        scan_job_id="scan-1",
+        version_label="v2",
+        user=SimpleNamespace(user_id="user-a"),
+    )
+
+    assert version.object_count == 3
+    assert version.total_size_bytes == 37
