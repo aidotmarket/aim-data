@@ -26,7 +26,12 @@ from app.auth.api_key_auth import get_current_user
 from app.config import settings
 from app.core.channel_config import CHANNEL
 from app.core.crypto import DeviceCrypto
+from app.core.database import get_session_context
+from app.models.s3_connection import S3Connection
+from app.models.s3_object_metadata import S3ObjectMetadata
+from app.models.s3_scan_job import S3ScanJob
 from app.services.registration_service import ensure_vz_install_registered
+from app.services.listing_versioning import build_version_prefix
 from app.services.s3_publish_source_resolver import (
     NotS3PublishSource,
     S3PublishSourceResolution,
@@ -34,6 +39,7 @@ from app.services.s3_publish_source_resolver import (
     resolve_s3_publish_source,
 )
 from app.services.serial_store import get_serial_store
+from sqlmodel import select
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +78,17 @@ class MarketplacePublishResponse(BaseModel):
     error: Optional[str] = None
 
 
+class VersionPublishEmit(BaseModel):
+    """Strict allowlist for the receiver's VersionPublish contract."""
+
+    model_config = {"extra": "forbid"}
+
+    version_label: str = Field(..., min_length=1, max_length=64)
+    object_count: int = Field(..., ge=0)
+    total_size_bytes: int = Field(..., ge=0)
+    manifest_hash: str = Field(..., min_length=1, max_length=256)
+
+
 class S3ConnectionPublishEmit(BaseModel):
     """Strict allowlist for the receiver's S3ConnectionPublish contract."""
 
@@ -82,6 +99,27 @@ class S3ConnectionPublishEmit(BaseModel):
     role_arn: str
     prefix: str
     serial_id: str
+
+
+class MarketplaceVersionPublishRequest(MarketplacePublishRequest):
+    s3_connection_id: str
+    scan_job_id: str
+    version_label: str = Field(..., min_length=1, max_length=64)
+
+
+class MarketplaceVersionPublishResponse(MarketplacePublishResponse):
+    version_label: str
+    version_status: Optional[str] = None
+    quarantine_reason: Optional[str] = None
+
+
+class MarketplaceVersionConfirmResponse(BaseModel):
+    version_id: str
+    listing_id: str
+    version_label: str
+    status: str
+    quarantine_reason: Optional[str] = None
+    result: str
 
 
 # ---------------------------------------------------------------------------
@@ -148,9 +186,14 @@ def _build_s3_connection_emit(resolution: S3PublishSourceResolution) -> dict[str
     ).model_dump(mode="json")
 
 
+def _build_version_emit(version: VersionPublishEmit) -> dict[str, Any]:
+    return version.model_dump(mode="json")
+
+
 def _build_publish_payload(
     body: MarketplacePublishRequest,
     s3_source: NotS3PublishSource | S3PublishSourceResolution,
+    versions: Optional[list[VersionPublishEmit]] = None,
 ) -> dict[str, Any]:
     """Build the single canonical publish payload used for wire body and hash."""
     payload = body.model_dump(exclude_none=True)
@@ -158,7 +201,68 @@ def _build_publish_payload(
     payload["download_channel"] = CHANNEL.value
     if isinstance(s3_source, S3PublishSourceResolution):
         payload["s3_connection"] = _build_s3_connection_emit(s3_source)
+    if versions:
+        payload["versions"] = [_build_version_emit(version) for version in versions]
     return payload
+
+
+def _manifest_hash_for_scan_job(session, scan_job: S3ScanJob) -> str:
+    rows = session.exec(
+        select(S3ObjectMetadata)
+        .where(S3ObjectMetadata.scan_job_id == scan_job.id)
+        .order_by(S3ObjectMetadata.object_key)
+    ).all()
+    manifest = [
+        {
+            "etag": row.etag,
+            "key": row.object_key,
+            "last_modified": row.last_modified.isoformat(),
+            "size": row.size_bytes,
+        }
+        for row in rows
+    ]
+    return _jcs_hash({"objects": manifest})
+
+
+def _version_emit_from_scan(
+    *,
+    connection_id: str,
+    scan_job_id: str,
+    version_label: str,
+    user,
+) -> VersionPublishEmit:
+    with get_session_context() as session:
+        connection = session.get(S3Connection, connection_id)
+        if connection is None:
+            raise HTTPException(status_code=404, detail="S3 connection not found")
+        if connection.owner_id != user.user_id:
+            raise HTTPException(status_code=403, detail="S3 connection is not owned by this user")
+        try:
+            version_prefix = build_version_prefix(str(connection.prefix or ""), version_label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"invalid version prefix: {exc}") from exc
+
+        scan_job = session.get(S3ScanJob, scan_job_id)
+        if scan_job is None or scan_job.connection_id != connection_id:
+            raise HTTPException(status_code=404, detail="S3 version scan job not found")
+        if scan_job.status != "completed":
+            raise HTTPException(status_code=409, detail="S3 version scan must complete before publish")
+        outside_prefix = session.exec(
+            select(S3ObjectMetadata.id)
+            .where(S3ObjectMetadata.scan_job_id == scan_job.id)
+            .where(~S3ObjectMetadata.object_key.startswith(version_prefix))
+            .limit(1)
+        ).first()
+        if outside_prefix is not None:
+            raise HTTPException(status_code=409, detail="S3 version scan does not match the requested version prefix")
+
+        stats = scan_job.sampled_stats or {}
+        return VersionPublishEmit(
+            version_label=version_label,
+            object_count=int(stats.get("object_count") or scan_job.objects_enumerated or 0),
+            total_size_bytes=int(stats.get("total_size_bytes") or 0),
+            manifest_hash=_manifest_hash_for_scan_job(session, scan_job),
+        )
 
 
 def _assert_no_sensitive_publish_values(payload: dict[str, Any]) -> None:
@@ -222,10 +326,97 @@ async def publish_to_marketplace(
     )
 
 
+@router.post("/marketplace/versions/publish", response_model=MarketplaceVersionPublishResponse)
+async def publish_version_to_marketplace(
+    body: MarketplaceVersionPublishRequest,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    """Publish a new dataset version to ai.market via the signed publish proxy."""
+    version = _version_emit_from_scan(
+        connection_id=body.s3_connection_id,
+        scan_job_id=body.scan_job_id,
+        version_label=body.version_label,
+        user=user,
+    )
+    publish_body = MarketplacePublishRequest(
+        **body.model_dump(exclude={"s3_connection_id", "scan_job_id", "version_label"})
+    )
+    data = await publish_via_signed_proxy(publish_body, request, user, versions=[version])
+    version_data = data.get("version") if isinstance(data.get("version"), dict) else {}
+    versions_data = data.get("versions") if isinstance(data.get("versions"), list) else []
+    if not version_data and versions_data:
+        version_data = next(
+            (item for item in versions_data if item.get("version_label") == body.version_label),
+            versions_data[0],
+        )
+    return MarketplaceVersionPublishResponse(
+        status="published",
+        listing_id=data.get("listing_id"),
+        marketplace_url=data.get("marketplace_url"),
+        version_label=body.version_label,
+        version_status=version_data.get("status"),
+        quarantine_reason=version_data.get("quarantine_reason"),
+    )
+
+
+@router.post("/marketplace/versions/{version_id}/confirm", response_model=MarketplaceVersionConfirmResponse)
+async def confirm_marketplace_version(
+    version_id: str,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    """Approve a receiver-quarantined version for activation."""
+    store = get_serial_store()
+    incoming_auth = request.headers.get("Authorization", "")
+    incoming_bearer = incoming_auth.removeprefix("Bearer ").strip() if incoming_auth.startswith("Bearer ") else None
+    seller_token = store.state.ai_market_access_token or incoming_bearer
+    if not seller_token:
+        raise HTTPException(status_code=409, detail="Seller ai.market token not available")
+
+    url = f"{settings.ai_market_url}/api/v1/vz/versions/{version_id}/confirm"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {seller_token}",
+                    "Content-Type": "application/json",
+                },
+            )
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail="Cannot reach ai.market — check network connectivity")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="ai.market request timed out")
+
+    try:
+        data = resp.json()
+    except Exception:
+        data = {}
+    if resp.status_code not in (200, 201):
+        detail = data.get("detail") or data.get("error") or resp.text or f"ai.market returned {resp.status_code}"
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+
+    status = str(data.get("status") or "")
+    if status == "superseded":
+        result = "confirmed_but_superseded"
+    else:
+        result = "confirmed"
+    return MarketplaceVersionConfirmResponse(
+        version_id=str(data.get("version_id") or version_id),
+        listing_id=str(data.get("listing_id") or ""),
+        version_label=str(data.get("version_label") or ""),
+        status=status,
+        quarantine_reason=data.get("quarantine_reason"),
+        result=result,
+    )
+
+
 async def publish_via_signed_proxy(
     body: MarketplacePublishRequest,
     request: Request,
     user,
+    versions: Optional[list[VersionPublishEmit]] = None,
 ) -> dict[str, Any]:
     """Publish a dataset listing to ai.market via the canonical signed proxy."""
     # 1. Load crypto + keypairs
@@ -271,7 +462,7 @@ async def publish_via_signed_proxy(
             ),
         )
 
-    payload = _build_publish_payload(body, s3_source)
+    payload = _build_publish_payload(body, s3_source, versions=versions)
     _assert_no_sensitive_publish_values(payload)
 
     # 4. JCS hash + JWT

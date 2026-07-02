@@ -25,6 +25,7 @@ from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
 from app.routers.datasets import prepare_listing_task
+from app.services.listing_versioning import build_version_prefix
 from app.services.processing_service import DatasetRecord as ProcessingDatasetRecord
 from app.services.processing_service import get_processing_service
 from app.services.s3_broker_client import S3BrokerClient, S3BrokerError
@@ -117,6 +118,10 @@ class S3ObjectRegisterRequest(BaseModel):
     listing_id: Optional[str] = None
 
 
+class S3VersionScanRequest(BaseModel):
+    version_label: str = Field(..., min_length=1, max_length=64)
+
+
 class S3DatasetResponse(BaseModel):
     id: str
     original_filename: str
@@ -132,6 +137,12 @@ class S3DatasetResponse(BaseModel):
 class S3ObjectRegisterResponse(BaseModel):
     dataset: S3DatasetResponse
     object: S3ObjectMetadataResponse
+
+
+class S3VersionScanResponse(BaseModel):
+    version_label: str
+    version_prefix: str
+    scan_job: S3ScanJobResponse
 
 
 def _policy_prefix(prefix: Optional[str]) -> str:
@@ -450,6 +461,35 @@ async def get_scan_job(
         if scan_job is None or scan_job.connection_id != connection_id:
             raise HTTPException(status_code=404, detail="S3 scan job not found")
         return _scan_job_response(scan_job)
+
+
+@router.post("/{connection_id}/versions/scan", summary="Scan a derived S3 version prefix")
+async def scan_version_prefix(
+    connection_id: str,
+    body: S3VersionScanRequest,
+    background_tasks: BackgroundTasks,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> S3VersionScanResponse:
+    with get_session_context() as session:
+        connection = _get_connection_for_user(session, connection_id, user)
+        if connection.status != "verified" or not connection.role_arn:
+            raise HTTPException(status_code=409, detail="S3 connection must be verified before scanning versions")
+        try:
+            version_prefix = build_version_prefix(str(connection.prefix or ""), body.version_label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"invalid version prefix: {exc}") from exc
+
+    service = S3ScanService()
+    try:
+        scan_job = service.create_scan_job(connection_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="S3 connection not found") from None
+    background_tasks.add_task(S3ScanService().run_scan_job_for_prefix, scan_job.id, version_prefix)
+    return S3VersionScanResponse(
+        version_label=body.version_label,
+        version_prefix=version_prefix,
+        scan_job=_scan_job_response(scan_job),
+    )
 
 
 @router.get("/{connection_id}/objects", summary="List scanned S3 objects")

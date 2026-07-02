@@ -100,6 +100,12 @@ class S3ScanService:
             return scan_job
 
     def run_scan_job(self, scan_job_id: str) -> None:
+        self._run_scan_job(scan_job_id)
+
+    def run_scan_job_for_prefix(self, scan_job_id: str, prefix: str) -> None:
+        self._run_scan_job(scan_job_id, scan_prefix=prefix)
+
+    def _run_scan_job(self, scan_job_id: str, scan_prefix: Optional[str] = None) -> None:
         with get_session_context() as session:
             scan_job = session.get(S3ScanJob, scan_job_id)
             if scan_job is None:
@@ -128,7 +134,7 @@ class S3ScanService:
                                 role_arn=connection.role_arn,
                                 region=connection.region,
                                 bucket=connection.bucket,
-                                prefix=connection.prefix,
+                                prefix=scan_prefix if scan_prefix is not None else connection.prefix,
                                 continuation_token=continuation_token,
                                 max_keys=1000,
                             )
