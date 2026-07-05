@@ -43,3 +43,25 @@ Auth-scope + money + customer-data. Buyer credential is short-lived, prefix-scop
 - Seller clicks "List the whole bucket" -> one listing on ai.market bound to bucket+prefix, no files[], no local download.
 - Test buyer purchase -> scoped STS cred -> `aws s3 sync` pulls the whole prefix; access outside prefix denied.
 - No bucket-root listing unless decision (B) is taken.
+
+---
+
+## GATE-1 RESULT — UNANIMOUS APPROVE (S1127)
+- **MP** (gpt-5.5): APPROVED_WITH_MANDATES
+- **AG** (gemini-3.5): APPROVED_WITH_MANDATES
+- **DeepSeek** (deepseek-v4-pro): APPROVED
+No REJECT, no CRITICAL veto. Reuse of the proven signed-proxy + STS delivery with no-files[] reference listings is blessed. Root relaxation via a distinct resolver path is accepted. Gate 2 = verify these mandates are addressed in the build.
+
+## MANDATES (M1–M5) — must be satisfied by the build
+**M1 (MP-1) Root path isolation.** Shared `_validate_prefix` stays strict for ALL existing callers (still rejects empty/`/`). The new connection-level resolver enters root mode ONLY on an explicit `scope='bucket_root'` + `allow_bucket_root=True`; NO implicit root fallback from an empty/malformed prefix. Tests: (a) existing prefix publish + object register still reject root; (b) only the new publish-bucket path can enter root mode.
+
+**M2 (MP-2 + AG-1 + DeepSeek-2) Count/scope integrity.** Source `object_count`/size from `scan_job.objects_enumerated` ONLY when the scan's target prefix exactly matches the chosen listing scope (prefix vs bucket root). On mismatch or no matching completed scan, set count `null` / "unscanned" — never show a prefix-scoped count for a root listing (or vice versa). Include a `last_scan_time`.
+
+**M3 (MP-3) Server-side authz + validation.** `POST /s3-connections/{id}/publish-bucket` must enforce server-side (never rely on UI): authenticated seller owns the connection; connection status=verified; `role_arn` present+valid; requested scope authorized; listing metadata/price/category pass the SAME validation as existing marketplace publish.
+
+**M4 (AG-2) STS policy per scope.** Buyer STS credential IAM policy is built dynamically from the sold listing's scope: prefix → `arn:aws:s3:::{bucket}/{prefix}/*` (+ scoped ListBucket); bucket_root → `arn:aws:s3:::{bucket}/*` (+ bucket-root ListBucket). A prefix-scoped listing must NEVER mint a bucket-root credential. (Verify against existing s3_presigner/sts_assumer scoping on ai-market-backend; extend only if needed.)
+
+**M5 (AG-3 + DeepSeek-1) Delivery contract + disclosure.** Listing flagged `delivery_type=s3_scoped_credential`; buyer download bypasses single-file size checks (prefix sync). Frontend root opt-in warning must state explicitly that ALL current AND FUTURE files under the bucket root become accessible to the buyer. Optional: cheap prefix-level digest hash({bucket,prefix,role_arn,objects_enumerated}) + creation timestamp for audit/dispute (metadata only; not a per-file manifest).
+
+## Build plan (Gate 2 → build)
+Repos: aim-data (backend resolver + endpoint + tests; frontend button/modal). Verify M4 against ai-market-backend fulfillment scope logic (extend there only if the scope isn't already derived from the sold listing's prefix). Reversible; new endpoint + resolver path + UI; no destructive migration. Unanimous Council Gate-3 audit before deploy. Gate-4 code-level on staging; real cross-account Gate-4 = Sergey first sale (human-gated).
