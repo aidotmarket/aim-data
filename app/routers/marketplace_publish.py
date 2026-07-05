@@ -426,6 +426,7 @@ async def publish_via_signed_proxy(
     request: Request,
     user,
     versions: Optional[list[VersionPublishEmit]] = None,
+    s3_source_override: Optional[S3PublishSourceResolution] = None,
 ) -> dict[str, Any]:
     """Publish a dataset listing to ai.market via the canonical signed proxy."""
     # 1. Load crypto + keypairs
@@ -460,16 +461,19 @@ async def publish_via_signed_proxy(
         )
 
     # 3. Resolve S3 provenance, then build the canonical payload for ai.market.
-    try:
-        s3_source = resolve_s3_publish_source(body.vz_dataset_id, user, store.state)
-    except S3PublishSourceResolutionError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "S3-sourced dataset is not eligible for scoped-credential publish yet; "
-                f"verify the S3 connection and dataset source, then retry. reason={exc.reason}"
-            ),
-        )
+    if s3_source_override is not None:
+        s3_source: NotS3PublishSource | S3PublishSourceResolution = s3_source_override
+    else:
+        try:
+            s3_source = resolve_s3_publish_source(body.vz_dataset_id, user, store.state)
+        except S3PublishSourceResolutionError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "S3-sourced dataset is not eligible for scoped-credential publish yet; "
+                    f"verify the S3 connection and dataset source, then retry. reason={exc.reason}"
+                ),
+            )
 
     payload = _build_publish_payload(body, s3_source, versions=versions)
     _assert_no_sensitive_publish_values(payload)

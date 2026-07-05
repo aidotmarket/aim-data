@@ -44,7 +44,9 @@ def _sampled_stats(
     type_histogram: dict[str, int],
     approximate: bool,
     sampled_object_count: int,
+    target_prefix: Optional[str],
 ) -> dict[str, Any]:
+    normalized_target = (target_prefix or "").strip().strip("/")
     return {
         "object_count": object_count,
         "total_size_bytes": total_size_bytes,
@@ -52,6 +54,8 @@ def _sampled_stats(
         "approximate": approximate,
         "sample_coverage": "partial" if approximate else "full",
         "sampled_object_count": sampled_object_count,
+        "target_prefix": normalized_target,
+        "target_scope": "bucket_root" if normalized_target == "" else "prefix",
     }
 
 
@@ -126,6 +130,7 @@ class S3ScanService:
                 sampled_object_count = 0
                 approximate = False
                 continuation_token: Optional[str] = None
+                target_prefix = scan_prefix if scan_prefix is not None else connection.prefix
                 while True:
                     rate_limit_retries = 0
                     while True:
@@ -134,7 +139,7 @@ class S3ScanService:
                                 role_arn=connection.role_arn,
                                 region=connection.region,
                                 bucket=connection.bucket,
-                                prefix=scan_prefix if scan_prefix is not None else connection.prefix,
+                                prefix=target_prefix,
                                 continuation_token=continuation_token,
                                 max_keys=1000,
                             )
@@ -194,6 +199,7 @@ class S3ScanService:
                         type_histogram=type_histogram,
                         approximate=approximate,
                         sampled_object_count=sampled_object_count,
+                        target_prefix=target_prefix,
                     )
                     scan_job.updated_at = _now()
                     session.add(scan_job)

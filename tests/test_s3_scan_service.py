@@ -189,6 +189,8 @@ def test_scan_persists_sample_and_exact_stats(session_context, monkeypatch):
         "approximate": False,
         "sample_coverage": "full",
         "sampled_object_count": 2,
+        "target_prefix": "exports",
+        "target_scope": "prefix",
     }
     assert broker.calls[0]["bucket"] == "seller-bucket"
     assert broker.calls[0]["prefix"] == "exports/"
@@ -347,6 +349,8 @@ def test_large_scan_computes_exact_stats_and_caps_sample_rows(session_context, m
         "approximate": False,
         "sample_coverage": "full",
         "sampled_object_count": 1000,
+        "target_prefix": "exports",
+        "target_scope": "prefix",
     }
     with session_context() as session:
         stored_objects = session.exec(select(S3ObjectMetadata)).all()

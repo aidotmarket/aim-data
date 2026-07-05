@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle, ChevronLeft, ChevronRight, FileSearch, Loader2, Play, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, FileSearch, Loader2, Play, RefreshCw, UploadCloud } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Table,
@@ -12,11 +24,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { getApiUrl } from "@/lib/api";
 
 interface S3ConnectionReviewConnection {
   id: string;
+  name?: string;
+  bucket?: string;
+  prefix?: string | null;
   status: string;
 }
 
@@ -61,6 +77,8 @@ interface S3RegisterResponse {
   object: S3ObjectMetadata;
 }
 
+type BucketPublishScope = "prefix" | "bucket_root";
+
 const PAGE_SIZE = 50;
 const POLL_INTERVAL_MS = 2500;
 const TERMINAL_SCAN_STATUSES = new Set(["completed", "failed", "error", "cancelled"]);
@@ -101,6 +119,14 @@ export function S3ConnectionReview({
   const [offset, setOffset] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [registeringIds, setRegisteringIds] = useState<Set<string>>(new Set());
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishingBucket, setPublishingBucket] = useState(false);
+  const [publishTitle, setPublishTitle] = useState(connection.name || "S3 bucket listing");
+  const [publishDescription, setPublishDescription] = useState("");
+  const [publishCategory, setPublishCategory] = useState("data");
+  const [publishPrice, setPublishPrice] = useState("");
+  const [publishScope, setPublishScope] = useState<BucketPublishScope>("prefix");
+  const [rootAcknowledged, setRootAcknowledged] = useState(false);
 
   const scanInProgress = Boolean(scanJob && !TERMINAL_SCAN_STATUSES.has(scanJob.status));
   const selectableObjects = useMemo(() => objects, [objects]);
@@ -210,6 +236,55 @@ export function S3ConnectionReview({
       toast({ title: "Error", description: "Scan could not be started.", variant: "destructive" });
     } finally {
       setScanLoading(false);
+    }
+  };
+
+  const publishWholeBucket = async () => {
+    const priceNumber = Number.parseFloat(publishPrice);
+    if (!publishTitle.trim() || !publishDescription.trim() || !Number.isFinite(priceNumber) || priceNumber < 0) {
+      toast({ title: "Publish details needed", description: "Add a title, description, and valid price.", variant: "destructive" });
+      return;
+    }
+    if (publishScope === "bucket_root" && !rootAcknowledged) {
+      toast({ title: "Root access confirmation required", description: "Confirm the bucket-root exposure before publishing.", variant: "destructive" });
+      return;
+    }
+
+    setPublishingBucket(true);
+    try {
+      const response = await fetch(`${getApiUrl()}/api/s3-connections/${connection.id}/publish-bucket`, {
+        method: "POST",
+        headers: apiHeaders(),
+        body: JSON.stringify({
+          title: publishTitle.trim(),
+          description: publishDescription.trim(),
+          category: publishCategory.trim() || null,
+          pricing_type: "one_time",
+          price_cents: Math.round(priceNumber * 100),
+          scope: publishScope,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast({
+          title: "Publish failed",
+          description: data.detail || "The bucket listing could not be published.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setPublishDialogOpen(false);
+      toast({
+        title: "Bucket listing published",
+        description: data.marketplace_url ? "The marketplace listing is ready." : "The marketplace accepted the listing.",
+      });
+      if (data.marketplace_url) {
+        window.open(data.marketplace_url, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      toast({ title: "Publish failed", description: "The bucket listing could not be published.", variant: "destructive" });
+    } finally {
+      setPublishingBucket(false);
     }
   };
 
@@ -327,6 +402,10 @@ export function S3ConnectionReview({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <Button size="sm" className="gap-1.5" onClick={() => setPublishDialogOpen(true)} disabled={connection.status !== "verified"}>
+            <UploadCloud className="h-3.5 w-3.5" />
+            List the whole bucket
+          </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => fetchObjects(offset)} disabled={objectsLoading}>
             {objectsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
             Refresh
@@ -337,6 +416,95 @@ export function S3ConnectionReview({
           </Button>
         </div>
       </div>
+
+      <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>List the whole bucket</DialogTitle>
+            <DialogDescription>
+              Create one marketplace listing that gives the buyer scoped S3 credentials for the selected bucket scope.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-2">
+              <Label htmlFor="s3-bucket-title">Title</Label>
+              <Input id="s3-bucket-title" value={publishTitle} onChange={(event) => setPublishTitle(event.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="s3-bucket-description">Description</Label>
+              <Textarea
+                id="s3-bucket-description"
+                value={publishDescription}
+                onChange={(event) => setPublishDescription(event.target.value)}
+                rows={4}
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="s3-bucket-category">Category</Label>
+                <Input id="s3-bucket-category" value={publishCategory} onChange={(event) => setPublishCategory(event.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="s3-bucket-price">Price</Label>
+                <Input
+                  id="s3-bucket-price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={publishPrice}
+                  onChange={(event) => setPublishPrice(event.target.value)}
+                />
+              </div>
+            </div>
+            <RadioGroup
+              value={publishScope}
+              onValueChange={(value) => {
+                setPublishScope(value as BucketPublishScope);
+                if (value !== "bucket_root") setRootAcknowledged(false);
+              }}
+              className="grid gap-2"
+            >
+              <Label className="flex items-start gap-2 rounded-md border border-border p-3">
+                <RadioGroupItem value="prefix" className="mt-0.5" />
+                <span className="grid gap-1 text-sm">
+                  <span className="font-medium">Connection prefix</span>
+                  <span className="text-muted-foreground">{connection.prefix ? `${connection.bucket || "Bucket"}/${connection.prefix}` : "Requires a non-root connection prefix."}</span>
+                </span>
+              </Label>
+              <Label className="flex items-start gap-2 rounded-md border border-border p-3">
+                <RadioGroupItem value="bucket_root" className="mt-0.5" />
+                <span className="grid gap-1 text-sm">
+                  <span className="font-medium">Entire bucket root</span>
+                  <span className="text-muted-foreground">{connection.bucket || "Bucket root"}</span>
+                </span>
+              </Label>
+            </RadioGroup>
+            {publishScope === "bucket_root" ? (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Buyers will be able to access ALL current AND FUTURE files under the bucket root.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {publishScope === "bucket_root" ? (
+              <Label className="flex items-center gap-2 text-sm">
+                <Checkbox checked={rootAcknowledged} onCheckedChange={(value) => setRootAcknowledged(value === true)} />
+                I understand this exposes the entire bucket root to buyers.
+              </Label>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPublishDialogOpen(false)} disabled={publishingBucket}>
+              Cancel
+            </Button>
+            <Button onClick={publishWholeBucket} disabled={publishingBucket || (publishScope === "bucket_root" && !rootAcknowledged)}>
+              {publishingBucket ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+              Publish listing
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {scanError ? <p className="text-xs text-destructive">{scanError}</p> : null}
       {objectsError ? <p className="text-xs text-destructive">{objectsError}</p> : null}

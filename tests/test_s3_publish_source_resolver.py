@@ -15,6 +15,7 @@ from app.services.processing_service import ProcessingService
 from app.services.s3_publish_source_resolver import (
     NotS3PublishSource,
     S3PublishSourceResolutionError,
+    resolve_s3_connection_publish_source,
     resolve_s3_publish_source,
 )
 from app.services.serial_store import SerialState
@@ -123,6 +124,25 @@ def _resolve(engine, dataset_id: str = "dataset-1", user=USER_A, serial_state=SE
     )
 
 
+def _resolve_connection(
+    engine,
+    connection_id: str = "connection-1",
+    user=USER_A,
+    serial_state=SERIAL_STATE,
+    *,
+    scope="prefix",
+    allow_bucket_root=False,
+):
+    return resolve_s3_connection_publish_source(
+        connection_id,
+        user,
+        serial_state,
+        scope=scope,
+        allow_bucket_root=allow_bucket_root,
+        session_context=_session_context_for(engine),
+    )
+
+
 def test_owner_match_success_returns_validated_resolution(resolver_engine):
     _add_connection(resolver_engine)
     _add_dataset(resolver_engine)
@@ -185,6 +205,35 @@ def test_empty_or_bucket_root_prefix_fails_closed(resolver_engine, prefix):
 
     with pytest.raises(S3PublishSourceResolutionError, match="not eligible"):
         _resolve(resolver_engine)
+
+
+def test_connection_publish_prefix_requires_non_root_prefix(resolver_engine):
+    _add_connection(resolver_engine, prefix="/")
+
+    with pytest.raises(S3PublishSourceResolutionError, match="not eligible") as exc_info:
+        _resolve_connection(resolver_engine, scope="prefix")
+
+    assert exc_info.value.reason == "bucket_root_prefix"
+
+
+def test_connection_publish_bucket_root_requires_explicit_allow(resolver_engine):
+    _add_connection(resolver_engine, prefix=None)
+
+    with pytest.raises(S3PublishSourceResolutionError, match="not eligible") as exc_info:
+        _resolve_connection(resolver_engine, scope="bucket_root", allow_bucket_root=False)
+
+    assert exc_info.value.reason == "bucket_root_not_allowed"
+
+
+def test_connection_publish_bucket_root_explicit_allow_returns_empty_prefix(resolver_engine):
+    _add_connection(resolver_engine, prefix=None)
+
+    result = _resolve_connection(resolver_engine, scope="bucket_root", allow_bucket_root=True)
+
+    assert result.is_s3 is True
+    assert result.bucket == "seller-bucket"
+    assert result.prefix == ""
+    assert result.role_arn == "arn:aws:iam::123456789012:role/aim-data-delivery"
 
 
 @pytest.mark.parametrize(

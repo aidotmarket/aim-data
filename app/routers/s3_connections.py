@@ -5,15 +5,18 @@ S3 Connection Router
 Customer-facing S3 STS connection setup and verification endpoints.
 """
 
+import base64
+import hashlib
+import json
 import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import aiofiles
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlmodel import select
 
@@ -24,12 +27,15 @@ from app.models.dataset import DatasetRecord
 from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
+from app.routers.marketplace_publish import MarketplacePublishRequest, MarketplacePublishResponse, publish_via_signed_proxy
 from app.routers.datasets import prepare_listing_task
 from app.services.listing_versioning import build_version_prefix
 from app.services.processing_service import DatasetRecord as ProcessingDatasetRecord
 from app.services.processing_service import get_processing_service
 from app.services.s3_broker_client import S3BrokerClient, S3BrokerError
+from app.services.s3_publish_source_resolver import S3PublishSourceResolutionError, resolve_s3_connection_publish_source
 from app.services.s3_scan_service import S3ScanService
+from app.services.serial_store import get_serial_store
 
 router = APIRouter()
 
@@ -116,6 +122,24 @@ class S3ObjectsResponse(BaseModel):
 class S3ObjectRegisterRequest(BaseModel):
     dataset_id: Optional[str] = None
     listing_id: Optional[str] = None
+
+
+class S3BucketPublishRequest(BaseModel):
+    title: str = Field(..., max_length=200)
+    description: str = Field(..., max_length=5000)
+    tags: List[str] = Field(default_factory=list)
+    category: Optional[str] = None
+    pricing_type: Literal["one_time", "subscription"] = "one_time"
+    price_cents: int = Field(..., ge=0)
+    scope: Literal["prefix", "bucket_root"] = "prefix"
+
+
+class S3BucketPublishResponse(MarketplacePublishResponse):
+    scope: Literal["prefix", "bucket_root"]
+    object_count: Optional[int] = None
+    total_size_bytes: Optional[int] = None
+    count_status: Literal["scanned", "unscanned"]
+    last_scan_time: Optional[str] = None
 
 
 class S3VersionScanRequest(BaseModel):
@@ -281,6 +305,49 @@ def _dataset_file_type(object_key: str) -> str:
     return extension or "unknown"
 
 
+def _normalized_scan_prefix(raw_prefix: Optional[str]) -> str:
+    return (raw_prefix or "").strip().strip("/")
+
+
+def _scan_matches_scope(scan_job: S3ScanJob, selected_prefix: str, scope: str) -> bool:
+    stats = scan_job.sampled_stats if isinstance(scan_job.sampled_stats, dict) else {}
+    if "target_prefix" not in stats:
+        return False
+    target_prefix = _normalized_scan_prefix(str(stats.get("target_prefix") or ""))
+    target_scope = str(stats.get("target_scope") or ("bucket_root" if target_prefix == "" else "prefix"))
+    return target_prefix == selected_prefix and target_scope == scope
+
+
+def _latest_matching_completed_scan(session, connection_id: str, selected_prefix: str, scope: str) -> Optional[S3ScanJob]:
+    rows = session.exec(
+        select(S3ScanJob)
+        .where(S3ScanJob.connection_id == connection_id)
+        .where(S3ScanJob.status == "completed")
+        .order_by(S3ScanJob.completed_at.desc(), S3ScanJob.updated_at.desc())
+    ).all()
+    for row in rows:
+        if _scan_matches_scope(row, selected_prefix, scope):
+            return row
+    return None
+
+
+def _prefix_listing_digest(
+    *,
+    bucket: str,
+    prefix: str,
+    role_arn: str,
+    objects_enumerated: Optional[int],
+) -> str:
+    payload = {
+        "bucket": bucket,
+        "objects_enumerated": objects_enumerated,
+        "prefix": prefix,
+        "role_arn": role_arn,
+    }
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
 def _user_can_access_connection(connection: S3Connection, user: AuthenticatedUser) -> bool:
     if connection.owner_id == user.user_id:
         return True
@@ -422,6 +489,91 @@ async def verify_connection(
         return S3VerifyResponse(status=connection.status, verified_at=verified_at.isoformat())
 
 
+@router.post("/{connection_id}/publish-bucket", summary="Publish an S3 connection as one scoped listing")
+async def publish_bucket(
+    connection_id: str,
+    body: S3BucketPublishRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> S3BucketPublishResponse:
+    store = get_serial_store()
+    try:
+        resolution = resolve_s3_connection_publish_source(
+            connection_id,
+            user,
+            store.state,
+            scope=body.scope,
+            allow_bucket_root=body.scope == "bucket_root",
+        )
+    except S3PublishSourceResolutionError as exc:
+        status_code = 404 if exc.reason == "connection_unavailable" else 409
+        raise HTTPException(
+            status_code=status_code,
+            detail=(
+                "S3 connection is not eligible for bucket listing publish; "
+                f"verify ownership, status, role ARN, and scope. reason={exc.reason}"
+            ),
+        ) from exc
+
+    selected_prefix = _normalized_scan_prefix(resolution.prefix)
+    scan_job: Optional[S3ScanJob]
+    with get_session_context() as session:
+        scan_job = _latest_matching_completed_scan(session, connection_id, selected_prefix, body.scope)
+        object_count = scan_job.objects_enumerated if scan_job is not None else None
+        sampled_stats = scan_job.sampled_stats if scan_job is not None and isinstance(scan_job.sampled_stats, dict) else {}
+        total_size_bytes = sampled_stats.get("total_size_bytes") if scan_job is not None else None
+        if not isinstance(total_size_bytes, int):
+            total_size_bytes = None
+        last_scan_time = scan_job.completed_at.isoformat() if scan_job is not None and scan_job.completed_at else None
+
+    manifest_hash = _prefix_listing_digest(
+        bucket=resolution.bucket,
+        prefix=resolution.prefix,
+        role_arn=resolution.role_arn,
+        objects_enumerated=object_count,
+    )
+    count_status = "scanned" if scan_job is not None else "unscanned"
+    publish_body = MarketplacePublishRequest(
+        title=body.title,
+        description=body.description,
+        tags=body.tags,
+        category=body.category,
+        pricing_type=body.pricing_type,
+        price_cents=body.price_cents,
+        row_count=object_count,
+        file_size_bytes=total_size_bytes,
+        file_format="s3_prefix",
+        schema_info={
+            "delivery_type": "s3_scoped_credential",
+            "s3_scope": body.scope,
+            "s3_prefix": resolution.prefix,
+            "object_count": object_count,
+            "total_size_bytes": total_size_bytes,
+            "count_status": count_status,
+            "last_scan_time": last_scan_time,
+            "prefix_manifest_hash": manifest_hash,
+            "manifest_created_at": datetime.now(timezone.utc).isoformat(),
+        },
+        vz_dataset_id=f"s3-connection:{connection_id}:{body.scope}",
+    )
+    data = await publish_via_signed_proxy(
+        publish_body,
+        request,
+        user,
+        s3_source_override=resolution,
+    )
+    return S3BucketPublishResponse(
+        status="published",
+        listing_id=data.get("listing_id"),
+        marketplace_url=data.get("marketplace_url"),
+        scope=body.scope,
+        object_count=object_count,
+        total_size_bytes=total_size_bytes,
+        count_status=count_status,
+        last_scan_time=last_scan_time,
+    )
+
+
 @router.post("/{connection_id}/scan", summary="Scan S3 connection objects")
 async def scan_connection(
     connection_id: str,
@@ -539,6 +691,8 @@ async def register_object(
         connection = _get_connection_for_user(session, connection_id, user)
         if connection.status != "verified" or not connection.role_arn:
             raise HTTPException(status_code=409, detail="S3 connection must be verified before registering objects")
+        if not _normalized_scan_prefix(connection.prefix):
+            raise HTTPException(status_code=409, detail="S3 object registration requires a non-root connection prefix")
 
         metadata = session.get(S3ObjectMetadata, object_id)
         if metadata is None or metadata.connection_id != connection_id:

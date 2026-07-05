@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from fnmatch import fnmatchcase
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 from uuid import uuid4
 
@@ -23,7 +24,7 @@ from app.models.s3_scan_job import S3ScanJob  # noqa: F401
 from app.routers import s3_connections
 from app.services.processing_service import ProcessingService
 from app.services.s3_broker_client import S3BrokerError
-from app.services import s3_scan_service
+from app.services import s3_publish_source_resolver, s3_scan_service
 
 USER_A = AuthenticatedUser(user_id="user-a", key_id="key-a", scopes=["read", "write"], valid=True)
 USER_B = AuthenticatedUser(user_id="user-b", key_id="key-b", scopes=["read", "write"], valid=True)
@@ -83,6 +84,7 @@ def client(s3_engine, monkeypatch, tmp_path):
             yield session
 
     monkeypatch.setattr(s3_connections, "get_session_context", _session_context)
+    monkeypatch.setattr(s3_publish_source_resolver, "get_session_context", _session_context)
     monkeypatch.setattr(s3_scan_service, "get_session_context", _session_context)
     monkeypatch.setattr(ProcessingService, "_get_session", staticmethod(lambda: _session_context()))
     monkeypatch.setattr(s3_connections.settings, "upload_directory", str(tmp_path / "uploads"))
@@ -138,6 +140,38 @@ def _configured_row(
         session.refresh(connection)
         session.expunge(connection)
     return connection
+
+
+def _completed_scan(
+    s3_engine,
+    connection_id: str,
+    *,
+    target_prefix: str,
+    target_scope: str,
+    objects_enumerated: int = 3,
+    total_size_bytes: int = 123,
+) -> S3ScanJob:
+    now = datetime.now(timezone.utc)
+    scan_job = S3ScanJob(
+        id=str(uuid4()),
+        connection_id=connection_id,
+        status="completed",
+        started_at=now,
+        completed_at=now,
+        objects_enumerated=objects_enumerated,
+        sampled_stats={
+            "object_count": objects_enumerated,
+            "total_size_bytes": total_size_bytes,
+            "target_prefix": target_prefix,
+            "target_scope": target_scope,
+        },
+    )
+    with Session(s3_engine) as session:
+        session.add(scan_job)
+        session.commit()
+        session.refresh(scan_job)
+        session.expunge(scan_job)
+    return scan_job
 
 
 def test_post_creates_row_and_returns_substituted_policies(client):
@@ -321,6 +355,104 @@ def test_verify_broker_error_result_sets_error(client, s3_engine):
     assert response.status_code == 200
     assert response.json()["status"] == "error"
     assert "s3:AccessDenied" in response.json()["error_message"]
+
+
+@pytest.mark.asyncio
+async def test_publish_bucket_prefix_uses_signed_proxy_without_file_manifest(client, s3_engine, monkeypatch):
+    connection = _configured_row(s3_engine, status="verified", prefix="exports/")
+    _completed_scan(
+        s3_engine,
+        connection.id,
+        target_prefix="exports",
+        target_scope="prefix",
+        objects_enumerated=10,
+        total_size_bytes=999,
+    )
+    captured = {}
+
+    async def _publish(body, request, user, versions=None, s3_source_override=None):
+        captured["body"] = body
+        captured["versions"] = versions
+        captured["s3_source"] = s3_source_override
+        return {"listing_id": "listing-123", "marketplace_url": "https://market/listing-123"}
+
+    monkeypatch.setattr(s3_connections, "publish_via_signed_proxy", _publish)
+    monkeypatch.setattr(
+        s3_connections,
+        "get_serial_store",
+        lambda: SimpleNamespace(state=SimpleNamespace(serial_id="11111111-2222-3333-4444-555555555555")),
+    )
+    monkeypatch.setattr(
+        s3_connections,
+        "_download_presigned_object",
+        lambda *_args, **_kwargs: pytest.fail("publish-bucket must not download objects"),
+    )
+
+    response = await s3_connections.publish_bucket(
+        connection.id,
+        s3_connections.S3BucketPublishRequest(
+            title="Whole prefix",
+            description="All files under the connection prefix",
+            category="data",
+            price_cents=2500,
+            scope="prefix",
+        ),
+        SimpleNamespace(headers={}),
+        user=USER_A,
+    )
+
+    assert response.status == "published"
+    assert response.object_count == 10
+    assert response.total_size_bytes == 999
+    assert response.count_status == "scanned"
+    assert captured["versions"] is None
+    assert captured["body"].vz_dataset_id == f"s3-connection:{connection.id}:prefix"
+    assert not hasattr(captured["body"], "files")
+    assert captured["s3_source"].prefix == "exports"
+    assert captured["s3_source"].bucket == "seller-bucket"
+
+
+@pytest.mark.asyncio
+async def test_publish_bucket_root_does_not_reuse_prefix_scan_counts(client, s3_engine, monkeypatch):
+    connection = _configured_row(s3_engine, status="verified", prefix=None)
+    _completed_scan(
+        s3_engine,
+        connection.id,
+        target_prefix="exports",
+        target_scope="prefix",
+        objects_enumerated=10,
+        total_size_bytes=999,
+    )
+    captured = {}
+
+    async def _publish(body, request, user, versions=None, s3_source_override=None):
+        captured["s3_source"] = s3_source_override
+        return {"listing_id": "listing-root"}
+
+    monkeypatch.setattr(s3_connections, "publish_via_signed_proxy", _publish)
+    monkeypatch.setattr(
+        s3_connections,
+        "get_serial_store",
+        lambda: SimpleNamespace(state=SimpleNamespace(serial_id="11111111-2222-3333-4444-555555555555")),
+    )
+
+    response = await s3_connections.publish_bucket(
+        connection.id,
+        s3_connections.S3BucketPublishRequest(
+            title="Whole bucket",
+            description="All files under the bucket root",
+            price_cents=2500,
+            scope="bucket_root",
+        ),
+        SimpleNamespace(headers={}),
+        user=USER_A,
+    )
+
+    assert response.scope == "bucket_root"
+    assert response.object_count is None
+    assert response.total_size_bytes is None
+    assert response.count_status == "unscanned"
+    assert captured["s3_source"].prefix == ""
 
 
 @pytest.mark.asyncio
@@ -582,6 +714,40 @@ def test_register_s3_object_downloads_stages_and_enqueues_processing(client, s3_
         assert json.loads(stored_dataset.metadata_json)["source_type"] == "s3"
         stored_object = session.get(S3ObjectMetadata, object_id)
         assert stored_object.dataset_id == dataset_id
+
+
+def test_register_s3_object_rejects_bucket_root_connection(client, s3_engine, monkeypatch):
+    connection = _configured_row(s3_engine, status="verified", prefix=None)
+    scan_job = S3ScanJob(id=str(uuid4()), connection_id=connection.id, status="completed")
+    object_metadata = S3ObjectMetadata(
+        id=str(uuid4()),
+        connection_id=connection.id,
+        scan_job_id=scan_job.id,
+        object_key="report.csv",
+        size_bytes=17,
+        content_type="text/csv",
+        last_modified=datetime.now(timezone.utc),
+        etag="etag",
+    )
+    object_id = object_metadata.id
+    with Session(s3_engine) as session:
+        session.add(scan_job)
+        session.add(object_metadata)
+        session.commit()
+
+    monkeypatch.setattr(
+        s3_connections,
+        "_download_presigned_object",
+        lambda *_args, **_kwargs: pytest.fail("root object registration must fail before download"),
+    )
+
+    response = client.post(
+        f"/api/s3-connections/{connection.id}/objects/{object_id}/register",
+        json={},
+    )
+
+    assert response.status_code == 409
+    assert "non-root connection prefix" in response.json()["detail"]
 
 
 def test_delete_removes_row(client):

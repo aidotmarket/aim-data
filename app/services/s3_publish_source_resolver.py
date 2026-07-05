@@ -121,6 +121,43 @@ def resolve_s3_publish_source(
         raise S3PublishSourceResolutionError("connection_lookup_failed")
 
 
+def resolve_s3_connection_publish_source(
+    connection_id: str,
+    user: AuthenticatedUser,
+    serial_state: SerialState,
+    *,
+    scope: Literal["prefix", "bucket_root"],
+    allow_bucket_root: bool = False,
+    session_context=None,
+) -> S3PublishSourceResolution:
+    """Validate a seller-owned S3 connection for no-manifest scoped publishing."""
+
+    session_context = session_context or get_session_context
+    serial_id = getattr(serial_state, "serial_id", None)
+    if not serial_id:
+        raise S3PublishSourceResolutionError("missing_serial_id")
+
+    try:
+        with session_context() as session:
+            connection = session.exec(
+                select(S3Connection)
+                .where(S3Connection.id == str(connection_id))
+                .where(S3Connection.owner_id == user.user_id)
+            ).first()
+            if connection is None:
+                raise S3PublishSourceResolutionError("connection_unavailable")
+            return _validate_connection_publish_resolution(
+                connection,
+                str(serial_id),
+                scope=scope,
+                allow_bucket_root=allow_bucket_root,
+            )
+    except S3PublishSourceResolutionError:
+        raise
+    except Exception:
+        raise S3PublishSourceResolutionError("connection_lookup_failed")
+
+
 def _validate_connection_resolution(
     connection: S3Connection,
     object_key: str,
@@ -137,6 +174,35 @@ def _validate_connection_resolution(
         raise S3PublishSourceResolutionError("invalid_object_key")
     if not object_key.startswith(f"{prefix}/"):
         raise S3PublishSourceResolutionError("object_key_outside_prefix")
+
+    return S3PublishSourceResolution(
+        bucket=connection.bucket,
+        region=connection.region,
+        role_arn=connection.role_arn,
+        prefix=prefix,
+        serial_id=serial_id,
+    )
+
+
+def _validate_connection_publish_resolution(
+    connection: S3Connection,
+    serial_id: str,
+    *,
+    scope: Literal["prefix", "bucket_root"],
+    allow_bucket_root: bool,
+) -> S3PublishSourceResolution:
+    if connection.status != "verified":
+        raise S3PublishSourceResolutionError("connection_unverified")
+
+    if not connection.role_arn or not ROLE_ARN_RE.match(connection.role_arn):
+        raise S3PublishSourceResolutionError("invalid_role_arn")
+
+    if scope == "prefix":
+        prefix = _validate_prefix(connection.prefix)
+    elif scope == "bucket_root" and allow_bucket_root:
+        prefix = ""
+    else:
+        raise S3PublishSourceResolutionError("bucket_root_not_allowed")
 
     return S3PublishSourceResolution(
         bucket=connection.bucket,
