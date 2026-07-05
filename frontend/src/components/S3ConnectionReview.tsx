@@ -83,7 +83,7 @@ type BucketPublishScope = "prefix" | "bucket_root";
 // currently rejects empty prefixes). Until that backend build is live + verified, root listings
 // are publishable-but-undeliverable, which violates "works like the customer sees it or not at
 // all." Hide the root scope here and keep it 501-gated server-side until then (S711).
-const BUCKET_ROOT_DELIVERY_ENABLED = false;
+const BUCKET_ROOT_DELIVERY_ENABLED = true;
 
 const PAGE_SIZE = 50;
 const POLL_INTERVAL_MS = 2500;

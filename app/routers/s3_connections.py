@@ -310,7 +310,7 @@ def _normalized_scan_prefix(raw_prefix: Optional[str]) -> str:
 
 
 def _bucket_root_delivery_enabled() -> bool:
-    return os.getenv("AIM_DATA_BUCKET_ROOT_DELIVERY_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+    return os.getenv("AIM_DATA_BUCKET_ROOT_DELIVERY_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _scan_matches_scope(scan_job: S3ScanJob, selected_prefix: str, scope: str) -> bool:

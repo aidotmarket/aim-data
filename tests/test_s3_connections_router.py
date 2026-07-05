@@ -460,7 +460,7 @@ async def test_publish_bucket_root_does_not_reuse_prefix_scan_counts(client, s3_
 async def test_publish_bucket_root_gated_501_when_delivery_disabled(client, s3_engine, monkeypatch):
     # With the readiness flag unset (default), bucket_root must be rejected server-side so we
     # never create a publishable-but-undeliverable listing (S711 Gate-3 mandate).
-    monkeypatch.delenv("AIM_DATA_BUCKET_ROOT_DELIVERY_ENABLED", raising=False)
+    monkeypatch.setenv("AIM_DATA_BUCKET_ROOT_DELIVERY_ENABLED", "false")
     connection = _configured_row(s3_engine, status="verified", prefix=None)
     monkeypatch.setattr(
         s3_connections,
