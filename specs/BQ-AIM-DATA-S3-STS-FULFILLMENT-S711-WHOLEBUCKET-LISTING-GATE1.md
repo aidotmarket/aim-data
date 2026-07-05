@@ -20,16 +20,21 @@ A seller can only list **individual files** in AIM Data; there is no action to l
 **Non-goals:** per-file fingerprint/manifest fidelity (Max: not needed); materializing bucket contents in AIM Data; changing the buyer download engine (already built); changing pricing model.
 
 ## Design (smallest reversible mechanism — reuse the proven path)
-**D1. Connection-level publish source resolution.** Add a connection-level resolution in `s3_publish_source_resolver` that validates the **connection** (owner-scoped, verified, valid role_arn, valid non-root prefix) WITHOUT requiring a `source_object_key`. Returns the same `S3PublishSourceResolution` (bucket/region/role_arn/prefix/serial_id). Reuses `_validate_prefix` and owner-scoping unchanged.
+**D1. Connection-level publish source resolution.** Add a connection-level resolution in `s3_publish_source_resolver` that validates the **connection** (owner-scoped, verified, valid role_arn) WITHOUT requiring a `source_object_key`, taking a `scope` argument: `prefix` (validate a non-root prefix via the existing `_validate_prefix`) or `bucket_root` (explicit opt-in; allow empty/root prefix ONLY on this path). Returns the same `S3PublishSourceResolution` (bucket/region/role_arn/prefix/serial_id). Reuses `_validate_prefix` and owner-scoping unchanged.
 **D2. Reference-listing publish (no files[], no download).** New seller endpoint `POST /s3-connections/{id}/publish-bucket` that: verifies the connection, builds the publish payload with the `s3_connection` block and **no files[] manifest**, and sends it through the existing signed proxy (`publish_via_signed_proxy`). No `register_object`, no local dataset bytes. Listing metadata (title, description, price, category) supplied by the seller; object_count/total_size come from the last completed scan's `scan_job.objects_enumerated` (the TRUE bucket count, not the 1000 sample) as informational only — not a manifest.
-**D3. Seller UI action.** In `S3ConnectionReview.tsx`, add a primary "List the whole bucket" button (distinct from per-object selection) that opens the publish modal pre-scoped to the connection and calls D2. Copy makes clear the buyer will receive the whole bucket/prefix.
+**D3. Seller UI action.** In `S3ConnectionReview.tsx`, add a primary "List the whole bucket" button (distinct from per-object selection) that opens the publish modal pre-scoped to the connection and calls D2. The modal lets the seller pick scope: the connection prefix (default) or the entire bucket root (explicit opt-in with a plain-language exposure warning). Copy makes clear the buyer will receive the whole bucket/prefix.
 **D4. Manifest/fingerprint.** Per Max, no per-file manifest required. The listing's immutability/manifest field (if the receiver requires one) is a **prefix-level digest** (hash of {bucket, prefix, role_arn, objects_enumerated}) — cheap, no 600k materialization. Buyer download is by live S3 sync regardless, so the digest is metadata only.
 
-## OPEN DECISION FOR MAX (blocks final scope semantics)
-Current security forbids listing a **bucket root** (`bucket_root_prefix`). Sergey's data sits at top-level paths (checkers/..., README.md) — effectively the whole bucket root. Choose:
-- **(A) Safe / no change:** "whole bucket" = the connection's **non-root prefix**. Sellers whose data is at root must set a prefix (or we guide them). Zero security relaxation.
-- **(B) Allow bucket-root delivery:** relax `_validate_prefix` to permit root, so a buyer gets scoped creds to the **entire bucket** incl. anything added later. Wider blast radius; needs explicit Max sign-off + Council as a security change.
-Recommendation: ship **(A)** now (covers the general feature safely); decide (B) separately with eyes open. For Sergey specifically, (A) works if he lists under a prefix; (B) if he wants the literal bucket root.
+## SCOPE DECISION — RESOLVED (Max S1127)
+Max: make BOTH scopes available and let the **seller choose** at listing time.
+- **Prefix scope (default):** list the connection's non-root prefix. No security change.
+- **Whole-bucket-root scope (opt-in):** seller may list the entire bucket at its root. This relaxes the current `_validate_prefix` bucket-root block, so a purchased root listing grants the buyer scoped STS access to the ENTIRE bucket, including objects the seller adds later.
+
+**Guardrails for the root option (required, since it widens auth-scope):**
+- Root scope is an explicit, deliberate seller choice in the UI (never the default), with a clear plain-language warning that the buyer gets the whole bucket including future additions.
+- The relaxation is confined to this listing path: `_validate_prefix` stays strict for all existing callers; add a distinct connection-level resolution that accepts an explicit `allow_bucket_root=true` flag rather than loosening the shared validator.
+- STS delivery for a root listing scopes to the bucket root prefix only (still no cross-bucket / no other-bucket access); short-lived creds unchanged.
+- Council must explicitly bless the root path (unanimous) as an auth-scope change; dissent surfaces to Max.
 
 ## Security / risk
 Auth-scope + money + customer-data. Buyer credential is short-lived, prefix-scoped STS (proven). No long-lived creds leave seller AWS. Reversible (git revert + redeploy; no destructive migration expected — new endpoint + resolver path + UI). Gate flow: unanimous Council G1->G2->build->G3->deploy->G4 (G4 = real Sergey sale).
