@@ -79,6 +79,12 @@ interface S3RegisterResponse {
 
 type BucketPublishScope = "prefix" | "bucket_root";
 
+// Bucket-root delivery requires ai-market-backend STS policy support (build_s3_session_policy
+// currently rejects empty prefixes). Until that backend build is live + verified, root listings
+// are publishable-but-undeliverable, which violates "works like the customer sees it or not at
+// all." Hide the root scope here and keep it 501-gated server-side until then (S711).
+const BUCKET_ROOT_DELIVERY_ENABLED = false;
+
 const PAGE_SIZE = 50;
 const POLL_INTERVAL_MS = 2500;
 const TERMINAL_SCAN_STATUSES = new Set(["completed", "failed", "error", "cancelled"]);
@@ -471,6 +477,7 @@ export function S3ConnectionReview({
                   <span className="text-muted-foreground">{connection.prefix ? `${connection.bucket || "Bucket"}/${connection.prefix}` : "Requires a non-root connection prefix."}</span>
                 </span>
               </Label>
+              {BUCKET_ROOT_DELIVERY_ENABLED ? (
               <Label className="flex items-start gap-2 rounded-md border border-border p-3">
                 <RadioGroupItem value="bucket_root" className="mt-0.5" />
                 <span className="grid gap-1 text-sm">
@@ -478,6 +485,7 @@ export function S3ConnectionReview({
                   <span className="text-muted-foreground">{connection.bucket || "Bucket root"}</span>
                 </span>
               </Label>
+              ) : null}
             </RadioGroup>
             {publishScope === "bucket_root" ? (
               <Alert variant="destructive">

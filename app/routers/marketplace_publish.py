@@ -461,7 +461,13 @@ async def publish_via_signed_proxy(
         )
 
     # 3. Resolve S3 provenance, then build the canonical payload for ai.market.
+    # SECURITY: s3_source_override MUST be a resolution produced by an ownership-validating
+    # resolver (e.g. resolve_s3_connection_publish_source, which enforces owner_id, verified
+    # status, role_arn, and scope authorization). Callers must never pass an unvalidated
+    # override -- doing so would bypass ownership/eligibility checks.
     if s3_source_override is not None:
+        if not isinstance(s3_source_override, S3PublishSourceResolution):
+            raise HTTPException(status_code=500, detail="Invalid publish source override")
         s3_source: NotS3PublishSource | S3PublishSourceResolution = s3_source_override
     else:
         try:

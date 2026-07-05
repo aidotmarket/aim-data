@@ -309,6 +309,10 @@ def _normalized_scan_prefix(raw_prefix: Optional[str]) -> str:
     return (raw_prefix or "").strip().strip("/")
 
 
+def _bucket_root_delivery_enabled() -> bool:
+    return os.getenv("AIM_DATA_BUCKET_ROOT_DELIVERY_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _scan_matches_scope(scan_job: S3ScanJob, selected_prefix: str, scope: str) -> bool:
     stats = scan_job.sampled_stats if isinstance(scan_job.sampled_stats, dict) else {}
     if "target_prefix" not in stats:
@@ -496,6 +500,15 @@ async def publish_bucket(
     request: Request,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> S3BucketPublishResponse:
+    # Bucket-root delivery is not yet wired end-to-end (ai-market-backend
+    # build_s3_session_policy rejects empty prefixes), so a root listing would be
+    # publishable-but-undeliverable. Gate it server-side (authoritative; never trust the UI)
+    # behind an env flag until the backend delivery build is live + verified (S711).
+    if body.scope == "bucket_root" and not _bucket_root_delivery_enabled():
+        raise HTTPException(
+            status_code=501,
+            detail="Bucket-root delivery is not yet available. Publish a connection prefix instead.",
+        )
     store = get_serial_store()
     try:
         resolution = resolve_s3_connection_publish_source(

@@ -414,6 +414,7 @@ async def test_publish_bucket_prefix_uses_signed_proxy_without_file_manifest(cli
 
 @pytest.mark.asyncio
 async def test_publish_bucket_root_does_not_reuse_prefix_scan_counts(client, s3_engine, monkeypatch):
+    monkeypatch.setenv("AIM_DATA_BUCKET_ROOT_DELIVERY_ENABLED", "true")
     connection = _configured_row(s3_engine, status="verified", prefix=None)
     _completed_scan(
         s3_engine,
@@ -453,6 +454,32 @@ async def test_publish_bucket_root_does_not_reuse_prefix_scan_counts(client, s3_
     assert response.total_size_bytes is None
     assert response.count_status == "unscanned"
     assert captured["s3_source"].prefix == ""
+
+
+@pytest.mark.asyncio
+async def test_publish_bucket_root_gated_501_when_delivery_disabled(client, s3_engine, monkeypatch):
+    # With the readiness flag unset (default), bucket_root must be rejected server-side so we
+    # never create a publishable-but-undeliverable listing (S711 Gate-3 mandate).
+    monkeypatch.delenv("AIM_DATA_BUCKET_ROOT_DELIVERY_ENABLED", raising=False)
+    connection = _configured_row(s3_engine, status="verified", prefix=None)
+    monkeypatch.setattr(
+        s3_connections,
+        "get_serial_store",
+        lambda: SimpleNamespace(state=SimpleNamespace(serial_id="11111111-2222-3333-4444-555555555555")),
+    )
+    with pytest.raises(s3_connections.HTTPException) as excinfo:
+        await s3_connections.publish_bucket(
+            connection.id,
+            s3_connections.S3BucketPublishRequest(
+                title="Whole bucket",
+                description="All files under the bucket root",
+                price_cents=2500,
+                scope="bucket_root",
+            ),
+            SimpleNamespace(headers={}),
+            user=USER_A,
+        )
+    assert excinfo.value.status_code == 501
 
 
 @pytest.mark.asyncio
