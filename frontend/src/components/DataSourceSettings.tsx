@@ -258,7 +258,7 @@ export default function DataSourceSettings() {
         setStep(4);
       } else {
         const err = await response.json().catch(() => ({ detail: "Invalid role ARN" }));
-        setRoleError(err.detail || "Invalid role ARN");
+        setRoleError(formatErrorDetail(err.detail, "Invalid role ARN"));
       }
     } catch {
       setRoleError("Failed to save role ARN");
