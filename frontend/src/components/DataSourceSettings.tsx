@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { formatErrorDetail } from "../lib/format-error";
+
 import {
   CheckCircle,
   Copy,
@@ -232,7 +234,7 @@ export default function DataSourceSettings() {
         setStep(2);
       } else {
         const err = await response.json().catch(() => ({ detail: "Failed to create connection" }));
-        toast({ title: "Error", description: err.detail, variant: "destructive" });
+        toast({ title: "Error", description: formatErrorDetail(err.detail, "Something went wrong."), variant: "destructive" });
       }
     } catch {
       toast({ title: "Error", description: "Failed to create connection", variant: "destructive" });
@@ -256,7 +258,7 @@ export default function DataSourceSettings() {
         setStep(4);
       } else {
         const err = await response.json().catch(() => ({ detail: "Invalid role ARN" }));
-        setRoleError(err.detail || "Invalid role ARN");
+        setRoleError(formatErrorDetail(err.detail, "Invalid role ARN"));
       }
     } catch {
       setRoleError("Failed to save role ARN");

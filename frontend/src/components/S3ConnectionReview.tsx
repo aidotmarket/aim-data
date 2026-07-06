@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatErrorDetail } from "../lib/format-error";
+
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, FileSearch, Loader2, Play, RefreshCw, UploadCloud } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -274,7 +276,7 @@ export function S3ConnectionReview({
       if (!response.ok) {
         toast({
           title: "Publish failed",
-          description: data.detail || "The bucket listing could not be published.",
+          description: formatErrorDetail(data.detail, "The bucket listing could not be published."),
           variant: "destructive",
         });
         return;

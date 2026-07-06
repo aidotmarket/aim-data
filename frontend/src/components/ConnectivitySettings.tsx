@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
+import { formatErrorDetail } from "../lib/format-error";
+
 import {
   Wifi,
   WifiOff,
@@ -213,7 +215,7 @@ const ConnectivitySettings = () => {
         fetchStatus();
       } else {
         const err = await res.json().catch(() => ({ detail: "Failed to create token" }));
-        toast({ title: "Error", description: err.detail, variant: "destructive" });
+        toast({ title: "Error", description: formatErrorDetail(err.detail, "Something went wrong."), variant: "destructive" });
       }
     } catch {
       toast({ title: "Error", description: "Failed to create token", variant: "destructive" });
@@ -235,7 +237,7 @@ const ConnectivitySettings = () => {
         fetchStatus();
       } else {
         const err = await res.json().catch(() => ({ detail: "Failed to revoke" }));
-        toast({ title: "Error", description: err.detail, variant: "destructive" });
+        toast({ title: "Error", description: formatErrorDetail(err.detail, "Something went wrong."), variant: "destructive" });
       }
     } catch {
       toast({ title: "Error", description: "Failed to revoke token", variant: "destructive" });
