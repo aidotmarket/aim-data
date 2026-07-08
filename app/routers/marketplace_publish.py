@@ -32,6 +32,7 @@ from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
 from app.services.registration_service import ensure_vz_install_registered
 from app.services.listing_versioning import build_version_prefix
+from app.services.processing_service import ProcessingService, get_processing_service
 from app.services.s3_publish_source_resolver import (
     NotS3PublishSource,
     S3PublishSourceResolution,
@@ -76,6 +77,30 @@ class MarketplacePublishResponse(BaseModel):
     listing_id: Optional[str] = None
     marketplace_url: Optional[str] = None
     error: Optional[str] = None
+
+
+class DisclosureApprovedSample(BaseModel):
+    columns: list[str]
+    row_refs: list[str]
+    rows: list[dict[str, Any]]
+
+
+class DisclosureSnapshotProxyRequest(BaseModel):
+    dataset_id: str = Field(..., min_length=1)
+    approved_fields: dict[str, Any]
+    sample_decision: Literal["none", "approved_rows"]
+    approved_sample: Optional[DisclosureApprovedSample] = None
+    ai_training_notification_ack: bool
+    ai_training_notification_text: str = Field(..., min_length=1)
+    license: str = Field(..., min_length=1)
+    approval_source: Literal["aim_channel"]
+    source_publish_operation_id: str = Field(..., min_length=1)
+
+
+class DisclosureSnapshotProxyResponse(BaseModel):
+    status: str
+    listing_id: str
+    disclosure_version: Optional[str] = None
 
 
 class VersionPublishEmit(BaseModel):
@@ -316,6 +341,63 @@ def _assert_no_sensitive_publish_values(payload: dict[str, Any]) -> None:
             _walk(payload[key], (key,))
 
 
+def _seller_auth_headers(request: Request) -> dict[str, str]:
+    store = get_serial_store()
+    incoming_auth = request.headers.get("Authorization", "")
+    if incoming_auth.startswith("Bearer "):
+        return {"Authorization": incoming_auth}
+    if store.state.ai_market_access_token:
+        return {"Authorization": f"Bearer {store.state.ai_market_access_token}"}
+    incoming_api_key = request.headers.get("X-API-Key")
+    if incoming_api_key:
+        return {"X-API-Key": incoming_api_key}
+    return {}
+
+
+def _payload_hash(value: Any) -> str:
+    return hashlib.sha256(_jcs_canonical_bytes(value)).hexdigest()
+
+
+def _persist_disclosure_decision(
+    processing: ProcessingService,
+    record,
+    *,
+    status: Literal["draft", "publish_pending", "snapshot_pending", "complete", "failed"],
+    listing_id: str,
+    body: DisclosureSnapshotProxyRequest,
+    disclosure_version: Optional[str] = None,
+    last_error: Optional[str] = None,
+) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    approved_sample = body.approved_sample.model_dump() if body.approved_sample else None
+    existing = record.metadata.get("disclosure_decision")
+    created_at = existing.get("created_at") if isinstance(existing, dict) else None
+    decision = {
+        "status": status,
+        "source_publish_operation_id": body.source_publish_operation_id,
+        "listing_id": listing_id,
+        "disclosure_version": disclosure_version,
+        "approved_fields_hash": _payload_hash(body.approved_fields),
+        "sample_decision": body.sample_decision,
+        "approved_sample_hash": _payload_hash(approved_sample) if approved_sample else None,
+        "approved_sample_row_count": len(approved_sample["rows"]) if approved_sample else 0,
+        "approved_sample_columns": approved_sample["columns"] if approved_sample else [],
+        "ai_training_notification_text": body.ai_training_notification_text,
+        "license": body.license,
+        "created_at": created_at or now,
+        "updated_at": now,
+        "last_error": last_error,
+    }
+    if status == "snapshot_pending" and approved_sample:
+        decision["approved_sample_replay"] = approved_sample
+    if status == "snapshot_pending":
+        decision["approved_payload_replay"] = body.model_dump(exclude={"dataset_id"}, exclude_none=False)
+    record.metadata["disclosure_decision"] = decision
+    record.listing_id = listing_id
+    storage_fn = record.upload_path.name if record.upload_path else record.id
+    processing._save_record(record, storage_fn)
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -325,13 +407,108 @@ async def publish_to_marketplace(
     body: MarketplacePublishRequest,
     request: Request,
     user=Depends(get_current_user),
+    processing: ProcessingService = Depends(get_processing_service),
 ):
     """Publish a dataset listing to ai.market via signed JWT proxy."""
     data = await publish_via_signed_proxy(body, request, user)
+    listing_id = data.get("listing_id")
+    if listing_id and hasattr(processing, "get_dataset"):
+        record = processing.get_dataset(body.vz_dataset_id)
+        if record:
+            record.listing_id = str(listing_id)
+            storage_fn = record.upload_path.name if record.upload_path else record.id
+            processing._save_record(record, storage_fn)
     return MarketplacePublishResponse(
         status="published",
-        listing_id=data.get("listing_id"),
+        listing_id=listing_id,
         marketplace_url=data.get("marketplace_url"),
+    )
+
+
+@router.post(
+    "/marketplace/listings/{listing_id}/disclosure-snapshots",
+    response_model=DisclosureSnapshotProxyResponse,
+)
+async def create_disclosure_snapshot(
+    listing_id: str,
+    body: DisclosureSnapshotProxyRequest,
+    request: Request,
+    user=Depends(get_current_user),
+    processing: ProcessingService = Depends(get_processing_service),
+):
+    """Forward a seller-authorized disclosure snapshot request to ai.market."""
+    if not listing_id.strip():
+        raise HTTPException(status_code=422, detail="listing_id is required")
+
+    record = processing.get_dataset(body.dataset_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Dataset '{body.dataset_id}' not found")
+
+    payload = body.model_dump(exclude={"dataset_id"}, exclude_none=False)
+    if payload["sample_decision"] == "none":
+        payload["approved_sample"] = None
+    _persist_disclosure_decision(
+        processing,
+        record,
+        status="snapshot_pending",
+        listing_id=listing_id,
+        body=body,
+        last_error=None,
+    )
+
+    auth_headers = _seller_auth_headers(request)
+    if not auth_headers:
+        raise HTTPException(status_code=409, detail="Seller ai.market token or API key not available")
+
+    url = f"{settings.ai_market_url}/api/v1/listings/{listing_id}/disclosure-snapshots"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                url,
+                json=payload,
+                headers={
+                    **auth_headers,
+                    "Content-Type": "application/json",
+                },
+            )
+    except httpx.ConnectError as exc:
+        _persist_disclosure_decision(processing, record, status="snapshot_pending", listing_id=listing_id, body=body, last_error=str(exc))
+        raise HTTPException(status_code=502, detail="Cannot reach ai.market — disclosure snapshot pending")
+    except httpx.TimeoutException as exc:
+        _persist_disclosure_decision(processing, record, status="snapshot_pending", listing_id=listing_id, body=body, last_error=str(exc))
+        raise HTTPException(status_code=504, detail="ai.market disclosure snapshot timed out")
+
+    try:
+        data = resp.json()
+    except Exception:
+        data = {}
+    if resp.status_code not in (200, 201):
+        detail = data.get("detail") or data.get("error") or resp.text or f"ai.market returned {resp.status_code}"
+        _persist_disclosure_decision(processing, record, status="snapshot_pending", listing_id=listing_id, body=body, last_error=str(detail))
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+
+    disclosure_version = data.get("disclosure_version")
+    try:
+        _persist_disclosure_decision(
+            processing,
+            record,
+            status="complete",
+            listing_id=listing_id,
+            body=body,
+            disclosure_version=str(disclosure_version) if disclosure_version else None,
+            last_error=None,
+        )
+    except Exception as exc:
+        logger.exception("Disclosure snapshot succeeded but local audit persistence failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Disclosure status unknown: ai.market accepted the snapshot, but AIM Data could not store the local audit record.",
+        ) from exc
+
+    return DisclosureSnapshotProxyResponse(
+        status="complete",
+        listing_id=listing_id,
+        disclosure_version=str(disclosure_version) if disclosure_version else None,
     )
 
 

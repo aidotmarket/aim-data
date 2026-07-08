@@ -459,6 +459,29 @@ export interface MarketplacePublishResponse {
   error?: string | null;
 }
 
+export interface DisclosureSnapshotProxyRequest {
+  dataset_id: string;
+  approved_fields: Record<string, unknown>;
+  sample_decision: 'none' | 'approved_rows';
+  approved_sample: {
+    columns: string[];
+    row_refs: string[];
+    rows: Record<string, unknown>[];
+  } | null;
+  ai_training_notification_ack: boolean;
+  ai_training_notification_text: string;
+  license: string;
+  approval_source: 'aim_channel';
+  source_publish_operation_id: string;
+}
+
+export interface DisclosureSnapshotProxyResponse {
+  status: string;
+  listing_id: string;
+  disclosure_version?: string | null;
+  [key: string]: unknown;
+}
+
 // BQ-108: Batch upload types
 export interface BatchItemAccepted {
   client_file_index: number;
@@ -645,6 +668,11 @@ export const datasetsApi = {
   getSample: (id: string, limit = 10) => 
     apiFetch<DatasetSampleResponse>(
       `/api/datasets/${id}/sample?limit=${limit}`
+    ),
+
+  getDisclosureSample: (id: string, limit = 100) =>
+    apiFetch<DatasetSampleResponse>(
+      `/api/datasets/${id}/sample?limit=${limit}&redact_pii=false`
     ),
   
   getStatistics: (id: string) =>
@@ -868,6 +896,37 @@ export const marketplaceApi = {
         };
       };
       const message = error.detail || error.error?.safe_message || error.error?.title || `Publish failed: ${response.status}`;
+      throw new Error(message);
+    }
+
+    return response.json();
+  },
+
+  createDisclosureSnapshot: async (
+    listingId: string,
+    req: DisclosureSnapshotProxyRequest
+  ): Promise<DisclosureSnapshotProxyResponse> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const accessToken = getStoredAccessToken();
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+
+    const response = await fetch(`${getApiUrl()}/api/marketplace/listings/${listingId}/disclosure-snapshots`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(req),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Disclosure snapshot failed' })) as {
+        detail?: string;
+        error?: {
+          safe_message?: string;
+          title?: string;
+        };
+      };
+      const message = error.detail || error.error?.safe_message || error.error?.title || `Disclosure snapshot failed: ${response.status}`;
       throw new Error(message);
     }
 

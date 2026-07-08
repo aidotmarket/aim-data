@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from starlette.requests import Request
 
 from app.routers import marketplace_publish
+from app.services.processing_service import DatasetRecord, ProcessingStatus
 from app.services import registration_service
 from app.services.s3_publish_source_resolver import (
     NotS3PublishSource,
@@ -63,6 +64,47 @@ class _Store:
 
     def save(self):
         pass
+
+
+class _Processing:
+    def __init__(self, record):
+        self.record = record
+        self.saved = 0
+
+    def get_dataset(self, dataset_id: str):
+        return self.record if dataset_id == self.record.id else None
+
+    def _save_record(self, record, storage_filename: str):
+        self.saved += 1
+        self.record = record
+        self.storage_filename = storage_filename
+
+
+def _disclosure_body(**overrides):
+    body = {
+        "dataset_id": "ds-1",
+        "approved_fields": {
+            "title": "Customer Spend",
+            "description": "Buyer-facing spend data.",
+            "category": "retail",
+            "tags": ["customers"],
+            "schema": [{"name": "segment", "type": "string"}],
+            "data_format": "csv",
+            "source_row_count": 10,
+            "source_column_count": 1,
+            "compliance_summary": {},
+            "source_delivery_public_metadata": {"file_format": "csv"},
+        },
+        "sample_decision": "none",
+        "approved_sample": None,
+        "ai_training_notification_ack": True,
+        "ai_training_notification_text": "When I publish, my approved title, description, tags, category, schema, and sample-row choice become public on ai.market.",
+        "license": "standard_marketplace",
+        "approval_source": "aim_channel",
+        "source_publish_operation_id": "op-1",
+    }
+    body.update(overrides)
+    return marketplace_publish.DisclosureSnapshotProxyRequest(**body)
 
 
 @pytest.mark.asyncio
@@ -625,3 +667,120 @@ def test_jcs_hash_parity_golden_without_s3_connection():
 
     assert marketplace_publish._jcs_canonical_bytes(payload) == expected_canonical
     assert marketplace_publish._jcs_hash(payload) == expected_hash
+
+
+@pytest.mark.asyncio
+async def test_disclosure_snapshot_proxy_forwards_seller_bearer_not_vz_jwt(monkeypatch):
+    record = DatasetRecord("ds-1", "customers.csv", "csv")
+    record.status = ProcessingStatus.PREVIEW_READY
+    processing = _Processing(record)
+    capture: dict = {}
+
+    monkeypatch.setattr(marketplace_publish.settings, "ai_market_url", "https://ai.market.test")
+    monkeypatch.setattr(
+        marketplace_publish.httpx,
+        "AsyncClient",
+        lambda **kwargs: _MockAsyncClient(
+            _MockResponse(201, {"disclosure_version": "dsv_20260708000000_abcd1234"}),
+            capture,
+            **kwargs,
+        ),
+    )
+
+    request = Request({
+        "type": "http",
+        "method": "POST",
+        "path": "/api/marketplace/listings/listing-1/disclosure-snapshots",
+        "headers": [(b"authorization", b"Bearer seller-token")],
+    })
+
+    response = await marketplace_publish.create_disclosure_snapshot(
+        "listing-1",
+        _disclosure_body(),
+        request,
+        user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+        processing=processing,
+    )
+
+    assert response.status == "complete"
+    assert response.disclosure_version == "dsv_20260708000000_abcd1234"
+    assert capture["url"] == "https://ai.market.test/api/v1/listings/listing-1/disclosure-snapshots"
+    assert capture["kwargs"]["headers"]["Authorization"] == "Bearer seller-token"
+    assert "publish_listing" not in capture["kwargs"]["headers"]["Authorization"]
+
+
+@pytest.mark.asyncio
+async def test_disclosure_snapshot_proxy_rejects_missing_listing_id():
+    record = DatasetRecord("ds-1", "customers.csv", "csv")
+    processing = _Processing(record)
+    request = Request({
+        "type": "http",
+        "method": "POST",
+        "path": "/api/marketplace/listings//disclosure-snapshots",
+        "headers": [(b"authorization", b"Bearer seller-token")],
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        await marketplace_publish.create_disclosure_snapshot(
+            "",
+            _disclosure_body(),
+            request,
+            user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+            processing=processing,
+        )
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "listing_id is required"
+
+
+@pytest.mark.asyncio
+async def test_disclosure_snapshot_proxy_persists_local_audit(monkeypatch):
+    record = DatasetRecord("ds-1", "customers.csv", "csv")
+    record.status = ProcessingStatus.PREVIEW_READY
+    processing = _Processing(record)
+
+    monkeypatch.setattr(marketplace_publish.settings, "ai_market_url", "https://ai.market.test")
+    monkeypatch.setattr(
+        marketplace_publish.httpx,
+        "AsyncClient",
+        lambda **kwargs: _MockAsyncClient(
+            _MockResponse(201, {"disclosure_version": "dsv_20260708000000_abcd1234"}),
+            {},
+            **kwargs,
+        ),
+    )
+
+    request = Request({
+        "type": "http",
+        "method": "POST",
+        "path": "/api/marketplace/listings/listing-1/disclosure-snapshots",
+        "headers": [(b"authorization", b"Bearer seller-token")],
+    })
+
+    await marketplace_publish.create_disclosure_snapshot(
+        "listing-1",
+        _disclosure_body(
+            sample_decision="approved_rows",
+            approved_sample={
+                "columns": ["segment"],
+                "row_refs": ["preview:0"],
+                "rows": [{"segment": "enterprise"}],
+            },
+        ),
+        request,
+        user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+        processing=processing,
+    )
+
+    audit = processing.record.metadata["disclosure_decision"]
+    assert processing.saved == 2
+    assert processing.record.listing_id == "listing-1"
+    assert audit["status"] == "complete"
+    assert audit["listing_id"] == "listing-1"
+    assert audit["source_publish_operation_id"] == "op-1"
+    assert audit["disclosure_version"] == "dsv_20260708000000_abcd1234"
+    assert audit["sample_decision"] == "approved_rows"
+    assert audit["approved_sample_row_count"] == 1
+    assert audit["approved_sample_columns"] == ["segment"]
+    assert audit["approved_fields_hash"]
+    assert audit["approved_sample_hash"]
