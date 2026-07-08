@@ -61,6 +61,7 @@ import {
   marketplaceApi,
   piiApi,
   type ApiDataset,
+  type DisclosureSnapshotProxyRequest,
   type DatasetSampleResponse,
   type DatasetStatisticsResponse,
   type DatasetReadinessResponse,
@@ -88,6 +89,17 @@ import {
   ListingEditorForm,
   type ListingEditorValue,
 } from "@/components/ListingEditorForm";
+import {
+  AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY,
+  buildApprovedMetadataDraft,
+  buildDisclosureSnapshotPayload,
+  prepareDisclosureSample,
+  type ApprovedMetadataDraft,
+  type ApprovedSample,
+  type DisclosureSampleDecision,
+  type DisclosureSnapshotPayload,
+  type PreparedDisclosureSample,
+} from "@/lib/disclosure";
 
 const getFileIcon = (type: Dataset["type"]) => {
   switch (type) {
@@ -297,6 +309,15 @@ function ListingPreparation({
     category: "tabular",
     tags: [],
   });
+  const [approvedMetadataDraft, setApprovedMetadataDraft] = useState<ApprovedMetadataDraft | null>(null);
+  const [sampleDecision, setSampleDecision] = useState<DisclosureSampleDecision>("none");
+  const [preparedSample, setPreparedSample] = useState<PreparedDisclosureSample>(() => prepareDisclosureSample([]));
+  const [sampleLoading, setSampleLoading] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
+  const [finalDisclosureConfirmed, setFinalDisclosureConfirmed] = useState(false);
+  const [publishStatus, setPublishStatus] = useState<"idle" | "publish_failed" | "snapshot_pending" | "disclosure_unknown" | "complete">("idle");
+  const [publishedListingId, setPublishedListingId] = useState<string | null>(dataset.listing_id ?? null);
+  const [retrySnapshotPayload, setRetrySnapshotPayload] = useState<DisclosureSnapshotPayload | null>(null);
 
   const datasetReady = dataset.status === "preview_ready";
   const flaggedColumns = piiScan?.column_results ?? [];
@@ -462,13 +483,40 @@ function ListingPreparation({
     handleGenerateMetadata();
   }, [activeStep, dataset.id, metadata, metadataState, handleGenerateMetadata]);
 
+  useEffect(() => {
+    if (activeStep !== 3) return;
+    let cancelled = false;
+    setSampleLoading(true);
+    setSampleError(null);
+    datasetsApi.getDisclosureSample(dataset.id, 100)
+      .then((response) => {
+        if (cancelled) return;
+        setPreparedSample(prepareDisclosureSample(response.sample || []));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setPreparedSample(prepareDisclosureSample([]));
+        setSampleError(e instanceof Error ? e.message : "Could not load disclosure preview rows.");
+        setSampleDecision("none");
+      })
+      .finally(() => {
+        if (!cancelled) setSampleLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeStep, dataset.id]);
+
   const handleApproveMetadata = () => {
     if (!metadata) return;
     setMetadataApproved(true);
+    setApprovedMetadataDraft(buildApprovedMetadataDraft(form, metadata, dataset));
   };
 
   const handleContinueMetadata = () => {
     if (!metadata || !metadataApproved || !form.title.trim() || !form.description.trim()) return;
+    setApprovedMetadataDraft(buildApprovedMetadataDraft(form, metadata, dataset));
+    setFinalDisclosureConfirmed(false);
     setActiveStep(3);
   };
 
@@ -485,6 +533,8 @@ function ListingPreparation({
   const handleAcceptAllMetadata = () => {
     if (!metadata || !form.title.trim() || !form.description.trim()) return;
     setMetadataApproved(true);
+    setApprovedMetadataDraft(buildApprovedMetadataDraft(form, metadata, dataset));
+    setFinalDisclosureConfirmed(false);
     setActiveStep(3);
   };
 
@@ -523,6 +573,70 @@ function ListingPreparation({
     setTagInput("");
   };
 
+  const newPublishOperationId = () => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+    return `op-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
+
+  const submitDisclosureSnapshot = async (listingId: string, payload: DisclosureSnapshotPayload) => {
+    const response = await marketplaceApi.createDisclosureSnapshot(
+      listingId,
+      { dataset_id: dataset.id, ...payload } as DisclosureSnapshotProxyRequest
+    );
+    setPublishedListingId(listingId);
+    setRetrySnapshotPayload(null);
+    setPublishStatus("complete");
+    toast({
+      title: "Live on ai.market",
+      description: response.disclosure_version
+        ? `Disclosure snapshot ${response.disclosure_version} is stored.`
+        : "Disclosure snapshot is stored.",
+    });
+  };
+
+  const buildCurrentDisclosurePayload = (sourcePublishOperationId: string) => {
+    const approvedFields = approvedMetadataDraft;
+    if (!approvedFields) {
+      throw new Error("Metadata approval expired. Review and approve Step 2 again.");
+    }
+    const approvedSample = sampleDecision === "approved_rows" ? preparedSample.sample : null;
+    return buildDisclosureSnapshotPayload({
+      approvedFields,
+      sampleDecision,
+      approvedSample,
+      confirmed: finalDisclosureConfirmed,
+      sourcePublishOperationId,
+    });
+  };
+
+  const handleRetryDisclosureSnapshot = async () => {
+    if (!publishedListingId || !retrySnapshotPayload || publishing) return;
+    setPublishing(true);
+    try {
+      await submitDisclosureSnapshot(publishedListingId, retrySnapshotPayload);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "";
+      setPublishStatus(message.toLowerCase().includes("status unknown") ? "disclosure_unknown" : "snapshot_pending");
+      toast({
+        title: message.toLowerCase().includes("status unknown")
+          ? "Disclosure status unknown"
+          : "Listing published, disclosure snapshot pending",
+        description: message || "Retry the disclosure snapshot before treating this listing as complete.",
+        variant: "destructive",
+      });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handleReviewDisclosureDecision = () => {
+    setPublishStatus("idle");
+    setFinalDisclosureConfirmed(false);
+    setActiveStep(3);
+  };
+
   const handlePublish = async () => {
     const price = Number.parseFloat(form.priceUsd);
     if (!form.title.trim()) {
@@ -537,10 +651,38 @@ function ListingPreparation({
       toast({ title: "Price required", description: "Set a price of at least $25.", variant: "destructive" });
       return;
     }
+    if (!approvedMetadataDraft || !metadataApproved) {
+      toast({ title: "Review metadata again", description: "Approved metadata changed before publish.", variant: "destructive" });
+      setActiveStep(2);
+      return;
+    }
+    if (sampleDecision === "approved_rows" && !preparedSample.sample) {
+      toast({ title: "Sample unavailable", description: "Choose no sample rows or reload the disclosure preview.", variant: "destructive" });
+      return;
+    }
+    if (!finalDisclosureConfirmed) {
+      toast({ title: "Confirmation required", description: "Confirm the public disclosure notice before publishing.", variant: "destructive" });
+      return;
+    }
 
     setPublishing(true);
+    setPublishStatus("idle");
+    const sourcePublishOperationId = newPublishOperationId();
+    let disclosurePayload: DisclosureSnapshotPayload;
     try {
-      await marketplaceApi.publish({
+      disclosurePayload = buildCurrentDisclosurePayload(sourcePublishOperationId);
+    } catch (e) {
+      toast({
+        title: "Disclosure decision incomplete",
+        description: e instanceof Error ? e.message : "Complete the disclosure decision before publishing.",
+        variant: "destructive",
+      });
+      setPublishing(false);
+      return;
+    }
+
+    try {
+      const publishResponse = await marketplaceApi.publish({
         vz_dataset_id: dataset.id,
         title: form.title.trim(),
         description: form.description.trim(),
@@ -553,8 +695,28 @@ function ListingPreparation({
         file_format: metadata?.file_format || dataset.file_type,
         file_size_bytes: metadata?.size_bytes || dataset.metadata?.size_bytes || null,
       });
-      toast({ title: "Live on ai.market", description: "Your listing has been published." });
+      const listingId = publishResponse.listing_id;
+      if (!listingId) {
+        setPublishStatus("publish_failed");
+        throw new Error("ai.market did not return a listing_id.");
+      }
+      setPublishedListingId(listingId);
+      setRetrySnapshotPayload(disclosurePayload);
+      try {
+        await submitDisclosureSnapshot(listingId, disclosurePayload);
+      } catch (snapshotError) {
+        const message = snapshotError instanceof Error ? snapshotError.message : "";
+        setPublishStatus(message.toLowerCase().includes("status unknown") ? "disclosure_unknown" : "snapshot_pending");
+        toast({
+          title: message.toLowerCase().includes("status unknown")
+            ? "Disclosure status unknown"
+            : "Listing published, disclosure snapshot pending",
+          description: message || "The listing exists on ai.market, but the public discovery package is not complete.",
+          variant: "destructive",
+        });
+      }
     } catch (e) {
+      setPublishStatus("publish_failed");
       toast({
         title: "Publish failed",
         description: e instanceof Error ? e.message : "Failed to publish listing.",
@@ -567,7 +729,27 @@ function ListingPreparation({
 
   const setFormPatch = (patch: Partial<ListingEditorValue>) => {
     setMetadataApproved(false);
+    setApprovedMetadataDraft(null);
     setForm({ ...form, ...patch });
+  };
+
+  const handleStep3FormChange = (next: ListingEditorValue) => {
+    const metadataChanged =
+      next.title !== form.title ||
+      next.description !== form.description ||
+      next.category !== form.category ||
+      next.tags.join("\u0000") !== form.tags.join("\u0000");
+    setForm(next);
+    if (metadataChanged) {
+      setMetadataApproved(false);
+      setApprovedMetadataDraft(null);
+      setFinalDisclosureConfirmed(false);
+      setActiveStep(2);
+      toast({
+        title: "Metadata approval reset",
+        description: "Review and approve the changed public fields before publishing.",
+      });
+    }
   };
 
   useEffect(() => {
@@ -583,6 +765,10 @@ function ListingPreparation({
       tags: Array.isArray(updatedListing.tags) ? updatedListing.tags : current.tags,
     }));
   }, [dataset.id, listingDraftUpdates]);
+
+  const piiFlaggedColumnNames = new Set(flaggedColumns.map((column) => column.column));
+  const approvedSample: ApprovedSample | null = preparedSample.sample;
+  const sampleColumnsWithPii = approvedSample?.columns.filter((column) => piiFlaggedColumnNames.has(column)) ?? [];
 
   return (
     <div className="space-y-6">
@@ -639,7 +825,7 @@ function ListingPreparation({
           <div className="rounded-md border p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <StepIcon state={activeStep === 3 ? "passed" : "not_run"} />
-              3. Publish
+              3. Listing Details and Disclosure
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {activeStep === 3 ? "Editor unlocked" : "Waiting for metadata approval"}
@@ -904,20 +1090,171 @@ function ListingPreparation({
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Store className="h-4 w-4 text-primary" />
-              Step 3: Listing Details
+              Step 3: Listing Details and Disclosure
             </CardTitle>
-            <CardDescription>Edit buyer-facing details and publish when ready.</CardDescription>
+            <CardDescription>Confirm listing details, sample disclosure, and the public AI discovery notice.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <ListingEditorForm
               value={form}
-              onChange={setForm}
+              onChange={handleStep3FormChange}
               tagInput={tagInput}
               onTagInputChange={setTagInput}
               disabled={publishing}
             />
 
-            <Button onClick={handlePublish} disabled={publishing} size="sm" className="gap-2">
+            <div className="space-y-3 rounded-md border p-3">
+              <div>
+                <h3 className="text-sm font-medium">Public sample</h3>
+                <p className="text-xs text-muted-foreground">
+                  Choose whether real preview rows become public. The displayed set is the complete public sample.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={sampleDecision === "none" ? "default" : "outline"}
+                  disabled={publishing}
+                  onClick={() => {
+                    setSampleDecision("none");
+                    setFinalDisclosureConfirmed(false);
+                  }}
+                >
+                  No sample rows
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={sampleDecision === "approved_rows" ? "default" : "outline"}
+                  disabled={publishing || sampleLoading || !approvedSample}
+                  onClick={() => {
+                    setSampleDecision("approved_rows");
+                    setFinalDisclosureConfirmed(false);
+                  }}
+                >
+                  Publish these real sample rows
+                </Button>
+              </div>
+
+              {sampleLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading disclosure preview
+                </div>
+              )}
+              {sampleError && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  {sampleError} No sample rows will be submitted unless the preview loads.
+                </div>
+              )}
+              {approvedSample && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <Badge variant="outline">{approvedSample.rows.length} row{approvedSample.rows.length === 1 ? "" : "s"}</Badge>
+                    <Badge variant="outline">{approvedSample.columns.length} column{approvedSample.columns.length === 1 ? "" : "s"}</Badge>
+                    {preparedSample.truncatedRows && <Badge variant="secondary">Rows truncated to public limit</Badge>}
+                    {preparedSample.truncatedColumns && <Badge variant="secondary">Columns truncated to public limit</Badge>}
+                    {preparedSample.truncatedForBytes && <Badge variant="secondary">Sample reduced to 250 KB</Badge>}
+                  </div>
+                  {sampleColumnsWithPii.length > 0 && (
+                    <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 text-sm">
+                      Personal-data flagged columns in this sample: {sampleColumnsWithPii.join(", ")}. Choose no sample rows or confirm the exact row content below before publishing.
+                    </div>
+                  )}
+                  <ScrollArea className="w-full rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {approvedSample.columns.map((column) => (
+                            <TableHead key={column}>
+                              <span className="inline-flex items-center gap-1">
+                                {column}
+                                {piiFlaggedColumnNames.has(column) && <Badge variant="secondary">PII</Badge>}
+                              </span>
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {approvedSample.rows.map((row, index) => (
+                          <TableRow key={approvedSample.row_refs[index]}>
+                            {approvedSample.columns.map((column) => (
+                              <TableCell key={column} className="max-w-[220px] truncate">
+                                {String(row[column] ?? "")}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-md border p-3 text-sm">
+              <h3 className="font-medium">Disclosure summary</h3>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <div>
+                  <span className="text-muted-foreground">Approved title</span>
+                  <p className="font-medium">{approvedMetadataDraft?.title || form.title}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Sample choice</span>
+                  <p className="font-medium">{sampleDecision === "none" ? "No sample rows" : "Publish these real sample rows"}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Category</span>
+                  <p className="font-medium">{approvedMetadataDraft?.category || form.category}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Schema columns</span>
+                  <p className="font-medium">{approvedMetadataDraft?.schema.length ?? 0}</p>
+                </div>
+              </div>
+            </div>
+
+            {(publishStatus === "snapshot_pending" || publishStatus === "disclosure_unknown") && (
+              <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 text-sm">
+                <h3 className="font-medium">
+                  {publishStatus === "disclosure_unknown" ? "Disclosure status unknown" : "Listing published, disclosure snapshot pending"}
+                </h3>
+                <p className="mt-1 text-muted-foreground">
+                  {publishStatus === "disclosure_unknown"
+                    ? "ai.market may have accepted the snapshot, but AIM Data could not store the local audit record."
+                    : "The listing exists on ai.market, but the public discovery package is not complete."}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" size="sm" onClick={handleRetryDisclosureSnapshot} disabled={publishing || !retrySnapshotPayload}>
+                    Retry disclosure snapshot
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={handleReviewDisclosureDecision} disabled={publishing}>
+                    Review disclosure decision
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-start gap-3 rounded-md border p-3">
+              <Checkbox
+                id="ai-training-disclosure-confirmation"
+                checked={finalDisclosureConfirmed}
+                disabled={publishing}
+                onCheckedChange={(checked) => setFinalDisclosureConfirmed(checked === true)}
+              />
+              <Label htmlFor="ai-training-disclosure-confirmation" className="text-sm font-normal leading-5">
+                {AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY}
+              </Label>
+            </div>
+
+            <Button
+              onClick={handlePublish}
+              disabled={publishing || !finalDisclosureConfirmed || !approvedMetadataDraft || (sampleDecision === "approved_rows" && !approvedSample)}
+              size="sm"
+              className="gap-2"
+            >
               {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
               {publishing ? "Publishing..." : "Publish to ai.market"}
             </Button>
