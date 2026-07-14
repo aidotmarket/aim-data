@@ -8,6 +8,8 @@ CREATED: S136
 """
 
 import os
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from fastapi.testclient import TestClient
@@ -107,6 +109,23 @@ class TestConnectivityStatus:
         assert "token_count" in data
         assert "active_token_count" in data
         assert "metrics" in data
+
+    def test_status_excludes_expired_token_from_active_count(self):
+        key = _setup_and_get_key()
+        from app.services.connectivity_token_service import create_token
+
+        _, token = create_token(
+            label="Expired",
+            expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        )
+
+        resp = client.get("/api/connectivity/status", headers=_auth_headers(key))
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["token_count"] == 1
+        assert data["active_token_count"] == 0
+        assert data["tokens"][0]["id"] == token.id
 
 
 # =====================================================================
@@ -220,6 +239,21 @@ class TestTokenCRUD:
         data = resp.json()
         assert data["revoked"] is True
         assert data["token_id"] == token_id
+
+        # Both endpoints reload from a new DB session, as they would after restart.
+        list_resp = client.get("/api/connectivity/tokens", headers=_auth_headers(key))
+        assert list_resp.status_code == 200
+        listed_token = next(
+            token for token in list_resp.json()["tokens"] if token["id"] == token_id
+        )
+        assert listed_token["is_revoked"] is True
+
+        status_resp = client.get("/api/connectivity/status", headers=_auth_headers(key))
+        assert status_resp.status_code == 200
+        status = status_resp.json()
+        assert status["token_count"] == 1
+        assert status["active_token_count"] == 0
+        assert status["tokens"][0]["is_revoked"] is True
 
     def test_revoke_nonexistent_token(self):
         key = _setup_and_get_key()

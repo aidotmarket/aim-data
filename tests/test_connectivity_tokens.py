@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from app.models.connectivity import VALID_SCOPES
 from app.services.connectivity_token_service import (
     ConnectivityTokenError,
     create_token,
@@ -98,7 +99,8 @@ class TestTokenCRUD:
         assert len(raw.split("_")) == 3
         assert token.label == "Test Token"
         assert token.id
-        assert len(token.scopes) == 6
+        assert set(token.scopes) == VALID_SCOPES
+        assert token.is_revoked is False
 
     def test_create_token_custom_scopes(self):
         raw, token = create_token(label="SQL Only", scopes=["ext:sql"])
@@ -113,6 +115,7 @@ class TestTokenCRUD:
         verified = verify_token(raw)
         assert verified.id == created.id
         assert verified.label == "Verify Test"
+        assert verified.is_revoked is False
 
     def test_verify_wrong_secret(self):
         raw, _ = create_token(label="Wrong Secret")
@@ -130,6 +133,10 @@ class TestTokenCRUD:
         raw, created = create_token(label="Revoke Test")
         revoked = revoke_token(created.id)
         assert revoked.id == created.id
+        assert revoked.is_revoked is True
+
+        reloaded = next(token for token in list_tokens() if token.id == created.id)
+        assert reloaded.is_revoked is True
 
         # Verification should fail with revoked error
         with pytest.raises(ConnectivityTokenError, match="revoked"):

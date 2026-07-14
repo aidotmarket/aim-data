@@ -140,6 +140,7 @@ def verify_token(raw_token: str) -> ConnectivityToken:
             expires_at=record.expires_at,
             last_used_at=record.last_used_at,
             request_count=record.request_count,
+            is_revoked=record.is_revoked,
         )
 
 
@@ -230,6 +231,7 @@ def create_token(
             secret_last4=secret_last4,
             created_at=record.created_at,
             expires_at=record.expires_at,
+            is_revoked=record.is_revoked,
         )
 
         return raw_token, token
@@ -269,6 +271,7 @@ def revoke_token(token_id: str) -> ConnectivityToken:
             expires_at=record.expires_at,
             last_used_at=record.last_used_at,
             request_count=record.request_count,
+            is_revoked=record.is_revoked,
         )
 
 
@@ -296,6 +299,7 @@ def list_tokens() -> List[ConnectivityToken]:
                 expires_at=record.expires_at,
                 last_used_at=record.last_used_at,
                 request_count=record.request_count,
+                is_revoked=record.is_revoked,
             ))
 
         return tokens

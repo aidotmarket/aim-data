@@ -119,7 +119,7 @@ def _token_to_info(t) -> TokenInfo:
         expires_at=t.expires_at.isoformat() if t.expires_at else None,
         last_used_at=t.last_used_at.isoformat() if t.last_used_at else None,
         request_count=t.request_count,
-        is_revoked=getattr(t, "is_revoked", False),
+        is_revoked=t.is_revoked,
     )
 
 
@@ -150,7 +150,7 @@ async def connectivity_status(user: AuthenticatedUser = Depends(get_current_user
     # Active = not revoked and not expired
     active_count = 0
     for t in tokens_raw:
-        if not getattr(t, "is_revoked", False):
+        if not t.is_revoked:
             if t.expires_at is None or t.expires_at.timestamp() > time.time():
                 active_count += 1
 

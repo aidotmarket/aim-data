@@ -61,6 +61,7 @@ class ConnectivityToken(BaseModel):
     expires_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
     request_count: int = 0
+    is_revoked: bool = False
 
 
 # ---------------------------------------------------------------------------
