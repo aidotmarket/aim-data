@@ -694,9 +694,6 @@ async def get_dataset(
                 with ephemeral_duckdb_service() as duckdb:
                     return duckdb.get_file_metadata(record.processed_path)
             metadata = await run_sync(_get_metadata)
-            listing_metadata = record.metadata.get("listing_metadata")
-            if listing_metadata is not None:
-                metadata = {**metadata, "listing_metadata": listing_metadata}
             response["metadata"] = metadata
         except Exception as e:
             response["metadata_error"] = str(e)
