@@ -6,11 +6,18 @@ BQ-MCP-RAG Phase 1.
 """
 
 import pytest
-from unittest.mock import patch
 
 from app.services.query_orchestrator import ConnectivityError, QueryOrchestrator
 from app.services.connectivity_token_service import create_token, revoke_token
 from app.utils.sanitization import sql_quote_literal
+
+
+@pytest.fixture(autouse=True)
+def _runtime_connectivity_state(tmp_path):
+    from app.services.connectivity_state import get_connectivity_state
+    state = get_connectivity_state()
+    state.reset_for_tests(tmp_path / "connectivity_state.json", seed_enabled=True)
+    state.set_transport_available(True)
 
 
 @pytest.fixture
@@ -74,20 +81,20 @@ class TestScopeEnforcement:
 
 class TestDisabledState:
     def test_check_enabled_raises_when_disabled(self, orchestrator):
-        with patch("app.services.query_orchestrator.settings") as mock_settings:
-            mock_settings.connectivity_enabled = False
-            with pytest.raises(ConnectivityError) as exc_info:
-                orchestrator._check_enabled()
-            assert exc_info.value.code == "service_unavailable"
+        from app.services.connectivity_state import get_connectivity_state
+        get_connectivity_state()._enabled = False
+        with pytest.raises(ConnectivityError) as exc_info:
+            orchestrator._check_enabled()
+        assert exc_info.value.code == "service_unavailable"
 
     @pytest.mark.asyncio
     async def test_list_datasets_disabled(self, orchestrator, valid_token):
         _, token = valid_token
-        with patch("app.services.query_orchestrator.settings") as mock_settings:
-            mock_settings.connectivity_enabled = False
-            with pytest.raises(ConnectivityError) as exc_info:
-                await orchestrator.list_datasets(token)
-            assert exc_info.value.code == "service_unavailable"
+        from app.services.connectivity_state import get_connectivity_state
+        get_connectivity_state()._enabled = False
+        with pytest.raises(ConnectivityError) as exc_info:
+            await orchestrator.list_datasets(token)
+        assert exc_info.value.code == "service_unavailable"
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +126,8 @@ class TestHealthCheck:
     @pytest.mark.asyncio
     async def test_health_check(self, orchestrator):
         result = await orchestrator.health_check()
-        assert result.status == "ok"
+        assert result.status == "ready"
+        assert result.mcp_sse_ready is True
         assert result.version == "1.0"
 
 

@@ -292,11 +292,15 @@ class ConnectivityCollector(BaseCollector):
 
     async def collect(self) -> dict:
         from app.config import settings
+        from app.services.connectivity_state import get_connectivity_readiness
         from app.services.connectivity_metrics import get_connectivity_metrics
         from app.services.connectivity_token_service import list_tokens
 
+        readiness = get_connectivity_readiness()
         result: dict[str, Any] = {
-            "enabled": settings.connectivity_enabled,
+            "enabled": readiness.enabled,
+            "mcp_sse_ready": readiness.mcp_sse_ready,
+            "reason": readiness.reason,
             "bind_host": settings.connectivity_bind_host,
         }
 

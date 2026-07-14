@@ -88,7 +88,8 @@ uvicorn app.main:app \
     --host 0.0.0.0 \
     --port 8000 \
     --workers ${VECTORAIZ_WORKERS} \
-    --log-level ${VECTORAIZ_LOG_LEVEL:-info} &
+    --log-level ${VECTORAIZ_LOG_LEVEL:-info} \
+    --no-access-log &
 UVICORN_PID=$!
 
 # Start nginx in foreground mode (backgrounded for wait -n)

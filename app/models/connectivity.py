@@ -194,8 +194,10 @@ class SQLResponse(BaseModel):
 class HealthResponse(BaseModel):
     """Response for health endpoint."""
 
-    status: str = "ok"
-    connectivity_enabled: bool = True
+    status: str = "not_ready"
+    connectivity_enabled: bool = False
+    mcp_sse_ready: bool = False
+    reason: Optional[str] = None
     version: str = "1.0"
 
 

@@ -12,12 +12,6 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.config import settings
-
-# Enable connectivity for all ext_api tests
-settings.connectivity_enabled = True
-
-
 def _get_test_client():
     """Create a test client with connectivity enabled."""
     from app.main import create_app
@@ -26,8 +20,11 @@ def _get_test_client():
 
 
 @pytest.fixture
-def client():
-    settings.connectivity_enabled = True
+def client(tmp_path):
+    from app.services.connectivity_state import get_connectivity_state
+    get_connectivity_state().reset_for_tests(
+        tmp_path / "connectivity_state.json", seed_enabled=True
+    )
     # Reset the orchestrator singleton so rate limiter starts fresh
     import app.services.query_orchestrator as _qo
     _qo._orchestrator = None
@@ -51,14 +48,30 @@ class TestHealthEndpoint:
         response = client.get("/api/v1/ext/health")
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "ok"
-        assert "connectivity_enabled" in data
+        assert data["status"] == "ready"
+        assert data["connectivity_enabled"] is True
+        assert data["mcp_sse_ready"] is True
+        assert data["reason"] is None
         assert data["version"] == "1.0"
 
     def test_health_no_auth_required(self, client):
         # No Authorization header
         response = client.get("/api/v1/ext/health")
         assert response.status_code == 200
+
+    def test_disabled_readiness_is_503_but_container_liveness_stays_200(self, client):
+        from app.services.connectivity_state import get_connectivity_state
+        get_connectivity_state()._enabled = False
+        response = client.get("/api/v1/ext/health")
+        assert response.status_code == 503
+        assert response.json() == {
+            "status": "not_ready",
+            "connectivity_enabled": False,
+            "mcp_sse_ready": False,
+            "reason": "disabled",
+            "version": "1.0",
+        }
+        assert client.get("/api/health").status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +115,8 @@ class TestAuthHeaderParsing:
 
 class TestDatasetsEndpoint:
     def setup_method(self):
-        settings.connectivity_enabled = True
+        from app.services.connectivity_state import get_connectivity_state
+        get_connectivity_state()._enabled = True
 
     def test_list_datasets_authenticated(self, client, valid_token_header):
         response = client.get("/api/v1/ext/datasets", headers=valid_token_header)
@@ -129,7 +143,6 @@ class TestDatasetsEndpoint:
 
 class TestSchemaEndpoint:
     def test_schema_nonexistent_dataset(self, client, valid_token_header):
-        settings.connectivity_enabled = True
         response = client.get(
             "/api/v1/ext/datasets/nonexistent_id/schema",
             headers=valid_token_header,
@@ -145,7 +158,8 @@ class TestSchemaEndpoint:
 
 class TestSQLEndpoint:
     def setup_method(self):
-        settings.connectivity_enabled = True
+        from app.services.connectivity_state import get_connectivity_state
+        get_connectivity_state()._enabled = True
 
     def test_sql_missing_auth(self, client):
         response = client.post(

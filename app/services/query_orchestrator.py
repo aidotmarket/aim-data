@@ -69,7 +69,9 @@ class QueryOrchestrator:
 
     def _check_enabled(self) -> None:
         """Raise if connectivity is disabled."""
-        if not settings.connectivity_enabled:
+        from app.services.connectivity_state import is_connectivity_enabled
+
+        if not is_connectivity_enabled():
             raise ConnectivityError("service_unavailable", "External connectivity is disabled")
 
     def validate_token(self, raw_token: str) -> ConnectivityToken:
@@ -583,9 +585,14 @@ class QueryOrchestrator:
 
     async def health_check(self) -> HealthResponse:
         """Minimal health check — no auth required, no dataset/token details."""
+        from app.services.connectivity_state import get_connectivity_readiness
+
+        readiness = get_connectivity_readiness()
         return HealthResponse(
-            status="ok",
-            connectivity_enabled=settings.connectivity_enabled,
+            status="ready" if readiness.mcp_sse_ready else "not_ready",
+            connectivity_enabled=readiness.enabled,
+            mcp_sse_ready=readiness.mcp_sse_ready,
+            reason=readiness.reason,
             version="1.0",
         )
 

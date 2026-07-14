@@ -304,6 +304,9 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down AIM Data API...")
 
+    from app.services.connectivity_state import get_connectivity_state
+    await get_connectivity_state().shutdown()
+
     # BQ-123A: Persist issue tracker state
     issue_tracker.persist()
 
@@ -658,16 +661,20 @@ def create_app() -> FastAPI:
         dependencies=admin_route_dependency,
     )
 
-    # BQ-MCP-RAG: External LLM Connectivity — conditionally mount
-    if settings.connectivity_enabled:
-        from app.routers.ext import router as ext_router
-        from app.routers.mcp import mount_mcp_sse
+    # External connectivity routes are constructed once; live state gates requests.
+    from app.routers.ext import router as ext_router
+    from app.routers.mcp import mount_mcp_sse
+    from app.services.connectivity_state import get_connectivity_readiness
 
-        app.include_router(ext_router, tags=["External Connectivity"])
-        mount_mcp_sse(app)
-        logger.info("BQ-MCP-RAG: External connectivity routers mounted (REST + MCP SSE)")
+    app.include_router(ext_router, tags=["External Connectivity"])
+    mount_mcp_sse(app)
+    readiness = get_connectivity_readiness()
+    if readiness.mcp_sse_ready:
+        logger.info("External connectivity ready (REST + MCP legacy SSE)")
+    elif readiness.reason == "disabled":
+        logger.info("External connectivity routes constructed; access disabled")
     else:
-        logger.info("BQ-MCP-RAG: External connectivity disabled (CONNECTIVITY_ENABLED=false)")
+        logger.warning("External connectivity not ready: %s", readiness.reason)
 
     # Root endpoint
     @app.get("/", tags=["health"], summary="API Root", description="Returns basic API information and links to documentation.")

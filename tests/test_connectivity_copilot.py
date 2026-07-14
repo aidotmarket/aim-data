@@ -21,13 +21,17 @@ from app.services.allai_tool_executor import AllAIToolExecutor
 
 
 @pytest.fixture(autouse=True)
-def _clear_connectivity_tokens():
+def _clear_connectivity_tokens(tmp_path):
     """Clear connectivity tokens before each test to avoid cross-test state."""
     from app.core.database import get_session_context
     from app.models.connectivity import ConnectivityTokenRecord
     with get_session_context() as session:
         session.query(ConnectivityTokenRecord).delete()
         session.commit()
+    from app.services.connectivity_state import get_connectivity_state
+    state = get_connectivity_state()
+    state.reset_for_tests(tmp_path / "connectivity_state.json")
+    state.set_transport_available(True)
     yield
     with get_session_context() as session:
         session.query(ConnectivityTokenRecord).delete()
@@ -55,6 +59,11 @@ def _make_executor() -> AllAIToolExecutor:
     user.user_id = "test-user-001"
     send_ws = AsyncMock()
     return AllAIToolExecutor(user=user, send_ws=send_ws, session_id="test-session")
+
+
+def _set_enabled(enabled: bool):
+    from app.services.connectivity_state import get_connectivity_state
+    get_connectivity_state()._enabled = enabled
 
 
 # =====================================================================
@@ -166,12 +175,11 @@ class TestConnectivityStatusHandler:
     @pytest.mark.asyncio
     async def test_status_returns_enabled_state(self):
         executor = _make_executor()
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.connectivity_enabled = True
-            with patch(
-                "app.services.connectivity_token_service.list_tokens", return_value=[]
-            ):
-                result = await executor._handle_connectivity_status({})
+        _set_enabled(True)
+        with patch(
+            "app.services.connectivity_token_service.list_tokens", return_value=[]
+        ):
+            result = await executor._handle_connectivity_status({})
 
             assert result.frontend_data["enabled"] is True
             assert result.frontend_data["token_count"] == 0
@@ -332,38 +340,30 @@ class TestConnectivityEnableDisableHandler:
     @pytest.mark.asyncio
     async def test_enable_sets_flag(self):
         executor = _make_executor()
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.connectivity_enabled = False
-            result = await executor._handle_connectivity_enable({})
-            assert mock_settings.connectivity_enabled is True
-            assert result.frontend_data["enabled"] is True
-            assert result.frontend_data["changed"] is True
+        result = await executor._handle_connectivity_enable({})
+        assert result.frontend_data["enabled"] is True
+        assert result.frontend_data["changed"] is True
 
     @pytest.mark.asyncio
     async def test_enable_idempotent(self):
         executor = _make_executor()
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.connectivity_enabled = True
-            result = await executor._handle_connectivity_enable({})
-            assert result.frontend_data["changed"] is False
+        _set_enabled(True)
+        result = await executor._handle_connectivity_enable({})
+        assert result.frontend_data["changed"] is False
 
     @pytest.mark.asyncio
     async def test_disable_sets_flag(self):
         executor = _make_executor()
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.connectivity_enabled = True
-            result = await executor._handle_connectivity_disable({})
-            assert mock_settings.connectivity_enabled is False
-            assert result.frontend_data["enabled"] is False
-            assert result.frontend_data["changed"] is True
+        _set_enabled(True)
+        result = await executor._handle_connectivity_disable({})
+        assert result.frontend_data["enabled"] is False
+        assert result.frontend_data["changed"] is True
 
     @pytest.mark.asyncio
     async def test_disable_idempotent(self):
         executor = _make_executor()
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.connectivity_enabled = False
-            result = await executor._handle_connectivity_disable({})
-            assert result.frontend_data["changed"] is False
+        result = await executor._handle_connectivity_disable({})
+        assert result.frontend_data["changed"] is False
 
 
 class TestConnectivityGenerateSetupHandler:
@@ -460,41 +460,36 @@ class TestConnectivityTestHandler:
     @pytest.mark.asyncio
     async def test_diagnostic_disabled(self):
         executor = _make_executor()
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.connectivity_enabled = False
-            result = await executor._handle_connectivity_test({
-                "token": "vzmcp_testtest_abcdef0123456789abcdef0123456789",
-            })
+        result = await executor._handle_connectivity_test({
+            "token": "vzmcp_testtest_abcdef0123456789abcdef0123456789",
+        })
 
-            assert result.frontend_data["connectivity_enabled"] is False
-            assert "disabled" in result.llm_summary.lower()
+        assert result.frontend_data["connectivity_enabled"] is False
+        assert "disabled" in result.llm_summary.lower()
 
     @pytest.mark.asyncio
     async def test_diagnostic_invalid_token(self):
         executor = _make_executor()
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.connectivity_enabled = True
-            result = await executor._handle_connectivity_test({
-                "token": "vzmcp_XXXXXXXX_00000000000000000000000000000000",
-            })
+        _set_enabled(True)
+        result = await executor._handle_connectivity_test({
+            "token": "vzmcp_XXXXXXXX_00000000000000000000000000000000",
+        })
 
-            assert result.frontend_data["token_valid"] is False
-            assert "FAILED" in result.llm_summary
+        assert result.frontend_data["token_valid"] is False
+        assert "FAILED" in result.llm_summary
 
     @pytest.mark.asyncio
     async def test_diagnostic_returns_structured_results(self):
         executor = _make_executor()
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.connectivity_enabled = False
-            result = await executor._handle_connectivity_test({
-                "token": "vzmcp_testtest_abcdef0123456789abcdef0123456789",
-            })
+        result = await executor._handle_connectivity_test({
+            "token": "vzmcp_testtest_abcdef0123456789abcdef0123456789",
+        })
 
-            data = result.frontend_data
-            assert "connectivity_enabled" in data
-            assert "token_valid" in data
-            assert "mcp_responding" in data
-            assert "datasets_accessible" in data
+        data = result.frontend_data
+        assert "connectivity_enabled" in data
+        assert "token_valid" in data
+        assert "mcp_responding" in data
+        assert "datasets_accessible" in data
         assert "sample_sql_ok" in data
 
 

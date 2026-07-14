@@ -946,11 +946,12 @@ class AllAIToolExecutor:
 
     async def _handle_connectivity_status(self, _tool_input: dict) -> ToolResult:
         """Check connectivity state: enabled, tokens (masked), metrics."""
-        from app.config import settings
+        from app.services.connectivity_state import get_connectivity_state
         from app.services.connectivity_token_service import list_tokens
         from app.services.connectivity_metrics import get_connectivity_metrics
 
-        enabled = settings.connectivity_enabled
+        readiness = get_connectivity_state().readiness()
+        enabled = readiness.enabled
 
         tokens = []
         try:
@@ -982,6 +983,8 @@ class AllAIToolExecutor:
         return ToolResult(
             frontend_data={
                 "enabled": enabled,
+                "mcp_sse_ready": readiness.mcp_sse_ready,
+                "reason": readiness.reason,
                 "tokens": tokens,
                 "token_count": len(tokens),
                 "active_token_count": active_count,
@@ -1003,12 +1006,18 @@ class AllAIToolExecutor:
 
     async def _handle_connectivity_enable(self, _tool_input: dict) -> ToolResult:
         """Enable external connectivity."""
-        from app.config import settings
+        from app.services.connectivity_state import ConnectivityStateError, get_connectivity_state
 
-        was_enabled = settings.connectivity_enabled
-        settings.connectivity_enabled = True
+        state = get_connectivity_state()
+        try:
+            changed = await state.enable()
+        except ConnectivityStateError as exc:
+            return ToolResult(
+                frontend_data={"enabled": False, "changed": False, "error": exc.reason},
+                llm_summary="External connectivity could not be enabled because local readiness is unavailable.",
+            )
 
-        if was_enabled:
+        if not changed:
             return ToolResult(
                 frontend_data={"enabled": True, "changed": False},
                 llm_summary=(
@@ -1021,28 +1030,29 @@ class AllAIToolExecutor:
             frontend_data={
                 "enabled": True,
                 "changed": True,
-                "note": (
-                    "Connectivity enabled in memory. To persist across restarts, "
-                    "set VECTORAIZ_CONNECTIVITY_ENABLED=true as an environment variable."
-                ),
+                "mcp_sse_ready": state.readiness().mcp_sse_ready,
             },
             llm_summary=(
                 "External connectivity is now ENABLED. The MCP server and REST API "
-                "will accept external requests with valid tokens. "
-                "Note: To persist this across restarts, the user should set the "
-                "VECTORAIZ_CONNECTIVITY_ENABLED=true environment variable. "
+                "will accept external requests with valid tokens. The setting is persisted. "
                 "Next step: create a token for the AI tool they want to connect."
             ),
         )
 
     async def _handle_connectivity_disable(self, _tool_input: dict) -> ToolResult:
         """Disable external connectivity (preserves tokens)."""
-        from app.config import settings
+        from app.services.connectivity_state import ConnectivityStateError, get_connectivity_state
 
-        was_enabled = settings.connectivity_enabled
-        settings.connectivity_enabled = False
+        state = get_connectivity_state()
+        try:
+            changed = await state.disable()
+        except ConnectivityStateError:
+            return ToolResult(
+                frontend_data={"enabled": state.enabled, "changed": False, "error": "state_unavailable"},
+                llm_summary="External connectivity could not be disabled because local state could not be written.",
+            )
 
-        if not was_enabled:
+        if not changed:
             return ToolResult(
                 frontend_data={"enabled": False, "changed": False},
                 llm_summary=(
@@ -1063,8 +1073,7 @@ class AllAIToolExecutor:
             llm_summary=(
                 "External connectivity is now DISABLED. All external requests will be "
                 "rejected. Existing tokens are preserved — they'll work again when "
-                "connectivity is re-enabled. To persist across restarts, set "
-                "VECTORAIZ_CONNECTIVITY_ENABLED=false."
+                "connectivity is re-enabled. The disabled setting is persisted."
             ),
         )
 
@@ -1193,15 +1202,16 @@ class AllAIToolExecutor:
     async def _handle_connectivity_test(self, tool_input: dict) -> ToolResult:
         """Run self-diagnostic on connectivity."""
         import time
-        from app.config import settings
+        from app.services.connectivity_state import is_connectivity_enabled
         from app.services.connectivity_token_service import (
             ConnectivityTokenError,
             verify_token,
         )
 
         raw_token = tool_input.get("token", "")
+        enabled = is_connectivity_enabled()
         results = {
-            "connectivity_enabled": settings.connectivity_enabled,
+            "connectivity_enabled": enabled,
             "token_valid": False,
             "token_label": None,
             "token_scopes": [],
@@ -1212,7 +1222,7 @@ class AllAIToolExecutor:
         }
 
         # 1. Check connectivity enabled
-        if not settings.connectivity_enabled:
+        if not enabled:
             results["error"] = "External connectivity is disabled"
             return ToolResult(
                 frontend_data=results,

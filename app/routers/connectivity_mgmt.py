@@ -13,6 +13,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.auth.api_key_auth import AuthenticatedUser, get_current_user
@@ -26,6 +27,10 @@ from app.services.connectivity_token_service import (
     list_tokens,
     revoke_token,
     verify_token,
+)
+from app.services.connectivity_state import (
+    ConnectivityStateError,
+    get_connectivity_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,6 +75,8 @@ class TokenListResponse(BaseModel):
 
 class ConnectivityStatusResponse(BaseModel):
     enabled: bool
+    mcp_sse_ready: bool
+    reason: Optional[str] = None
     bind_host: str
     tokens: List[TokenInfo]
     token_count: int
@@ -153,8 +160,11 @@ async def connectivity_status(user: AuthenticatedUser = Depends(get_current_user
     except Exception as e:
         logger.warning("Failed to fetch connectivity metrics: %s", _safe_error_category(e))
 
+    readiness = get_connectivity_state().readiness()
     return ConnectivityStatusResponse(
-        enabled=settings.connectivity_enabled,
+        enabled=readiness.enabled,
+        mcp_sse_ready=readiness.mcp_sse_ready,
+        reason=readiness.reason,
         bind_host=settings.connectivity_bind_host,
         tokens=tokens,
         token_count=len(tokens),
@@ -168,15 +178,20 @@ async def connectivity_status(user: AuthenticatedUser = Depends(get_current_user
     summary="Enable external connectivity",
 )
 async def connectivity_enable(user: AuthenticatedUser = Depends(get_current_user), _meter: MeterDecision = Depends(metered("setup"))):
-    was_enabled = settings.connectivity_enabled
-    settings.connectivity_enabled = True
+    state = get_connectivity_state()
+    try:
+        changed = await state.enable()
+    except ConnectivityStateError as exc:
+        error = "state_unavailable" if exc.reason == "state_unavailable" else "mcp_unavailable"
+        return JSONResponse(
+            status_code=503,
+            content={"error": error, "enabled": False},
+        )
     return {
         "enabled": True,
-        "changed": not was_enabled,
-        "note": (
-            "Connectivity enabled in memory. Set VECTORAIZ_CONNECTIVITY_ENABLED=true "
-            "to persist across restarts."
-        ) if not was_enabled else None,
+        "changed": changed,
+        "mcp_sse_ready": state.readiness().mcp_sse_ready,
+        "reason": state.readiness().reason,
     }
 
 
@@ -185,14 +200,20 @@ async def connectivity_enable(user: AuthenticatedUser = Depends(get_current_user
     summary="Disable external connectivity",
 )
 async def connectivity_disable(user: AuthenticatedUser = Depends(get_current_user)):
-    was_enabled = settings.connectivity_enabled
-    settings.connectivity_enabled = False
+    state = get_connectivity_state()
+    try:
+        changed = await state.disable()
+    except ConnectivityStateError:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "state_unavailable", "enabled": state.enabled},
+        )
     return {
         "enabled": False,
-        "changed": was_enabled,
+        "changed": changed,
         "note": (
             "Connectivity disabled. Existing tokens preserved."
-        ) if was_enabled else None,
+        ) if changed else None,
     }
 
 
@@ -266,12 +287,13 @@ async def connectivity_test_token(
     # On self-hosted instances, only authenticated admin users can invoke token testing.
     logger.debug("Token test requested", extra={"has_token": bool(body.token)})
 
+    enabled = get_connectivity_state().enabled
     results = TestResponse(
-        connectivity_enabled=settings.connectivity_enabled,
+        connectivity_enabled=enabled,
         token_valid=False,
     )
 
-    if not settings.connectivity_enabled:
+    if not enabled:
         results.error = "External connectivity is disabled"
         return results
 

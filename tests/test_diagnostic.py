@@ -563,3 +563,20 @@ class TestDatabaseCollector:
         assert result.error is None
         assert result.data["backend"] == "sqlite"
         assert result.data["alembic_version"] == "abc123"
+
+
+@pytest.mark.asyncio
+async def test_connectivity_collector_reports_safe_live_readiness(monkeypatch, tmp_path):
+    from app.services.connectivity_state import get_connectivity_state
+    from app.services.diagnostic_collectors import ConnectivityCollector
+
+    state = get_connectivity_state()
+    state.reset_for_tests(tmp_path / "connectivity_state.json")
+    state.set_transport_available(True)
+    monkeypatch.setattr("app.services.connectivity_token_service.list_tokens", lambda: [])
+    result = await ConnectivityCollector().safe_collect()
+    assert result.error is None
+    assert result.data["enabled"] is False
+    assert result.data["mcp_sse_ready"] is False
+    assert result.data["reason"] == "disabled"
+    assert result.data["token_count"] == 0

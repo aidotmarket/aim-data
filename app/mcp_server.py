@@ -15,10 +15,11 @@ import os
 os.environ["TQDM_DISABLE"] = "1"  # Suppress progress bars on stdio
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 import asyncio
+from contextvars import ContextVar
 import json
 import logging
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -35,8 +36,18 @@ from app.services.query_orchestrator import ConnectivityError, QueryOrchestrator
 
 logger = logging.getLogger(__name__)
 
-# Global state set during startup
-_token_raw: str = ""
+# HTTP Bearers are scoped to the GET-owned MCP server task and its children.
+# The process-global value is used only by the explicit CLI stdio entrypoint.
+http_bearer_context: ContextVar[Optional[str]] = ContextVar(
+    "mcp_http_bearer", default=None
+)
+http_execution_context: ContextVar[bool] = ContextVar(
+    "mcp_http_execution", default=False
+)
+http_auth_failure_callback: ContextVar[Optional[Callable[[], None]]] = ContextVar(
+    "mcp_http_auth_failure_callback", default=None
+)
+_stdio_token_raw: str = ""
 _orchestrator: Optional[QueryOrchestrator] = None
 
 # Create MCP server only if SDK available
@@ -80,9 +91,24 @@ def _get_orchestrator() -> QueryOrchestrator:
 
 
 def _validate_token():
-    """Validate the global token. Raises on failure."""
+    """Validate the request-scoped HTTP Bearer or the stdio-only CLI token."""
     orch = _get_orchestrator()
-    return orch.validate_token(_token_raw)
+    raw_token = http_bearer_context.get()
+    if http_execution_context.get():
+        if raw_token is None:
+            raise ConnectivityError("auth_invalid", "MCP credential context is missing")
+    else:
+        raw_token = _stdio_token_raw
+    if not raw_token:
+        raise ConnectivityError("auth_invalid", "MCP credential context is missing")
+    try:
+        return orch.validate_token(raw_token)
+    except Exception:
+        if http_execution_context.get():
+            callback = http_auth_failure_callback.get()
+            if callback is not None:
+                callback()
+        raise
 
 
 def _validate_dataset_id(dataset_id: str) -> str:
@@ -223,7 +249,7 @@ async def vectoraiz_get_pii_report(dataset_id: str) -> str:
 def main():
     # Force all logging to stderr so stdout stays clean for JSON-RPC
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
-    global _token_raw
+    global _stdio_token_raw
 
     if not MCP_AVAILABLE:
         print("Error: MCP SDK not installed. Run: pip install 'mcp>=1.8.0,<1.9'", file=sys.stderr)
@@ -233,7 +259,7 @@ def main():
     parser.add_argument("--token", required=True, help="Connectivity token (vzmcp_...)")
     args = parser.parse_args()
 
-    _token_raw = args.token
+    _stdio_token_raw = args.token
 
     # Validate token before starting
     try:

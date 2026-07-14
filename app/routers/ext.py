@@ -90,7 +90,10 @@ def _error_response(e: ConnectivityError, request_id: Optional[str] = None) -> J
 async def ext_health():
     orch = get_query_orchestrator()
     result = await orch.health_check()
-    return result
+    return JSONResponse(
+        status_code=200 if result.mcp_sse_ready else 503,
+        content=result.model_dump(),
+    )
 
 
 # ------------------------------------------------------------------

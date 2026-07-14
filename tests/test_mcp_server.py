@@ -78,7 +78,7 @@ class TestListDatasets:
     @pytest.mark.asyncio
     async def test_list_datasets_success(self, mock_orchestrator, mock_token):
         import app.mcp_server as mcp_mod
-        mcp_mod._token_raw = "vzmcp_test1234_abcdef0123456789abcdef0123456789"
+        mcp_mod._stdio_token_raw = "vzmcp_test1234_abcdef0123456789abcdef0123456789"
 
         mock_orchestrator.list_datasets = AsyncMock(
             return_value=DatasetListResponse(datasets=[], count=0)
@@ -94,7 +94,7 @@ class TestListDatasets:
     @pytest.mark.asyncio
     async def test_list_datasets_auth_error(self):
         import app.mcp_server as mcp_mod
-        mcp_mod._token_raw = "invalid"
+        mcp_mod._stdio_token_raw = "invalid"
 
         mock_orch = MagicMock()
         mock_orch.validate_token.side_effect = ConnectivityError("auth_invalid", "Bad token")

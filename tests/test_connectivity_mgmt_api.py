@@ -21,7 +21,7 @@ client = TestClient(app)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def _clean_tables(monkeypatch):
+def _clean_tables(monkeypatch, tmp_path):
     """Clean local auth + connectivity token tables before each test."""
     from sqlmodel import SQLModel
     from app.core.database import get_engine
@@ -52,6 +52,15 @@ def _clean_tables(monkeypatch):
 
     from app.routers.auth import _setup_attempts
     _setup_attempts.clear()
+
+    from app.routers.mcp import get_mcp_guard
+    from app.services.connectivity_state import get_connectivity_state
+    state = get_connectivity_state()
+    state.reset_for_tests(tmp_path / "connectivity_state.json")
+    guard = get_mcp_guard()
+    state.set_transport_available(bool(guard and guard.transport_available))
+    if guard is not None:
+        state.register_close_hook(guard.detach_all)
 
     yield
 
@@ -107,45 +116,35 @@ class TestConnectivityStatus:
 class TestConnectivityToggle:
     def test_enable(self):
         key = _setup_and_get_key()
-        from app.routers.connectivity_mgmt import settings
-        original = settings.connectivity_enabled
-        try:
-            settings.connectivity_enabled = False
-            resp = client.post("/api/connectivity/enable", headers=_auth_headers(key))
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["enabled"] is True
-            assert data["changed"] is True
-            assert settings.connectivity_enabled is True
-        finally:
-            settings.connectivity_enabled = original
+        from app.services.connectivity_state import get_connectivity_state
+        state = get_connectivity_state()
+        resp = client.post("/api/connectivity/enable", headers=_auth_headers(key))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["enabled"] is True
+        assert data["changed"] is True
+        assert state.enabled is True
+        assert state.state_path.exists()
 
     def test_disable(self):
         key = _setup_and_get_key()
-        from app.routers.connectivity_mgmt import settings
-        original = settings.connectivity_enabled
-        try:
-            settings.connectivity_enabled = True
-            resp = client.post("/api/connectivity/disable", headers=_auth_headers(key))
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["enabled"] is False
-            assert data["changed"] is True
-            assert settings.connectivity_enabled is False
-        finally:
-            settings.connectivity_enabled = original
+        from app.services.connectivity_state import get_connectivity_state
+        state = get_connectivity_state()
+        state._enabled = True
+        resp = client.post("/api/connectivity/disable", headers=_auth_headers(key))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["enabled"] is False
+        assert data["changed"] is True
+        assert state.enabled is False
 
     def test_enable_already_enabled(self):
         key = _setup_and_get_key()
-        from app.routers.connectivity_mgmt import settings
-        original = settings.connectivity_enabled
-        try:
-            settings.connectivity_enabled = True
-            resp = client.post("/api/connectivity/enable", headers=_auth_headers(key))
-            assert resp.status_code == 200
-            assert resp.json()["changed"] is False
-        finally:
-            settings.connectivity_enabled = original
+        from app.services.connectivity_state import get_connectivity_state
+        get_connectivity_state()._enabled = True
+        resp = client.post("/api/connectivity/enable", headers=_auth_headers(key))
+        assert resp.status_code == 200
+        assert resp.json()["changed"] is False
 
 
 # =====================================================================
@@ -290,29 +289,25 @@ class TestTokenTest:
     def test_token_test_no_path_param(self):
         """POST /api/connectivity/test works without token_id in path."""
         key = _setup_and_get_key()
-        from app.routers.connectivity_mgmt import settings
-        original = settings.connectivity_enabled
-        try:
-            settings.connectivity_enabled = True
-            create_resp = client.post(
-                "/api/connectivity/tokens",
-                headers=_auth_headers(key),
-                json={"label": "Test Me"},
-            )
-            raw_token = create_resp.json()["token"]
+        from app.services.connectivity_state import get_connectivity_state
+        get_connectivity_state()._enabled = True
+        create_resp = client.post(
+            "/api/connectivity/tokens",
+            headers=_auth_headers(key),
+            json={"label": "Test Me"},
+        )
+        raw_token = create_resp.json()["token"]
 
-            resp = client.post(
-                "/api/connectivity/test",
-                headers=_auth_headers(key),
-                json={"token": raw_token},
-            )
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["connectivity_enabled"] is True
-            assert data["token_valid"] is True
-            assert data["token_label"] == "Test Me"
-        finally:
-            settings.connectivity_enabled = original
+        resp = client.post(
+            "/api/connectivity/test",
+            headers=_auth_headers(key),
+            json={"token": raw_token},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["connectivity_enabled"] is True
+        assert data["token_valid"] is True
+        assert data["token_label"] == "Test Me"
 
     def test_token_test_old_path_returns_404_or_405(self):
         """Old /test/{token_id} path no longer exists."""
@@ -328,38 +323,28 @@ class TestTokenTest:
     def test_token_test_invalid_token(self):
         """Error response when token is invalid."""
         key = _setup_and_get_key()
-        from app.routers.connectivity_mgmt import settings
-        original = settings.connectivity_enabled
-        try:
-            settings.connectivity_enabled = True
-            resp = client.post(
-                "/api/connectivity/test",
-                headers=_auth_headers(key),
-                json={"token": "vzmcp_bad_0000000000000000000000000000000000"},
-            )
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["token_valid"] is False
-            assert data["error"] is not None
-        finally:
-            settings.connectivity_enabled = original
+        from app.services.connectivity_state import get_connectivity_state
+        get_connectivity_state()._enabled = True
+        resp = client.post(
+            "/api/connectivity/test",
+            headers=_auth_headers(key),
+            json={"token": "vzmcp_bad_0000000000000000000000000000000000"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["token_valid"] is False
+        assert data["error"] is not None
 
     def test_token_test_connectivity_disabled(self):
         """Returns error when connectivity is disabled."""
         key = _setup_and_get_key()
-        from app.config import settings
-        original = settings.connectivity_enabled
-        try:
-            settings.connectivity_enabled = False
-            resp = client.post(
-                "/api/connectivity/test",
-                headers=_auth_headers(key),
-                json={"token": "vzmcp_any_abcdef0123456789abcdef0123456789"},
-            )
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["connectivity_enabled"] is False
-            assert data["token_valid"] is False
-            assert "disabled" in data["error"].lower()
-        finally:
-            settings.connectivity_enabled = original
+        resp = client.post(
+            "/api/connectivity/test",
+            headers=_auth_headers(key),
+            json={"token": "vzmcp_any_abcdef0123456789abcdef0123456789"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["connectivity_enabled"] is False
+        assert data["token_valid"] is False
+        assert "disabled" in data["error"].lower()
