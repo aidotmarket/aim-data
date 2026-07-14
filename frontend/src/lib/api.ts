@@ -168,6 +168,7 @@ export interface ApiDataset {
     columns?: Array<{ name: string; type: string }>;
     size_bytes?: number;
     pii_scan?: { overall_risk: string; columns_with_pii: number };
+    listing_metadata?: DatasetListingMetadata;
   };
 }
 
