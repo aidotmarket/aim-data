@@ -252,7 +252,7 @@ function FieldReviewCard({
       </div>
       <p className="text-foreground/70 text-xs mb-3">
         {needsDraft
-          ? "Generate the allAI draft before reviewing fields."
+          ? "Conversational field review with allAI is not available yet. Edit the fields directly and continue."
           : "Confirm this field or ask allAI to change it conversationally."}
       </p>
       <div className="flex flex-wrap items-center gap-2">
@@ -267,7 +267,7 @@ function FieldReviewCard({
   );
 }
 
-function ListingPreparation({
+export function ListingPreparation({
   dataset,
   backPath,
   onDelete,
@@ -287,27 +287,30 @@ function ListingPreparation({
     sendMessage,
     setEmbeddedSurfaceActive,
   } = useCoPilot();
+  const persistedListingMetadata = dataset.metadata?.listing_metadata ?? null;
   const [piiScan, setPiiScan] = useState<PIIScanResponse | null>(null);
   const [piiFailed, setPiiFailed] = useState(false);
   const [piiScanState, setPiiScanState] = useState<ListingStepState>("pending");
   const [piiActions, setPiiActions] = useState<Record<string, PIIColumnAction>>({});
   const [privacyAttested, setPrivacyAttested] = useState(false);
+  const [privacyStateHydrated, setPrivacyStateHydrated] = useState(false);
   const [savingPrivacy, setSavingPrivacy] = useState(false);
   const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
-  const [metadata, setMetadata] = useState<DatasetListingMetadata | null>(null);
-  const [metadataState, setMetadataState] = useState<ListingStepState>("pending");
+  const [metadata, setMetadata] = useState<DatasetListingMetadata | null>(persistedListingMetadata);
+  const [metadataState, setMetadataState] = useState<ListingStepState>(persistedListingMetadata ? "passed" : "pending");
   const [metadataApproved, setMetadataApproved] = useState(false);
   const [activeMetadataField, setActiveMetadataField] = useState<GuidedMetadataField>("title");
   const [publishing, setPublishing] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const autoPiiScanDatasetRef = useRef<string | null>(null);
-  const autoMetadataDatasetRef = useRef<string | null>(null);
+  const autoMetadataDatasetRef = useRef<string | null>(persistedListingMetadata ? dataset.id : null);
+  const hydrationStepResolvedRef = useRef(false);
   const [form, setForm] = useState<ListingEditorValue>({
-    title: filenameToTitle(dataset.original_filename) || dataset.original_filename,
-    description: "",
+    title: persistedListingMetadata?.title || filenameToTitle(dataset.original_filename) || dataset.original_filename,
+    description: persistedListingMetadata?.description || "",
     priceUsd: "25",
-    category: "tabular",
-    tags: [],
+    category: getPrimaryCategory(persistedListingMetadata),
+    tags: persistedListingMetadata?.tags || [],
   });
   const [approvedMetadataDraft, setApprovedMetadataDraft] = useState<ApprovedMetadataDraft | null>(null);
   const [sampleDecision, setSampleDecision] = useState<DisclosureSampleDecision>("none");
@@ -324,6 +327,7 @@ function ListingPreparation({
   const piiState = piiScanState === "running" ? "running" : getPiiSignal(piiScan, piiFailed);
   const allFlaggedColumnsSaved = flaggedColumns.length === 0 || flaggedColumns.every((column) => Boolean(piiActions[column.column]));
   const canContinuePrivacy = Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
+  const persistedPrivacySatisfied = privacyAttested || (Boolean(piiScan) && allFlaggedColumnsSaved);
   const draftListingId = initialDraftListingId ?? metadata?.listing_id ?? null;
 
   useEffect(() => {
@@ -385,10 +389,12 @@ function ListingPreparation({
           autoPiiScanDatasetRef.current = dataset.id;
           autoPiiScanAttemptedDatasetIds.add(dataset.id);
           await runPiiScan(false);
-          return;
+        } else {
+          setPiiScanState("pending");
         }
-        setPiiScanState("pending");
       }
+
+      if (!cancelled) setPrivacyStateHydrated(true);
     }
 
     loadPrivacyState();
@@ -396,6 +402,14 @@ function ListingPreparation({
       cancelled = true;
     };
   }, [dataset.id, datasetReady, runPiiScan]);
+
+  useEffect(() => {
+    if (!privacyStateHydrated || hydrationStepResolvedRef.current) return;
+    hydrationStepResolvedRef.current = true;
+    if (persistedListingMetadata && persistedPrivacySatisfied) {
+      setActiveStep(2);
+    }
+  }, [persistedListingMetadata, persistedPrivacySatisfied, privacyStateHydrated]);
 
   const savePrivacyConfig = async (actions: Record<string, PIIColumnAction>, attested: boolean) => {
     setSavingPrivacy(true);
@@ -1070,7 +1084,7 @@ function ListingPreparation({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button onClick={handleAcceptAllMetadata} disabled={activeStep > 2 || !draftListingId || !form.title.trim() || !form.description.trim()} size="sm">
+                  <Button onClick={handleAcceptAllMetadata} disabled={activeStep > 2 || !form.title.trim() || !form.description.trim()} size="sm">
                     Accept all & continue
                   </Button>
                   {metadataApproved && (
