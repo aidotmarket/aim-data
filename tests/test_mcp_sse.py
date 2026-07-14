@@ -195,6 +195,70 @@ async def test_validator_indeterminacy_detaches_session_and_closes_get(state):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("response_starts", [False, True])
+async def test_post_sdk_failure_runs_sweep_and_only_sends_503_before_response_start(
+    state,
+    response_starts,
+):
+    class FailingPostApp(FakeSseApp):
+        async def __call__(self, scope, receive, send):
+            if scope["method"] == "GET":
+                return await super().__call__(scope, receive, send)
+            if response_starts:
+                await send({"type": "http.response.start", "status": 202, "headers": []})
+            raise RuntimeError("sensitive-sdk-detail")
+
+    fake = FailingPostApp()
+    guard = AuthenticatedMcpSse(fake)
+    guard._validate = lambda raw: _token(raw)
+    await state.enable()
+    get_task, _ = await _start_bound_get(guard, fake)
+    close_actions_run = []
+    guard._sweep_locked = lambda _now: (lambda: close_actions_run.append(True),)
+
+    sent = []
+    await guard(
+        _scope("POST", "/messages/", token=TOKEN_A, query=f"session_id={SESSION}"),
+        _receive,
+        _send_to(sent),
+    )
+
+    assert close_actions_run == [True]
+    statuses = [message["status"] for message in sent if message["type"] == "http.response.start"]
+    assert statuses == ([202] if response_starts else [503])
+    if not response_starts:
+        assert b"mcp_unavailable" in sent[1]["body"]
+    fake.release.set()
+    await get_task
+
+
+@pytest.mark.asyncio
+async def test_watchdog_revalidates_immediately_after_session_promotion(state):
+    fake = FakeSseApp()
+    guard = AuthenticatedMcpSse(fake)
+    validation_calls = 0
+
+    def validate(raw):
+        nonlocal validation_calls
+        validation_calls += 1
+        if validation_calls > 1:
+            raise ConnectivityError("auth_revoked", "revoked")
+        return _token(raw)
+
+    guard._validate = validate
+    await state.enable()
+    sent = []
+    get_task = asyncio.create_task(
+        guard(_scope("GET", "/sse", token=TOKEN_A), _receive, _send_to(sent))
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(get_task, timeout=0.5)
+    assert validation_calls == 2
+    assert guard.registry_snapshot() == {"reservations": {}, "bindings": {}}
+
+
+@pytest.mark.asyncio
 async def test_idle_watchdog_revokes_only_its_own_connection(state, monkeypatch):
     import app.routers.mcp as mcp_router
 
@@ -320,6 +384,34 @@ async def test_process_cap_counts_reservations_before_sdk_sessions(state):
     for action in actions:
         action()
     await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def test_close_action_logs_exception_type_without_sensitive_message(caplog):
+    def fail_close():
+        raise RuntimeError("sensitive-close-detail")
+
+    AuthenticatedMcpSse._run_close_actions((fail_close,))
+
+    assert "RuntimeError" in caplog.text
+    assert "sensitive-close-detail" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_scheduled_connection_close_is_tracked_and_exception_safe(state, monkeypatch, caplog):
+    guard = AuthenticatedMcpSse(FakeSseApp())
+
+    async def fail_close(_nonce, _session_id_getter):
+        raise ValueError("sensitive-async-close-detail")
+
+    monkeypatch.setattr(guard, "_close_owned_connection", fail_close)
+    guard._schedule_connection_close("nonce", lambda: None)
+
+    assert len(guard._close_tasks) == 1
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert not guard._close_tasks
+    assert "ValueError" in caplog.text
+    assert "sensitive-async-close-detail" not in caplog.text
 
 
 @pytest.mark.asyncio

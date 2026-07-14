@@ -14,7 +14,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Set, Tuple
 from urllib.parse import parse_qsl
 
 from fastapi import FastAPI
@@ -112,6 +112,7 @@ class AuthenticatedMcpSse:
         self._registry_lock = asyncio.Lock()
         self._reservations: Dict[str, SessionReservation] = {}
         self._bindings: Dict[str, SessionBinding] = {}
+        self._close_tasks: Set[asyncio.Task[None]] = set()
         self._state = get_connectivity_state()
         self._state.set_transport_available(sdk_app is not None)
         self._state.register_close_hook(self.detach_all)
@@ -235,9 +236,7 @@ class AuthenticatedMcpSse:
         response_started = False
 
         def close_on_tool_auth_failure() -> None:
-            asyncio.create_task(
-                self._close_owned_connection(nonce, lambda: promoted_session)
-            )
+            self._schedule_connection_close(nonce, lambda: promoted_session)
 
         failure_callback_token = http_auth_failure_callback.set(close_on_tool_auth_failure)
 
@@ -338,25 +337,47 @@ class AuthenticatedMcpSse:
                 await _send_error(send, 503, "mcp_unavailable")
                 return
 
-            now = time.monotonic()
-            async with self._registry_lock:
-                close_actions = self._sweep_locked(now)
-                binding = self._bindings.get(session_id)
-                allowed = bool(
-                    binding is not None
-                    and binding.token_id == token.id
-                    and binding.enqueueable
-                    and not binding.closing
-                    and binding.deadline > now
-                    and self._state.enabled
-                )
-                if allowed:
-                    binding.last_validated_activity = now
-                    # The SDK's zero-buffer send completes only after the GET-owned
-                    # server task receives this message, so the locked call is the
-                    # final enqueue decision and enqueue itself.
-                    await self._sdk_app(scope, receive, send)
-            self._run_close_actions(close_actions)
+            close_actions: Sequence[Callable[[], None]] = ()
+            allowed = False
+            response_started = False
+            sdk_failed = False
+
+            async def guarded_send(message: dict) -> None:
+                nonlocal response_started
+                await send(message)
+                if message.get("type") == "http.response.start":
+                    response_started = True
+
+            try:
+                now = time.monotonic()
+                async with self._registry_lock:
+                    close_actions = self._sweep_locked(now)
+                    binding = self._bindings.get(session_id)
+                    allowed = bool(
+                        binding is not None
+                        and binding.token_id == token.id
+                        and binding.enqueueable
+                        and not binding.closing
+                        and binding.deadline > now
+                        and self._state.enabled
+                    )
+                    if allowed:
+                        binding.last_validated_activity = now
+                        # The SDK's zero-buffer send completes only after the GET-owned
+                        # server task receives this message, so the locked call is the
+                        # final enqueue decision and enqueue itself.
+                        try:
+                            await self._sdk_app(scope, receive, guarded_send)
+                        except Exception as exc:
+                            logger.warning("MCP POST SDK call failed: %s", type(exc).__name__)
+                            sdk_failed = True
+            finally:
+                self._run_close_actions(close_actions)
+
+            if sdk_failed:
+                if not response_started:
+                    await _send_error(send, 503, "mcp_unavailable")
+                return
             if not allowed:
                 await _send_error(send, 401, "unauthorized", bearer=True)
 
@@ -380,16 +401,11 @@ class AuthenticatedMcpSse:
                     if binding is None or binding.owner_task is not owner:
                         return
                     remaining = binding.deadline - time.monotonic()
-                    if remaining <= 0:
-                        expired = True
-                        delay = 0.0
-                    else:
-                        delay = min(WATCHDOG_SECONDS, remaining)
+                    expired = remaining <= 0
                 if expired:
                     close_actions = await self._detach_session(session_id)
                     self._run_close_actions(close_actions)
                     return
-                await asyncio.sleep(delay)
                 try:
                     token = self._validate(raw_token)
                 except Exception:
@@ -403,9 +419,38 @@ class AuthenticatedMcpSse:
                         return
                     binding.last_validated_activity = now
                     binding.deadline = min(binding.deadline, _token_deadline(token.expires_at, time.time(), now))
+                    remaining = binding.deadline - now
+                    if remaining <= 0:
+                        expired = True
+                        delay = 0.0
+                    else:
+                        delay = min(WATCHDOG_SECONDS, remaining)
+                if expired:
+                    close_actions = await self._detach_session(session_id)
+                    self._run_close_actions(close_actions)
+                    return
+                await asyncio.sleep(delay)
         except asyncio.TimeoutError:
             close_actions = await self._detach_reservation(nonce)
             self._run_close_actions(close_actions)
+
+    def _schedule_connection_close(
+        self,
+        nonce: str,
+        session_id_getter: Callable[[], Optional[str]],
+    ) -> None:
+        task = asyncio.create_task(self._close_owned_connection(nonce, session_id_getter))
+        self._close_tasks.add(task)
+        task.add_done_callback(self._connection_close_done)
+
+    def _connection_close_done(self, task: asyncio.Task[None]) -> None:
+        self._close_tasks.discard(task)
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.warning("MCP asynchronous connection close failed: %s", type(exc).__name__)
 
     async def _close_owned_connection(
         self,
@@ -489,8 +534,8 @@ class AuthenticatedMcpSse:
         for action in actions:
             try:
                 action()
-            except Exception:
-                logger.warning("MCP connection close failed: close_error")
+            except Exception as exc:
+                logger.warning("MCP connection close failed: %s", type(exc).__name__)
 
 
 _mounted_guard: Optional[AuthenticatedMcpSse] = None
