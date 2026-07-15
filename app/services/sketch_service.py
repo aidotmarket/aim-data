@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.services.duckdb_service import ephemeral_duckdb_service
+from app.services.processing_service import get_processing_service
 
 logger = logging.getLogger(__name__)
 
@@ -61,13 +62,14 @@ class SketchService:
         """
         from datasketches import hll_sketch, kll_floats_sketch, frequent_strings_sketch, frequent_items_error_type
 
-        # Resolve filepath
-        with ephemeral_duckdb_service() as duckdb:
-            dataset_info = duckdb.get_dataset_by_id(dataset_id)
-        if not dataset_info:
-            raise ValueError(f"Dataset '{dataset_id}' not found")
+        # Resolve the canonical processed artifact from the persisted dataset record.
+        record = get_processing_service().get_dataset(dataset_id)
+        if not record or not record.processed_path:
+            raise ValueError(f"Dataset '{dataset_id}' not found or not yet processed")
 
-        filepath = Path(dataset_info["filepath"])
+        filepath = Path(record.processed_path)
+        if not filepath.is_file():
+            raise ValueError(f"Dataset '{dataset_id}' processed file not found")
 
         with ephemeral_duckdb_service() as duckdb:
             file_type = duckdb.detect_file_type(filepath)

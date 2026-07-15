@@ -46,6 +46,15 @@ def _mock_duckdb_for_file(filepath: Path):
     return _FakeCtx()
 
 
+def _mock_processing_for_file(filepath: Path):
+    """Return a processing service mock with a canonical processed artifact."""
+    record = MagicMock()
+    record.processed_path = filepath
+    processing = MagicMock()
+    processing.get_dataset.return_value = record
+    return processing
+
+
 # ── Sketch Service ───────────────────────────────────────────────────
 
 
@@ -73,8 +82,8 @@ class TestSketchService:
         def _patched_ctx():
             return _mock_duckdb_for_file(csv_path)
 
-        with patch("app.services.sketch_service.ephemeral_duckdb_service", _patched_ctx):
-            # Also patch data_directory so get_dataset_by_id finds the file
+        with patch("app.services.sketch_service.ephemeral_duckdb_service", _patched_ctx), \
+             patch("app.services.sketch_service.get_processing_service", return_value=_mock_processing_for_file(csv_path)):
             with patch.object(settings, "data_directory", str(tmp_path)):
                 profile = sketch_service.generate_profile(dataset_id)
 
@@ -101,7 +110,8 @@ class TestSketchService:
         def _patched_ctx():
             return _mock_duckdb_for_file(csv_path)
 
-        with patch("app.services.sketch_service.ephemeral_duckdb_service", _patched_ctx):
+        with patch("app.services.sketch_service.ephemeral_duckdb_service", _patched_ctx), \
+             patch("app.services.sketch_service.get_processing_service", return_value=_mock_processing_for_file(csv_path)):
             with patch.object(settings, "data_directory", str(tmp_path)):
                 profile = sketch_service.generate_profile(dataset_id)
 
@@ -120,7 +130,8 @@ class TestSketchService:
         def _patched_ctx():
             return _mock_duckdb_for_file(csv_path)
 
-        with patch("app.services.sketch_service.ephemeral_duckdb_service", _patched_ctx):
+        with patch("app.services.sketch_service.ephemeral_duckdb_service", _patched_ctx), \
+             patch("app.services.sketch_service.get_processing_service", return_value=_mock_processing_for_file(csv_path)):
             with patch.object(settings, "data_directory", str(tmp_path)):
                 profile = sketch_service.generate_profile(dataset_id)
 
@@ -136,7 +147,8 @@ class TestSketchService:
         def _patched_ctx():
             return _mock_duckdb_for_file(csv_path)
 
-        with patch("app.services.sketch_service.ephemeral_duckdb_service", _patched_ctx):
+        with patch("app.services.sketch_service.ephemeral_duckdb_service", _patched_ctx), \
+             patch("app.services.sketch_service.get_processing_service", return_value=_mock_processing_for_file(csv_path)):
             with patch.object(settings, "data_directory", str(tmp_path)):
                 sketch_service.generate_profile(dataset_id)
 
@@ -144,6 +156,27 @@ class TestSketchService:
         assert output_path.exists()
         data = json.loads(output_path.read_text())
         assert data["dataset_id"] == dataset_id
+
+    def test_uuid_id_resolves_canonical_processed_path(self, sketch_service, tmp_path):
+        """A UUID-style ID resolves its nested processed artifact from the record."""
+        import pandas as pd
+
+        dataset_id = "a0d9b1b5"
+        processed_path = tmp_path / "processed" / f"{dataset_id}.parquet"
+        pd.DataFrame({"id": [1, 2], "value": [10.0, 20.0]}).to_parquet(processed_path)
+        processing = _mock_processing_for_file(processed_path)
+
+        def _patched_ctx():
+            return _mock_duckdb_for_file(processed_path)
+
+        with patch.object(settings, "data_directory", str(tmp_path)), \
+             patch("app.services.sketch_service.ephemeral_duckdb_service", _patched_ctx), \
+             patch("app.services.sketch_service.get_processing_service", return_value=processing):
+            profile = sketch_service.generate_profile(dataset_id)
+
+        processing.get_dataset.assert_called_once_with(dataset_id)
+        assert profile.dataset_id == dataset_id
+        assert profile.row_count == 2
 
 
 # ── Quality Contract Service ─────────────────────────────────────────
@@ -172,7 +205,8 @@ class TestQualityContractService:
         def _patched_ctx():
             return _mock_duckdb_for_file(csv_path)
 
-        with patch("app.services.quality_contract_service.ephemeral_duckdb_service", _patched_ctx):
+        with patch("app.services.quality_contract_service.ephemeral_duckdb_service", _patched_ctx), \
+             patch("app.services.quality_contract_service.get_processing_service", return_value=_mock_processing_for_file(csv_path)):
             with patch.object(settings, "data_directory", str(tmp_path)):
                 scorecard = quality_service.validate_dataset(dataset_id)
 
@@ -191,7 +225,8 @@ class TestQualityContractService:
         def _patched_ctx():
             return _mock_duckdb_for_file(csv_path)
 
-        with patch("app.services.quality_contract_service.ephemeral_duckdb_service", _patched_ctx):
+        with patch("app.services.quality_contract_service.ephemeral_duckdb_service", _patched_ctx), \
+             patch("app.services.quality_contract_service.get_processing_service", return_value=_mock_processing_for_file(csv_path)):
             with patch.object(settings, "data_directory", str(tmp_path)):
                 scorecard = quality_service.validate_dataset(dataset_id)
 
@@ -204,7 +239,8 @@ class TestQualityContractService:
         def _patched_ctx():
             return _mock_duckdb_for_file(csv_path)
 
-        with patch("app.services.quality_contract_service.ephemeral_duckdb_service", _patched_ctx):
+        with patch("app.services.quality_contract_service.ephemeral_duckdb_service", _patched_ctx), \
+             patch("app.services.quality_contract_service.get_processing_service", return_value=_mock_processing_for_file(csv_path)):
             with patch.object(settings, "data_directory", str(tmp_path)):
                 quality_service.validate_dataset(dataset_id)
 
@@ -218,11 +254,33 @@ class TestQualityContractService:
         def _patched_ctx():
             return _mock_duckdb_for_file(csv_path)
 
-        with patch("app.services.quality_contract_service.ephemeral_duckdb_service", _patched_ctx):
+        with patch("app.services.quality_contract_service.ephemeral_duckdb_service", _patched_ctx), \
+             patch("app.services.quality_contract_service.get_processing_service", return_value=_mock_processing_for_file(csv_path)):
             with patch.object(settings, "data_directory", str(tmp_path)):
                 scorecard = quality_service.validate_dataset(dataset_id)
 
         assert scorecard.consistency.score == 1.0
+
+    def test_uuid_id_resolves_canonical_processed_path(self, quality_service, tmp_path):
+        """A UUID-style ID validates its nested processed artifact from the record."""
+        import pandas as pd
+
+        dataset_id = "a0d9b1b5"
+        processed_path = tmp_path / "processed" / f"{dataset_id}.parquet"
+        pd.DataFrame({"id": [1, 2], "value": [10.0, 20.0]}).to_parquet(processed_path)
+        processing = _mock_processing_for_file(processed_path)
+
+        def _patched_ctx():
+            return _mock_duckdb_for_file(processed_path)
+
+        with patch.object(settings, "data_directory", str(tmp_path)), \
+             patch("app.services.quality_contract_service.ephemeral_duckdb_service", _patched_ctx), \
+             patch("app.services.quality_contract_service.get_processing_service", return_value=processing):
+            scorecard = quality_service.validate_dataset(dataset_id)
+
+        processing.get_dataset.assert_called_once_with(dataset_id)
+        assert scorecard.dataset_id == dataset_id
+        assert 0.0 <= scorecard.overall_score <= 1.0
 
 
 # ── PII Structured Scanning + Settings ───────────────────────────────

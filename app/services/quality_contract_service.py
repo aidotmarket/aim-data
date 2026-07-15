@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.services.duckdb_service import ephemeral_duckdb_service
+from app.services.processing_service import get_processing_service
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +59,13 @@ class QualityContractService:
         Uses DuckDB SQL for aggregate checks and Pandera for sample validation.
         If a sketch_profile.json exists, uses HLL estimates for uniqueness.
         """
-        with ephemeral_duckdb_service() as duckdb:
-            dataset_info = duckdb.get_dataset_by_id(dataset_id)
-        if not dataset_info:
-            raise ValueError(f"Dataset '{dataset_id}' not found")
+        record = get_processing_service().get_dataset(dataset_id)
+        if not record or not record.processed_path:
+            raise ValueError(f"Dataset '{dataset_id}' not found or not yet processed")
 
-        filepath = Path(dataset_info["filepath"])
+        filepath = Path(record.processed_path)
+        if not filepath.is_file():
+            raise ValueError(f"Dataset '{dataset_id}' processed file not found")
 
         # Load sketch profile if available (for HLL-based uniqueness)
         sketch_profile = self._load_sketch_profile(dataset_id)
