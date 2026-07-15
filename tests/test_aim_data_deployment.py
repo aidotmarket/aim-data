@@ -46,9 +46,21 @@ def test_aim_data_compose_uses_aim_data_image_and_env():
     assert service["ports"] == ["${AIM_DATA_PORT:-8080}:80"]
     assert service["volumes"] == [
         "aim-data-data:/data",
+        "${HOST_IMPORT_DIR:-./import}:/imports:ro",
         "${HOST_IMPORT_DIR:-./import}:/data/import:ro",
         "/var/run/docker.sock:/var/run/docker.sock",
     ]
+
+    import_mounts = [
+        volume
+        for volume in service["volumes"]
+        if volume.startswith("${HOST_IMPORT_DIR:-./import}:")
+    ]
+    parsed_import_mounts = [mount.rsplit(":", 2) for mount in import_mounts]
+    assert {target for _, target, _ in parsed_import_mounts} == {"/imports", "/data/import"}
+    assert len({target for _, target, _ in parsed_import_mounts}) == len(parsed_import_mounts)
+    assert all(mode == "ro" for _, _, mode in parsed_import_mounts)
+
     assert set(service["depends_on"]) == {"postgres"}
 
     postgres_env = set(data["services"]["postgres"]["environment"])

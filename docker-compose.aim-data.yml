@@ -19,6 +19,7 @@ services:
     volumes:
       - aim-data-data:/data
       # Optional: host directory for local file import (read-only)
+      - ${HOST_IMPORT_DIR:-./import}:/imports:ro
       - ${HOST_IMPORT_DIR:-./import}:/data/import:ro
       # Optional: enables one-click auto-update from the UI
       # Remove this line if you don't want the container to have Docker access
