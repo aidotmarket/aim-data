@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, Optional, Union
 
 from sqlmodel import select
@@ -58,6 +59,46 @@ class S3PublishSourceResolution:
 
 
 PublishSourceResolution = Union[NotS3PublishSource, S3PublishSourceResolution]
+
+
+@dataclass(frozen=True)
+class LocalCommitmentSource:
+    """Customer-local source handle; this object is never serialized to ai.market."""
+
+    path: Path
+    file_format: Literal["csv", "parquet", "json-array", "ndjson"]
+
+
+def resolve_local_commitment_source(
+    dataset_id: str,
+    *,
+    processing: Optional[ProcessingService] = None,
+) -> LocalCommitmentSource:
+    """Resolve only an already-local full dataset for commitment generation.
+
+    S3 credentials, bucket paths, and source object keys are deliberately not
+    returned.  S3-backed datasets must first exist in the installation's local
+    processed area; this function never fetches from S3 or ai.market.
+    """
+    processing = processing or get_processing_service()
+    record = processing.get_dataset(dataset_id)
+    if record is None:
+        raise S3PublishSourceResolutionError("dataset_lookup_failed")
+    path = record.processed_path if record.processed_path and record.processed_path.is_file() else record.upload_path
+    if path is None or not path.is_file():
+        raise S3PublishSourceResolutionError("local_commitment_source_unavailable")
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        file_format = "csv"
+    elif suffix == ".parquet":
+        file_format = "parquet"
+    elif suffix in {".ndjson", ".jsonl"}:
+        file_format = "ndjson"
+    elif suffix == ".json":
+        file_format = "json-array"
+    else:
+        raise S3PublishSourceResolutionError("unsupported_commitment_source_format")
+    return LocalCommitmentSource(path=path.resolve(), file_format=file_format)
 
 
 def resolve_s3_publish_source(

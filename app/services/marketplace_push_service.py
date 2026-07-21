@@ -14,16 +14,46 @@ Conflict: 409 → PATCH update instead of POST create.
 import json
 import logging
 import asyncio
+import hashlib
+import hmac
 from pathlib import Path
-from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Dict, Any, Mapping, Sequence
+from uuid import UUID
 
 import httpx
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from app.config import settings
-from app.models.listing_metadata_schemas import ListingMetadata
+from app.models.listing_metadata_schemas import (
+    DatasetCommitmentSubmission,
+    DatasetPreviewProofSubmission,
+    ListingMetadata,
+)
 from app.models.compliance_schemas import ComplianceReport
 from app.models.attestation_schemas import QualityAttestation
+from app.services.dataset_canonicalization import (
+    LogicalField,
+    canonicalize_row,
+    compute_schema_digest,
+    decode_base64url,
+    encode_base64url,
+    jcs_canonical_bytes,
+)
+from app.services.dataset_merkle_service import (
+    DatasetMerkleCommitment,
+    compute_leaf_hash,
+    verify_inclusion_proof,
+)
+from app.services.preview_content_policy import PreviewPolicyResult
+from app.services.preview_package_service import (
+    PACKAGE_MEDIA_TYPE,
+    PACKAGE_PROFILE,
+    PreviewPackage,
+    PreviewPackageError,
+    PreviewPackageService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +61,9 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 BACKOFF_BASE = 1.0  # seconds: 1, 2, 4
 REQUEST_TIMEOUT = 30.0
+MAX_CLOCK_SKEW_SECONDS = 300
+MAX_CLOCK_SKEW = timedelta(seconds=MAX_CLOCK_SKEW_SECONDS)
+MAX_ATTESTATION_AGE = timedelta(days=90)
 
 
 class MarketplacePushError(Exception):
@@ -39,6 +72,387 @@ class MarketplacePushError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.detail = detail
+
+
+class CommitmentClientValidationError(MarketplacePushError):
+    """Distinct, stable client-side §3.6 validation failure (M6/M8)."""
+
+    def __init__(self, code: str):
+        super().__init__(code, detail={"error_code": code})
+        self.code = code
+
+
+def _b64decode(value: str, size: int) -> bytes:
+    try:
+        return decode_base64url(value, expected_size=size)
+    except Exception as exc:
+        raise CommitmentClientValidationError("invalid_hash_encoding") from exc
+
+
+def _sign(private_key: Ed25519PrivateKey, prefix: bytes, body: Mapping[str, Any]) -> str:
+    return encode_base64url(private_key.sign(prefix + jcs_canonical_bytes(body)))
+
+
+def _verify_signature(
+    public_key: Ed25519PublicKey,
+    signature: str,
+    prefix: bytes,
+    body: Mapping[str, Any],
+    *,
+    code: str,
+) -> None:
+    try:
+        public_key.verify(_b64decode(signature, 64), prefix + jcs_canonical_bytes(body))
+    except (InvalidSignature, ValueError) as exc:
+        raise CommitmentClientValidationError(code) from exc
+
+
+def _timestamp_text(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _attestation_payload(
+    payload: DatasetCommitmentSubmission,
+    *,
+    metadata_accuracy_attested: bool = True,
+    preview_disclosure_permitted: bool = True,
+) -> dict[str, Any]:
+    return {
+        "listing_id": str(payload.listing_id),
+        "seller_dataset_version": payload.seller_dataset_version,
+        "canonicalization_profile": payload.canonicalization_profile,
+        "schema_digest": payload.schema_digest,
+        "dataset_merkle_root": payload.dataset_merkle_root,
+        "leaf_count": payload.leaf_count,
+        "metadata_accuracy_attested": metadata_accuracy_attested,
+        "preview_disclosure_permitted": preview_disclosure_permitted,
+        "attested_at": _timestamp_text(payload.signed_at),
+    }
+
+
+def _sampled_leaf_list(proofs: Sequence[DatasetPreviewProofSubmission]) -> list[dict[str, Any]]:
+    return [
+        {
+            "proof_id": str(proof.proof_id),
+            "base_row_digest": proof.base_row_digest,
+            "duplicate_ordinal": proof.duplicate_ordinal,
+            "leaf_index": proof.leaf_index,
+            "tree_size": proof.tree_size,
+        }
+        for proof in proofs
+    ]
+
+
+def _sampled_leaf_list_digest(proofs: Sequence[DatasetPreviewProofSubmission]) -> str:
+    return encode_base64url(
+        hashlib.sha256(
+            b"aim-sampled-leaf-list-v1\0" + jcs_canonical_bytes(_sampled_leaf_list(proofs))
+        ).digest()
+    )
+
+
+def _scan_attestation_payload(proof: DatasetPreviewProofSubmission) -> dict[str, Any]:
+    return {
+        "scan_policy": proof.scan_policy,
+        "scan_policy_version": proof.scan_policy_version,
+        "scan_verdict": proof.scan_verdict,
+        "scanned_at": _timestamp_text(proof.scanned_at),
+        "sampled_leaf_list_digest": proof.sampled_leaf_list_digest,
+        "signer_reference": proof.signer_reference,
+    }
+
+
+def _commitment_signature_payload(payload: DatasetCommitmentSubmission) -> dict[str, Any]:
+    return payload.model_dump(mode="json", exclude={"seller_signature"})
+
+
+def build_signed_commitment_submission(
+    *,
+    commitment: DatasetMerkleCommitment,
+    schema: Sequence[LogicalField | Mapping[str, Any]],
+    package: PreviewPackage,
+    policy_result: PreviewPolicyResult,
+    listing_id: UUID,
+    commitment_id: UUID,
+    seller_dataset_version: str,
+    preview_package_url: str,
+    signer_reference: str,
+    private_key: Ed25519PrivateKey,
+    signed_at: datetime,
+    previous_commitment_id: UUID | None = None,
+    previous_submission: DatasetCommitmentSubmission | None = None,
+    now: datetime | None = None,
+) -> DatasetCommitmentSubmission:
+    """Build and sign only the closed non-content contract sent to ai.market."""
+    if policy_result.verdict != "passed" or policy_result.row_count != len(package.body.get("entries", [])):
+        raise CommitmentClientValidationError("scan_attestation_invalid")
+    if not hmac.compare_digest(compute_schema_digest(schema), commitment.schema_digest):
+        raise CommitmentClientValidationError("schema_digest_mismatch")
+    if package.body.get("commitment_id") != str(commitment_id):
+        raise CommitmentClientValidationError("preview_commitment_mismatch")
+    if package.body.get("schema_digest") != encode_base64url(commitment.schema_digest):
+        raise CommitmentClientValidationError("schema_digest_mismatch")
+    try:
+        PreviewPackageService.validate_package(package.body, expected_commitment_id=commitment_id)
+    except PreviewPackageError as exc:
+        raise CommitmentClientValidationError(exc.code) from exc
+    # Validate the entire unsigned proof/row binding before any signature is
+    # created.  The rows remain local and are discarded from the wire contract.
+    seen_positions: set[int] = set()
+    seen_leaf_identities: set[tuple[str, int]] = set()
+    for entry in package.body["entries"]:
+        leaf_index = entry["leaf_index"]
+        if leaf_index in seen_positions:
+            raise CommitmentClientValidationError("duplicate_leaf_index")
+        seen_positions.add(leaf_index)
+        leaf_identity = (entry["base_row_digest"], entry["duplicate_ordinal"])
+        if leaf_identity in seen_leaf_identities:
+            raise CommitmentClientValidationError("duplicate_leaf_identity")
+        seen_leaf_identities.add(leaf_identity)
+        local_record = canonicalize_row(
+            schema,
+            entry["row"],
+            schema_digest=commitment.schema_digest,
+        )
+        if not hmac.compare_digest(
+            local_record.base_row_digest,
+            _b64decode(entry["base_row_digest"], 32),
+        ):
+            raise CommitmentClientValidationError("preview_row_digest_mismatch")
+        leaf_hash = compute_leaf_hash(local_record.base_row_digest, entry["duplicate_ordinal"])
+        if entry["tree_size"] != commitment.leaf_count or not verify_inclusion_proof(
+            leaf_hash,
+            leaf_index,
+            entry["tree_size"],
+            entry["siblings"],
+            commitment.dataset_merkle_root,
+        ):
+            raise CommitmentClientValidationError("invalid_inclusion_proof")
+    signed_at = signed_at.astimezone(timezone.utc) if signed_at.tzinfo else signed_at
+    if signed_at.tzinfo is None:
+        raise CommitmentClientValidationError("attestation_timestamp_timezone_required")
+    validation_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    _validate_signed_at(signed_at, validation_time)
+    if policy_result.scanned_at > validation_time + MAX_CLOCK_SKEW:
+        raise CommitmentClientValidationError("scan_timestamp_in_future")
+    if policy_result.scanned_at < signed_at - MAX_ATTESTATION_AGE:
+        raise CommitmentClientValidationError("scan_attestation_stale")
+    if policy_result.scanned_at > signed_at + MAX_CLOCK_SKEW:
+        raise CommitmentClientValidationError("scan_timestamp_after_signature")
+    proof_dicts: list[dict[str, Any]] = []
+    for entry in package.body["entries"]:
+        proof_dicts.append(
+            {
+                "proof_id": entry["proof_id"],
+                "base_row_digest": entry["base_row_digest"],
+                "duplicate_ordinal": entry["duplicate_ordinal"],
+                "leaf_index": entry["leaf_index"],
+                "tree_size": entry["tree_size"],
+                "siblings": entry["siblings"],
+                "preview_package_url": preview_package_url,
+                "package_media_type": PACKAGE_MEDIA_TYPE,
+                "package_profile": PACKAGE_PROFILE,
+                "package_byte_ceiling": len(package.encoded),
+                "scan_policy": policy_result.policy,
+                "scan_policy_version": policy_result.policy_version,
+                "scan_verdict": "passed",
+                "scanned_at": policy_result.scanned_at,
+                "sampled_leaf_list_digest": encode_base64url(b"\0" * 32),
+                "signer_reference": signer_reference,
+                "signature_algorithm": "ed25519",
+                "signature": encode_base64url(b"\0" * 64),
+            }
+        )
+    provisional_proofs = [DatasetPreviewProofSubmission(**item) for item in proof_dicts]
+    leaf_list_digest = _sampled_leaf_list_digest(provisional_proofs)
+    for item in proof_dicts:
+        item["sampled_leaf_list_digest"] = leaf_list_digest
+    unsigned = DatasetCommitmentSubmission(
+        commitment_id=commitment_id,
+        listing_id=listing_id,
+        seller_dataset_version=seller_dataset_version,
+        previous_commitment_id=previous_commitment_id,
+        canonicalization_profile="aim-dataset-merkle-v1",
+        hash_algorithm="sha-256",
+        schema_digest=encode_base64url(commitment.schema_digest),
+        dataset_merkle_root=encode_base64url(commitment.dataset_merkle_root),
+        leaf_count=commitment.leaf_count,
+        seller_attestation_digest=encode_base64url(b"\0" * 32),
+        aim_data_signer_reference=signer_reference,
+        signature_algorithm="ed25519",
+        seller_signature=encode_base64url(b"\0" * 64),
+        signed_at=signed_at,
+        proofs=proof_dicts,
+    )
+    attestation_digest = encode_base64url(
+        hashlib.sha256(
+            b"aim-seller-attestation-v1\0" + jcs_canonical_bytes(_attestation_payload(unsigned))
+        ).digest()
+    )
+    unsigned.seller_attestation_digest = attestation_digest
+    # M6: every check that does not require a signature runs before the first
+    # signature is created. The final validation below only adds cryptographic
+    # verification of the signatures produced after this point.
+    validate_commitment_submission(
+        unsigned,
+        schema=schema,
+        public_key=private_key.public_key(),
+        expected_listing_id=listing_id,
+        expected_signer_reference=signer_reference,
+        now=validation_time,
+        previous_submission=previous_submission,
+        verify_signatures=False,
+    )
+    for proof in unsigned.proofs:
+        proof.signature = _sign(
+            private_key,
+            b"aim-preview-scan-attestation-v1\0",
+            _scan_attestation_payload(proof),
+        )
+    unsigned.seller_signature = _sign(
+        private_key,
+        b"aim-dataset-commitment-submission-v1\0",
+        _commitment_signature_payload(unsigned),
+    )
+    validate_commitment_submission(
+        unsigned,
+        schema=schema,
+        public_key=private_key.public_key(),
+        expected_listing_id=listing_id,
+        expected_signer_reference=signer_reference,
+        now=validation_time,
+        previous_submission=previous_submission,
+    )
+    return unsigned
+
+
+def _validate_signed_at(signed_at: datetime, now: datetime) -> None:
+    """Apply the explicit inclusive five-minute clock-skew contract (M7)."""
+    if signed_at > now + MAX_CLOCK_SKEW:
+        raise CommitmentClientValidationError("attestation_timestamp_in_future")
+    if signed_at < now - MAX_ATTESTATION_AGE:
+        raise CommitmentClientValidationError("attestation_stale")
+
+
+def validate_commitment_submission(
+    payload: DatasetCommitmentSubmission,
+    *,
+    schema: Sequence[LogicalField | Mapping[str, Any]] | None,
+    public_key: Ed25519PublicKey,
+    expected_listing_id: UUID,
+    expected_signer_reference: str,
+    now: datetime | None = None,
+    update_cadence_days: int | None = None,
+    previous_submission: DatasetCommitmentSubmission | None = None,
+    verify_signatures: bool = True,
+) -> None:
+    """Enforce all client-verifiable §3.6 gates before any network call."""
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    if len(jcs_canonical_bytes(payload.model_dump(mode="json"))) > 256 * 1024:
+        raise CommitmentClientValidationError("proof_bound_exceeded")
+    if payload.listing_id != expected_listing_id:
+        raise CommitmentClientValidationError("commitment_listing_mismatch")
+    if payload.aim_data_signer_reference != expected_signer_reference:
+        raise CommitmentClientValidationError("signer_mismatch")
+    if payload.canonicalization_profile != "aim-dataset-merkle-v1" or payload.hash_algorithm != "sha-256":
+        raise CommitmentClientValidationError("unsupported_commitment_profile")
+    signed_at = payload.signed_at.astimezone(timezone.utc)
+    _validate_signed_at(signed_at, now)
+    cadence_window = MAX_ATTESTATION_AGE
+    if update_cadence_days is not None:
+        if isinstance(update_cadence_days, bool) or update_cadence_days < 0:
+            raise CommitmentClientValidationError("invalid_update_cadence")
+        cadence_window = min(MAX_ATTESTATION_AGE, max(timedelta(days=7), timedelta(days=2 * update_cadence_days)))
+    if signed_at < now - cadence_window:
+        raise CommitmentClientValidationError("attestation_stale")
+    if schema is not None:
+        expected_schema_digest = compute_schema_digest(schema)
+        if not hmac.compare_digest(expected_schema_digest, _b64decode(payload.schema_digest, 32)):
+            raise CommitmentClientValidationError("schema_digest_mismatch")
+    expected_attestation = hashlib.sha256(
+        b"aim-seller-attestation-v1\0" + jcs_canonical_bytes(_attestation_payload(payload))
+    ).digest()
+    if not hmac.compare_digest(expected_attestation, _b64decode(payload.seller_attestation_digest, 32)):
+        raise CommitmentClientValidationError("seller_attestation_invalid")
+    expected_leaf_list_digest = _sampled_leaf_list_digest(payload.proofs)
+    root = _b64decode(payload.dataset_merkle_root, 32)
+    seen_leaf_positions: set[int] = set()
+    seen_leaf_identities: set[tuple[str, int]] = set()
+    seen_proof_ids: set[UUID] = set()
+    for proof in payload.proofs:
+        if proof.proof_id in seen_proof_ids:
+            raise CommitmentClientValidationError("duplicate_proof_id")
+        seen_proof_ids.add(proof.proof_id)
+        if proof.leaf_index in seen_leaf_positions:
+            raise CommitmentClientValidationError("duplicate_leaf_index")
+        seen_leaf_positions.add(proof.leaf_index)
+        leaf_identity = (proof.base_row_digest, proof.duplicate_ordinal)
+        if leaf_identity in seen_leaf_identities:
+            raise CommitmentClientValidationError("duplicate_leaf_identity")
+        seen_leaf_identities.add(leaf_identity)
+        if proof.tree_size != payload.leaf_count:
+            raise CommitmentClientValidationError("proof_tree_mismatch")
+        if proof.scanned_at > now + MAX_CLOCK_SKEW:
+            raise CommitmentClientValidationError("scan_timestamp_in_future")
+        if proof.scanned_at < signed_at - cadence_window or proof.scanned_at > signed_at + MAX_CLOCK_SKEW:
+            raise CommitmentClientValidationError("scan_attestation_stale")
+        if proof.sampled_leaf_list_digest != expected_leaf_list_digest:
+            raise CommitmentClientValidationError("scan_leaf_list_mismatch")
+        if verify_signatures:
+            _verify_signature(
+                public_key,
+                proof.signature,
+                b"aim-preview-scan-attestation-v1\0",
+                _scan_attestation_payload(proof),
+                code="scan_attestation_invalid",
+            )
+        leaf = compute_leaf_hash(_b64decode(proof.base_row_digest, 32), proof.duplicate_ordinal)
+        if not verify_inclusion_proof(leaf, proof.leaf_index, proof.tree_size, proof.siblings, root):
+            raise CommitmentClientValidationError("invalid_inclusion_proof")
+    if verify_signatures:
+        _verify_signature(
+            public_key,
+            payload.seller_signature,
+            b"aim-dataset-commitment-submission-v1\0",
+            _commitment_signature_payload(payload),
+            code="device_signature_invalid",
+        )
+    if previous_submission is not None and previous_submission.seller_dataset_version != payload.seller_dataset_version:
+        old_proof_ids = {proof.proof_id for proof in previous_submission.proofs}
+        new_proof_ids = {proof.proof_id for proof in payload.proofs}
+        if (
+            previous_submission.commitment_id == payload.commitment_id
+            or hmac.compare_digest(
+                _b64decode(previous_submission.dataset_merkle_root, 32),
+                _b64decode(payload.dataset_merkle_root, 32),
+            )
+            or old_proof_ids & new_proof_ids
+        ):
+            raise CommitmentClientValidationError("dataset_version_reuse")
+
+
+def assert_non_custodial_commitment_wire(payload: Mapping[str, Any]) -> None:
+    """Reject every raw-content carrier immediately before transport."""
+    forbidden = {
+        "row", "rows", "data", "content", "excerpt", "record", "records",
+        "sample", "sample_data", "sample_rows", "source_path", "source_credentials",
+        "query_string", "response_body", "package_response_body",
+    }
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                normalized = str(key).lower()
+                if normalized in forbidden or normalized.startswith("raw_"):
+                    raise CommitmentClientValidationError("raw_content_forbidden")
+                walk(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                walk(child)
+        elif isinstance(value, (bytes, bytearray, memoryview)):
+            raise CommitmentClientValidationError("raw_content_forbidden")
+
+    walk(payload)
 
 
 def load_listing_metadata(base_path: Path) -> ListingMetadata:
@@ -94,6 +508,82 @@ class MarketplacePushService:
         self.api_key = settings.internal_api_key
         if not self.api_key:
             logger.warning("VECTORAIZ_INTERNAL_API_KEY not set — marketplace push will fail auth")
+
+    async def push_dataset_commitment(
+        self,
+        payload: DatasetCommitmentSubmission,
+        *,
+        schema: Sequence[LogicalField | Mapping[str, Any]],
+        public_key: Ed25519PublicKey,
+        expected_signer_reference: str,
+        auth_headers: Mapping[str, str],
+        now: datetime | None = None,
+        update_cadence_days: int | None = None,
+        previous_submission: DatasetCommitmentSubmission | None = None,
+        client: httpx.AsyncClient | None = None,
+    ) -> Dict[str, Any]:
+        """Validate locally, then send the closed contract without row content.
+
+        A 2xx response is recorded only as backend acceptance; it is never used
+        as evidence that the payload itself was valid (M6).
+        """
+        validate_commitment_submission(
+            payload,
+            schema=schema,
+            public_key=public_key,
+            expected_listing_id=payload.listing_id,
+            expected_signer_reference=expected_signer_reference,
+            now=now,
+            update_cadence_days=update_cadence_days,
+            previous_submission=previous_submission,
+        )
+        wire_payload = payload.model_dump(mode="json")
+        assert_non_custodial_commitment_wire(wire_payload)
+        allowed_headers = {
+            key: value
+            for key, value in auth_headers.items()
+            if key.lower() in {"authorization", "x-api-key"}
+        }
+        headers = {**allowed_headers, "Content-Type": "application/json"}
+        owned_client = client is None
+        request_client = client or httpx.AsyncClient(timeout=REQUEST_TIMEOUT)
+        try:
+            response = await request_client.post(
+                f"{self.base_url}/api/v1/listings/{payload.listing_id}/commitments",
+                json=wire_payload,
+                headers=headers,
+            )
+        except httpx.TimeoutException as exc:
+            raise MarketplacePushError("commitment_push_timeout", detail={"error_code": "commitment_push_timeout"}) from exc
+        except httpx.RequestError as exc:
+            raise MarketplacePushError("commitment_push_unavailable", detail={"error_code": "commitment_push_unavailable"}) from exc
+        finally:
+            if owned_client:
+                await request_client.aclose()
+        if response.status_code not in (200, 201):
+            error_code = "commitment_rejected"
+            try:
+                response_data = response.json()
+                candidate = response_data.get("error_code") or response_data.get("detail")
+                if isinstance(candidate, str) and candidate.replace("_", "").isalnum() and len(candidate) <= 80:
+                    error_code = candidate
+            except Exception:
+                pass
+            raise MarketplacePushError(error_code, status_code=response.status_code, detail={"error_code": error_code})
+        response_data: Mapping[str, Any]
+        try:
+            parsed = response.json()
+            response_data = parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            response_data = {}
+        return {
+            "status": "accepted",
+            "commitment_id": str(payload.commitment_id),
+            "local_validation": "passed",
+            "backend_accepted": True,
+            "transparency_sequence": response_data.get("transparency_sequence"),
+            "checkpoint_size": response_data.get("checkpoint_size"),
+        }
 
     async def push_to_marketplace(
         self,

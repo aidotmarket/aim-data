@@ -151,6 +151,7 @@ class CanonicalRecord:
     canonical_row_bytes: bytes
     base_row_digest: bytes
     row: Mapping[str, Any]
+    source_index: int | None = None
 
 
 def _field_from_value(value: LogicalField | Mapping[str, Any]) -> LogicalField:
@@ -383,6 +384,7 @@ def canonicalize_row(
     row: Mapping[str, Any],
     *,
     schema_digest: bytes | None = None,
+    source_index: int | None = None,
 ) -> CanonicalRecord:
     fields = normalize_schema(schema)
     if not isinstance(row, Mapping):
@@ -412,7 +414,9 @@ def canonicalize_row(
     if len(digest) != 32:
         raise DatasetCanonicalizationError("invalid_schema_digest")
     base_digest = hashlib.sha256(b"aim-row-v1\0" + digest + b"\0" + canonical_bytes).digest()
-    return CanonicalRecord(canonical, canonical_bytes, base_digest, dict(row))
+    if source_index is not None and (isinstance(source_index, bool) or source_index < 0):
+        raise DatasetCanonicalizationError("invalid_source_index")
+    return CanonicalRecord(canonical, canonical_bytes, base_digest, dict(row), source_index)
 
 
 def _json_no_duplicates(text: str) -> Any:
@@ -561,8 +565,15 @@ class DatasetCanonicalizationService:
         normalized_schema = normalize_schema(schema)
         digest = compute_schema_digest(normalized_schema)
         count = 0
-        for row in iter_dataset_rows(path, file_format, normalized_schema, csv_options=csv_options):
+        for source_index, row in enumerate(
+            iter_dataset_rows(path, file_format, normalized_schema, csv_options=csv_options)
+        ):
             count += 1
-            yield canonicalize_row(normalized_schema, row, schema_digest=digest)
+            yield canonicalize_row(
+                normalized_schema,
+                row,
+                schema_digest=digest,
+                source_index=source_index,
+            )
         if count == 0:
             raise DatasetCanonicalizationError("empty_dataset")

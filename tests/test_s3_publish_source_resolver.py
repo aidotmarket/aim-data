@@ -15,6 +15,7 @@ from app.services.processing_service import ProcessingService
 from app.services.s3_publish_source_resolver import (
     NotS3PublishSource,
     S3PublishSourceResolutionError,
+    resolve_local_commitment_source,
     resolve_s3_connection_publish_source,
     resolve_s3_publish_source,
 )
@@ -23,6 +24,17 @@ from app.services.serial_store import SerialState
 
 USER_A = AuthenticatedUser(user_id="user-a", key_id="key-a", scopes=["read", "write"], valid=True)
 SERIAL_STATE = SerialState(serial_id="11111111-2222-3333-4444-555555555555")
+
+
+def test_local_commitment_source_returns_only_customer_local_path(tmp_path):
+    source = tmp_path / "dataset.ndjson"
+    source.write_text('{"id":1}\n')
+    record = type("Record", (), {"processed_path": source, "upload_path": None})()
+    processing = type("Processing", (), {"get_dataset": lambda self, dataset_id: record if dataset_id == "ds-1" else None})()
+    resolution = resolve_local_commitment_source("ds-1", processing=processing)
+    assert resolution.path == source.resolve()
+    assert resolution.file_format == "ndjson"
+    assert not hasattr(resolution, "source_credentials")
 
 
 @pytest.fixture

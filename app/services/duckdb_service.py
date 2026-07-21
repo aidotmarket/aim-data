@@ -73,6 +73,28 @@ class DuckDBService:
         if ext in self.SUPPORTED_EXTENSIONS:
             return ext[1:]  # Remove the dot
         return None
+
+    def iter_commitment_records(
+        self,
+        filepath: Path,
+        *,
+        file_format: str,
+        schema: List[Dict[str, Any]],
+        csv_options=None,
+    ):
+        """Stream the entire dataset through the versioned commitment profile.
+
+        Unlike preview/profile helpers, this path never samples and never asks
+        DuckDB to infer CSV or logical-schema options.
+        """
+        from app.services.dataset_canonicalization import DatasetCanonicalizationService
+
+        return DatasetCanonicalizationService().canonicalize_dataset(
+            filepath,
+            file_format,
+            schema,
+            csv_options=csv_options,
+        )
     
     def _register_excel(self, filepath: str) -> str:
         """Read an Excel file via pandas and register it as a DuckDB view.

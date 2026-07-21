@@ -272,6 +272,20 @@ class PIIService:
         )
         
         return results
+
+    def scan_preview_rows(self, rows, *, rights_basis, now=None):
+        """Run the closed S1294 preview policy locally using this PII engine.
+
+        The returned result contains counts and verdict metadata only; matched
+        values are never returned to a marketplace transport path.
+        """
+        from app.services.preview_content_policy import PreviewContentPolicy
+
+        return PreviewContentPolicy(pii_service=self).scan_rows(
+            rows,
+            rights_basis=rights_basis,
+            now=now,
+        )
     
     def _calculate_privacy_score(
         self, 

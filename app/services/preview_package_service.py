@@ -69,7 +69,7 @@ class PreviewPackageService:
         if len(selected_leaf_indices) > MAX_PREVIEW_ROWS:
             raise PreviewPackageError("preview_row_limit_exceeded")
         if len(set(selected_leaf_indices)) != len(selected_leaf_indices):
-            raise PreviewPackageError("duplicate_leaf_selection")
+            raise PreviewPackageError("duplicate_leaf_index")
         if proof_ids is None:
             proof_ids = [
                 uuid5(NAMESPACE_URL, f"aim-preview-proof:{commitment_id}:{index}")
@@ -138,6 +138,8 @@ class PreviewPackageService:
             "siblings",
         }
         proof_ids: set[str] = set()
+        leaf_indices: set[int] = set()
+        leaf_identities: set[tuple[str, int]] = set()
         canonical_size = 0
         tree_size: int | None = None
         for entry in entries:
@@ -174,6 +176,13 @@ class PreviewPackageService:
                 tree_size = entry_tree_size
             elif entry_tree_size != tree_size:
                 raise PreviewPackageError("preview_entry_tree_mismatch")
+            if leaf_index in leaf_indices:
+                raise PreviewPackageError("duplicate_leaf_index")
+            leaf_indices.add(leaf_index)
+            leaf_identity = (entry["base_row_digest"], ordinal)
+            if leaf_identity in leaf_identities:
+                raise PreviewPackageError("duplicate_leaf_identity")
+            leaf_identities.add(leaf_identity)
             for sibling in siblings:
                 if not isinstance(sibling, dict) or set(sibling) != {"hash", "direction"}:
                     raise PreviewPackageError("preview_sibling_shape_invalid")

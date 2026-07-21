@@ -29,10 +29,28 @@ def test_package_enforces_closed_shape_caps_and_duplicate_leaf_uniqueness():
     )
     with pytest.raises(PreviewPackageError) as duplicate:
         service.build(commitment, commitment_id=uuid4(), selected_leaf_indices=[0, 0])
-    assert duplicate.value.code == "duplicate_leaf_selection"
+    assert duplicate.value.code == "duplicate_leaf_index"
     with pytest.raises(PreviewPackageError) as count:
         service.build(_commitment(51), commitment_id=uuid4(), selected_leaf_indices=list(range(51)))
     assert count.value.code == "preview_row_limit_exceeded"
+
+
+def test_package_validation_distinguishes_leaf_index_and_leaf_identity_collisions():
+    service = PreviewPackageService()
+    package = service.build(_commitment(), commitment_id=uuid4(), selected_leaf_indices=[0, 1])
+
+    duplicate_index = json.loads(package.encoded)
+    duplicate_index["entries"][1]["leaf_index"] = duplicate_index["entries"][0]["leaf_index"]
+    with pytest.raises(PreviewPackageError) as index_error:
+        service.validate_package(duplicate_index)
+    assert index_error.value.code == "duplicate_leaf_index"
+
+    duplicate_identity = json.loads(package.encoded)
+    duplicate_identity["entries"][1]["base_row_digest"] = duplicate_identity["entries"][0]["base_row_digest"]
+    duplicate_identity["entries"][1]["duplicate_ordinal"] = duplicate_identity["entries"][0]["duplicate_ordinal"]
+    with pytest.raises(PreviewPackageError) as identity_error:
+        service.validate_package(duplicate_identity)
+    assert identity_error.value.code == "duplicate_leaf_identity"
 
 
 def test_package_rejects_combined_canonical_row_bytes_over_5120():

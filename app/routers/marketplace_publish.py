@@ -15,12 +15,12 @@ import logging
 import re
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.auth.api_key_auth import get_current_user
 from app.config import settings
@@ -30,7 +30,20 @@ from app.core.database import get_session_context
 from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
+from app.models.listing_metadata_schemas import DatasetCommitmentSubmission
+from app.services.dataset_canonicalization import CsvParseOptions, LogicalField, compute_schema_digest
+from app.services.dataset_merkle_service import DatasetMerkleService
+from app.services.duckdb_service import DuckDBService
+from app.services.marketplace_push_service import (
+    CommitmentClientValidationError,
+    MarketplacePushError,
+    MarketplacePushService,
+    build_signed_commitment_submission,
+)
+from app.services.preview_content_policy import PreviewContentPolicy, PreviewPolicyError, PreviewRightsBasis
+from app.services.preview_package_service import PreviewPackageError, PreviewPackageService
 from app.services.registration_service import ensure_vz_install_registered
+from app.services.s3_publish_source_resolver import resolve_local_commitment_source
 from app.services.listing_versioning import build_version_prefix
 from app.services.processing_service import ProcessingService, get_processing_service
 from app.services.s3_publish_source_resolver import (
@@ -79,17 +92,13 @@ class MarketplacePublishResponse(BaseModel):
     error: Optional[str] = None
 
 
-class DisclosureApprovedSample(BaseModel):
-    columns: list[str]
-    row_refs: list[str]
-    rows: list[dict[str, Any]]
-
-
 class DisclosureSnapshotProxyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     dataset_id: str = Field(..., min_length=1)
     approved_fields: dict[str, Any]
-    sample_decision: Literal["none", "approved_rows"]
-    approved_sample: Optional[DisclosureApprovedSample] = None
+    sample_decision: Literal["none"] = "none"
+    approved_sample: None = None
     ai_training_notification_ack: bool
     ai_training_notification_text: str = Field(..., min_length=1)
     license: str = Field(..., min_length=1)
@@ -101,6 +110,72 @@ class DisclosureSnapshotProxyResponse(BaseModel):
     status: str
     listing_id: str
     disclosure_version: Optional[str] = None
+
+
+class LocalCommitmentSubmitRequest(BaseModel):
+    """Local-only envelope; only ``commitment`` crosses into ai.market."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    dataset_id: str = Field(min_length=1, max_length=255)
+    logical_schema: list[dict[str, Any]] = Field(alias="schema", min_length=1, max_length=500)
+    update_cadence_days: Optional[int] = Field(default=None, ge=0)
+    commitment: DatasetCommitmentSubmission
+
+
+class CsvCommitmentOptionsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    encoding: str = Field(min_length=1, max_length=80)
+    delimiter: str = Field(min_length=1, max_length=1)
+    quotechar: str = Field(min_length=1, max_length=1)
+    header: bool
+    locale: str = Field(min_length=1, max_length=80)
+    null_token: str = Field(max_length=255)
+
+
+class PreviewRightsBasisRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    basis: str = Field(min_length=1, max_length=500)
+    public_preview_permitted: bool
+    copyright_status: Literal["seller_owned", "licensed", "public_domain"]
+    license_conflict_resolved: bool = False
+
+
+class LocalCommitmentBuildRequest(BaseModel):
+    """Closed local build inputs; selected rows are resolved by leaf index only."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    dataset_id: str = Field(min_length=1, max_length=255)
+    logical_schema: list[dict[str, Any]] = Field(alias="schema", min_length=1, max_length=500)
+    seller_dataset_version: str = Field(min_length=1, max_length=255)
+    selected_leaf_indices: Optional[list[int]] = Field(default=None, min_length=1, max_length=50)
+    selected_source_row_indices: Optional[list[int]] = Field(default=None, min_length=1, max_length=50)
+    preview_package_url: str = Field(min_length=1, max_length=2_048)
+    rights_basis: PreviewRightsBasisRequest
+    commitment_id: Optional[UUID] = None
+    previous_commitment_id: Optional[UUID] = None
+    csv_options: Optional[CsvCommitmentOptionsRequest] = None
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> "LocalCommitmentBuildRequest":
+        if (self.selected_leaf_indices is None) == (self.selected_source_row_indices is None):
+            raise ValueError("exactly_one_preview_selection_required")
+        values = self.selected_leaf_indices or self.selected_source_row_indices or []
+        if any(isinstance(value, bool) or value < 0 for value in values):
+            raise ValueError("invalid_preview_selection")
+        if len(set(values)) != len(values):
+            raise ValueError("duplicate_preview_selection")
+        return self
+
+
+class PreviewOriginValidationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(min_length=1, max_length=2_048)
+    commitment_id: UUID
 
 
 class VersionPublishEmit(BaseModel):
@@ -354,6 +429,28 @@ def _seller_auth_headers(request: Request) -> dict[str, str]:
     return {}
 
 
+async def _ensure_commitment_signer(crypto: DeviceCrypto, *, request: Request, user: Any) -> str:
+    """Resolve the registered install signer without exposing key material."""
+    store = get_serial_store()
+    incoming_auth = request.headers.get("Authorization", "")
+    incoming_bearer = incoming_auth.removeprefix("Bearer ").strip() if incoming_auth.startswith("Bearer ") else None
+    seller_id = (
+        store.state.ai_market_seller_id
+        or (user.user_id if getattr(user, "key_id", "") == "ai_market_bearer" else None)
+        or (store.state.last_status_cache or {}).get("gateway_user_id")
+    )
+    if not seller_id:
+        raise HTTPException(status_code=409, detail="seller_identity_unavailable")
+    signer_reference = await ensure_vz_install_registered(
+        crypto,
+        access_token=store.state.ai_market_access_token or incoming_bearer,
+        seller_id=str(seller_id),
+    )
+    if not signer_reference:
+        raise HTTPException(status_code=409, detail="signer_registration_unavailable")
+    return str(signer_reference)
+
+
 def _payload_hash(value: Any) -> str:
     return hashlib.sha256(_jcs_canonical_bytes(value)).hexdigest()
 
@@ -369,7 +466,6 @@ def _persist_disclosure_decision(
     last_error: Optional[str] = None,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
-    approved_sample = body.approved_sample.model_dump() if body.approved_sample else None
     existing = record.metadata.get("disclosure_decision")
     created_at = existing.get("created_at") if isinstance(existing, dict) else None
     decision = {
@@ -379,17 +475,15 @@ def _persist_disclosure_decision(
         "disclosure_version": disclosure_version,
         "approved_fields_hash": _payload_hash(body.approved_fields),
         "sample_decision": body.sample_decision,
-        "approved_sample_hash": _payload_hash(approved_sample) if approved_sample else None,
-        "approved_sample_row_count": len(approved_sample["rows"]) if approved_sample else 0,
-        "approved_sample_columns": approved_sample["columns"] if approved_sample else [],
+        "approved_sample_hash": None,
+        "approved_sample_row_count": 0,
+        "approved_sample_columns": [],
         "ai_training_notification_text": body.ai_training_notification_text,
         "license": body.license,
         "created_at": created_at or now,
         "updated_at": now,
         "last_error": last_error,
     }
-    if status == "snapshot_pending" and approved_sample:
-        decision["approved_sample_replay"] = approved_sample
     if status == "snapshot_pending":
         decision["approved_payload_replay"] = body.model_dump(exclude={"dataset_id"}, exclude_none=False)
     record.metadata["disclosure_decision"] = decision
@@ -510,6 +604,193 @@ async def create_disclosure_snapshot(
         listing_id=listing_id,
         disclosure_version=str(disclosure_version) if disclosure_version else None,
     )
+
+
+@router.post("/marketplace/listings/{listing_id}/commitments")
+async def submit_dataset_commitment(
+    listing_id: str,
+    body: LocalCommitmentSubmitRequest,
+    request: Request,
+    user=Depends(get_current_user),
+    processing: ProcessingService = Depends(get_processing_service),
+):
+    """Validate the signed commitment locally before forwarding it."""
+    if str(body.commitment.listing_id) != listing_id:
+        raise HTTPException(status_code=409, detail="commitment_listing_mismatch")
+    record = processing.get_dataset(body.dataset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="dataset_not_found")
+    if record.listing_id and str(record.listing_id) != listing_id:
+        raise HTTPException(status_code=409, detail="commitment_listing_mismatch")
+    local_version = record.metadata.get("dataset_version") or record.metadata.get("version_label")
+    if local_version is not None and str(local_version) != body.commitment.seller_dataset_version:
+        raise HTTPException(status_code=409, detail="new_commitment_required")
+    previous_submission = None
+    previous_wire = record.metadata.get("dataset_commitment_submission")
+    if isinstance(previous_wire, dict):
+        try:
+            previous_submission = DatasetCommitmentSubmission.model_validate(previous_wire)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail="local_commitment_state_invalid") from exc
+    crypto = _get_crypto()
+    _private_key, public_key, _x_private, _x_public = crypto.get_or_create_keypairs()
+    signer_reference = await _ensure_commitment_signer(crypto, request=request, user=user)
+    auth_headers = _seller_auth_headers(request)
+    if not auth_headers:
+        raise HTTPException(status_code=409, detail="seller_auth_unavailable")
+    try:
+        result = await MarketplacePushService().push_dataset_commitment(
+            body.commitment,
+            schema=[LogicalField(**item) for item in body.logical_schema],
+            public_key=public_key,
+            expected_signer_reference=str(signer_reference),
+            auth_headers=auth_headers,
+            update_cadence_days=body.update_cadence_days,
+            previous_submission=previous_submission,
+        )
+    except CommitmentClientValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.code) from exc
+    except MarketplacePushError as exc:
+        raise HTTPException(status_code=exc.status_code or 502, detail=str(exc)) from exc
+    record.metadata["dataset_commitment_submission"] = body.commitment.model_dump(mode="json")
+    record.listing_id = listing_id
+    storage_filename = record.upload_path.name if record.upload_path else record.id
+    processing._save_record(record, storage_filename)
+    return result
+
+
+@router.post("/marketplace/listings/{listing_id}/commitments/build")
+async def build_dataset_commitment(
+    listing_id: str,
+    body: LocalCommitmentBuildRequest,
+    request: Request,
+    user=Depends(get_current_user),
+    processing: ProcessingService = Depends(get_processing_service),
+):
+    """Build, scan, and sign a seller-hostable package inside AIM Data."""
+    try:
+        listing_uuid = UUID(listing_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="invalid_listing_id") from exc
+    record = processing.get_dataset(body.dataset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="dataset_not_found")
+    if record.listing_id and str(record.listing_id) != listing_id:
+        raise HTTPException(status_code=409, detail="commitment_listing_mismatch")
+    local_version = record.metadata.get("dataset_version") or record.metadata.get("version_label")
+    if local_version is not None and str(local_version) != body.seller_dataset_version:
+        raise HTTPException(status_code=409, detail="new_commitment_required")
+    previous_submission = None
+    previous_wire = record.metadata.get("dataset_commitment_submission")
+    if isinstance(previous_wire, dict):
+        try:
+            previous_submission = DatasetCommitmentSubmission.model_validate(previous_wire)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail="local_commitment_state_invalid") from exc
+
+    try:
+        logical_schema = [LogicalField(**item) for item in body.logical_schema]
+        source = resolve_local_commitment_source(body.dataset_id, processing=processing)
+        csv_options = CsvParseOptions(**body.csv_options.model_dump()) if body.csv_options else None
+        if source.file_format == "csv" and csv_options is None:
+            raise CommitmentClientValidationError("csv_options_required")
+        records = DuckDBService().iter_commitment_records(
+            source.path,
+            file_format=source.file_format,
+            schema=body.logical_schema,
+            csv_options=csv_options,
+        )
+        commitment = DatasetMerkleService().build(
+            records,
+            schema_digest=compute_schema_digest(logical_schema),
+            source_path=source.path,
+        )
+        selected_leaf_indices = body.selected_leaf_indices
+        if body.selected_source_row_indices is not None:
+            leaf_by_source_index = {
+                leaf.record.source_index: leaf.leaf_index
+                for leaf in commitment.leaves
+                if leaf.record.source_index is not None
+            }
+            try:
+                selected_leaf_indices = [
+                    leaf_by_source_index[index]
+                    for index in body.selected_source_row_indices
+                ]
+            except KeyError as exc:
+                raise CommitmentClientValidationError("source_row_index_out_of_range") from exc
+        if selected_leaf_indices is None:
+            raise CommitmentClientValidationError("preview_selection_required")
+        commitment_id = body.commitment_id or uuid4()
+        package = PreviewPackageService().build(
+            commitment,
+            commitment_id=commitment_id,
+            selected_leaf_indices=selected_leaf_indices,
+        )
+        rights = PreviewRightsBasis(**body.rights_basis.model_dump())
+        policy_result = PreviewContentPolicy().scan_rows(
+            [entry["row"] for entry in package.body["entries"]],
+            rights_basis=rights,
+        )
+        crypto = _get_crypto()
+        private_key, _public_key, _x_private, _x_public = crypto.get_or_create_keypairs()
+        signer_reference = await _ensure_commitment_signer(crypto, request=request, user=user)
+        signed_at = datetime.now(timezone.utc)
+        submission = build_signed_commitment_submission(
+            commitment=commitment,
+            schema=logical_schema,
+            package=package,
+            policy_result=policy_result,
+            listing_id=listing_uuid,
+            commitment_id=commitment_id,
+            seller_dataset_version=body.seller_dataset_version,
+            preview_package_url=body.preview_package_url,
+            signer_reference=signer_reference,
+            private_key=private_key,
+            signed_at=signed_at,
+            previous_commitment_id=body.previous_commitment_id,
+            previous_submission=previous_submission,
+            now=signed_at,
+        )
+    except (CommitmentClientValidationError, PreviewPackageError, PreviewPolicyError) as exc:
+        raise HTTPException(status_code=422, detail=exc.code) from exc
+    except S3PublishSourceResolutionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        code = getattr(exc, "code", "commitment_build_invalid")
+        raise HTTPException(status_code=422, detail=code) from exc
+
+    return {
+        "status": "built_locally",
+        "commitment": submission.model_dump(mode="json"),
+        "preview_package": package.body,
+        "preview_package_media_type": "application/vnd.aim.preview+json",
+        "preview_package_bytes": len(package.encoded),
+        "canonical_row_bytes": package.canonical_row_bytes,
+        "leaf_count": commitment.leaf_count,
+    }
+
+
+@router.post("/marketplace/preview-origins/validate")
+async def validate_preview_origin(
+    body: PreviewOriginValidationRequest,
+    _user=Depends(get_current_user),
+):
+    """Fetch the package from AIM Data, never from ai.market infrastructure."""
+    try:
+        package = await PreviewPackageService().validate_origin(
+            body.url,
+            expected_commitment_id=body.commitment_id,
+        )
+    except PreviewPackageError as exc:
+        raise HTTPException(status_code=422, detail=exc.code) from exc
+    return {
+        "status": "passed",
+        "profile": package.body["profile"],
+        "entry_count": len(package.body["entries"]),
+        "canonical_row_bytes": package.canonical_row_bytes,
+        "package_bytes": len(package.encoded),
+    }
 
 
 @router.post("/marketplace/versions/publish", response_model=MarketplaceVersionPublishResponse)
