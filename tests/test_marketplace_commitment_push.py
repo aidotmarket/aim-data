@@ -364,6 +364,17 @@ async def test_local_build_route_reads_full_dataset_and_returns_hostable_package
         "PreviewContentPolicy",
         lambda: PreviewContentPolicy(require_presidio=False),
     )
+    original_iter_commitment_records = marketplace_publish.DuckDBService.iter_commitment_records
+
+    def iter_commitment_records_with_parsed_schema(service, filepath, **kwargs):
+        assert all(isinstance(field, marketplace_publish.LogicalField) for field in kwargs["schema"])
+        return original_iter_commitment_records(service, filepath, **kwargs)
+
+    monkeypatch.setattr(
+        marketplace_publish.DuckDBService,
+        "iter_commitment_records",
+        iter_commitment_records_with_parsed_schema,
+    )
     body = marketplace_publish.LocalCommitmentBuildRequest.model_validate(
         {
             "dataset_id": "ds-1",
@@ -403,6 +414,64 @@ async def test_local_build_route_reads_full_dataset_and_returns_hostable_package
     assert "first safe row" not in wire_text
     assert "second safe row" not in wire_text
     assert str(source) not in wire_text
+
+
+@pytest.mark.asyncio
+async def test_local_build_route_rejects_ambiguous_csv_null_token_before_parsing(monkeypatch, tmp_path):
+    source = tmp_path / "customer.csv"
+    source.write_text('id,label\n1,""\n', encoding="utf-8")
+    listing_id = uuid4()
+    record = SimpleNamespace(
+        processed_path=None,
+        upload_path=source,
+        listing_id=str(listing_id),
+        metadata={},
+    )
+    processing = SimpleNamespace(get_dataset=lambda dataset_id: record if dataset_id == "ds-1" else None)
+    body = marketplace_publish.LocalCommitmentBuildRequest.model_validate(
+        {
+            "dataset_id": "ds-1",
+            "schema": SCHEMA,
+            "seller_dataset_version": "v1",
+            "selected_source_row_indices": [0],
+            "selected_base_row_digests": [encode_base64url(b"x" * 32)],
+            "preview_package_url": "https://seller.example/preview.json",
+            "rights_basis": {
+                "basis": "seller owned",
+                "public_preview_permitted": True,
+                "copyright_status": "seller_owned",
+            },
+            "csv_options": {
+                "encoding": "utf-8",
+                "delimiter": ",",
+                "quotechar": "\"",
+                "header": True,
+                "locale": "C",
+                "null_token": "",
+            },
+        }
+    )
+
+    def parsing_must_not_start(*_args, **_kwargs):
+        raise AssertionError("invalid CSV options must fail at the route boundary")
+
+    monkeypatch.setattr(
+        marketplace_publish.DuckDBService,
+        "iter_commitment_records",
+        parsing_must_not_start,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await marketplace_publish.build_dataset_commitment(
+            str(listing_id),
+            body,
+            SimpleNamespace(headers={}),
+            user=SimpleNamespace(user_id="seller-1", key_id="ai_market_bearer"),
+            processing=processing,
+        )
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "ambiguous_csv_null_token"
 
 
 @pytest.mark.asyncio

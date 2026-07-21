@@ -774,12 +774,14 @@ async def build_dataset_commitment(
         logical_schema = _parse_logical_schema(body.logical_schema)
         source = resolve_local_commitment_source(body.dataset_id, processing=processing)
         csv_options = CsvParseOptions(**body.csv_options.model_dump()) if body.csv_options else None
+        if csv_options is not None:
+            csv_options.validate()
         if source.file_format == "csv" and csv_options is None:
             raise CommitmentClientValidationError("csv_options_required")
         records = DuckDBService().iter_commitment_records(
             source.path,
             file_format=source.file_format,
-            schema=body.logical_schema,
+            schema=logical_schema,
             csv_options=csv_options,
         )
         commitment = DatasetMerkleService().build(

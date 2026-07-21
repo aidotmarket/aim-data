@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { datasetsApi, piiApi, type ApiDataset, type DatasetListingMetadata, type PIIScanResponse } from "@/lib/api";
-import { ListingPreparation } from "./DatasetDetail";
+import { ListingPreparation, resolvedCommitmentFormat } from "./DatasetDetail";
 
 vi.mock("@/contexts/CoPilotContext", () => ({
   useCoPilot: () => ({
@@ -91,6 +91,12 @@ afterEach(() => {
 });
 
 describe("seller listing preparation", () => {
+  it("gates CSV commitment options on the resolved format", () => {
+    expect(resolvedCommitmentFormat(listingMetadata)).toBe("csv");
+    expect(resolvedCommitmentFormat({ ...listingMetadata, file_format: "parquet" })).toBe("parquet");
+    expect(resolvedCommitmentFormat(null)).toBeNull();
+  });
+
   it("enables metadata acceptance without a draft listing id", async () => {
     vi.spyOn(piiApi, "getConfig").mockResolvedValue({
       dataset_id: "ds-1",

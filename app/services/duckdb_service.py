@@ -3,7 +3,7 @@ import logging
 import re
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from typing import TYPE_CHECKING, Optional, List, Dict, Any, Mapping, Sequence, Tuple
 from datetime import datetime
 
 import pandas as pd
@@ -11,6 +11,9 @@ import pyarrow.parquet as pq
 
 from app.config import settings
 from app.utils.sanitization import sql_quote_literal
+
+if TYPE_CHECKING:
+    from app.services.dataset_canonicalization import LogicalField
 
 _log = logging.getLogger(__name__)
 
@@ -79,7 +82,7 @@ class DuckDBService:
         filepath: Path,
         *,
         file_format: str,
-        schema: List[Dict[str, Any]],
+        schema: Sequence["LogicalField | Mapping[str, Any]"],
         csv_options=None,
     ):
         """Stream the entire dataset through the versioned commitment profile.

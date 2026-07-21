@@ -94,6 +94,40 @@ def test_csv_json_ndjson_and_parquet_parse_to_equal_records(tmp_path):
     assert [record.base_row_digest for record in parquet_records] == expected
 
 
+def test_csv_empty_null_token_fails_closed_instead_of_collapsing_empty_strings(tmp_path):
+    path = tmp_path / "ambiguous.csv"
+    path.write_text('value\n""\n\n', encoding="utf-8")
+    schema = [{"name": "value", "type": "string", "nullable": True, "type_parameters": {}}]
+
+    with pytest.raises(DatasetCanonicalizationError) as exc:
+        list(DatasetCanonicalizationService().canonicalize_dataset(
+            path,
+            "csv",
+            schema,
+            csv_options=CsvParseOptions("utf-8", ",", '"', True, "C", ""),
+        ))
+
+    assert exc.value.code == "ambiguous_csv_null_token"
+
+
+def test_csv_nonempty_null_token_preserves_empty_string_and_maps_exact_token(tmp_path):
+    path = tmp_path / "rows.csv"
+    path.write_text('value\n""\nNULL\n', encoding="utf-8")
+    schema = [{"name": "value", "type": "string", "nullable": True, "type_parameters": {}}]
+
+    records = list(DatasetCanonicalizationService().canonicalize_dataset(
+        path,
+        "csv",
+        schema,
+        csv_options=CsvParseOptions("utf-8", ",", '"', True, "C", "NULL"),
+    ))
+
+    assert [record.canonical_row[0][1:] for record in records] == [
+        ["string", ""],
+        ["null", None],
+    ]
+
+
 def test_parquet_physical_type_mismatch_stops_instead_of_coercing(tmp_path):
     path = tmp_path / "wrong.parquet"
     pq.write_table(pa.table({"id": ["1"]}), path)

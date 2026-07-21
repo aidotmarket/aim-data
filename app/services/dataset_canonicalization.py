@@ -143,6 +143,12 @@ class CsvParseOptions:
             raise DatasetCanonicalizationError("csv_options_required")
         if len(self.delimiter) != 1 or len(self.quotechar) != 1 or self.delimiter == self.quotechar:
             raise DatasetCanonicalizationError("invalid_csv_dialect")
+        if not isinstance(self.null_token, str) or not self.null_token:
+            # csv.reader intentionally erases whether an empty field was
+            # quoted.  An empty null token would therefore collapse both an
+            # empty string and NULL to None, so reject the profile instead of
+            # producing a publishable but ambiguous commitment.
+            raise DatasetCanonicalizationError("ambiguous_csv_null_token")
 
 
 @dataclass(frozen=True)

@@ -188,6 +188,11 @@ function getPrimaryCategory(metadata: DatasetListingMetadata | null): string {
     : "other";
 }
 
+export function resolvedCommitmentFormat(metadata: DatasetListingMetadata | null): string | null {
+  const fileFormat = metadata?.file_format?.trim().toLowerCase();
+  return fileFormat || null;
+}
+
 function getPiiSignal(scan: PIIScanResponse | null, failed: boolean): ListingStepState {
   if (failed) return "not_run";
   if (!scan) return "pending";
@@ -872,6 +877,7 @@ export function ListingPreparation({
     (_row, index) => selectedPreviewRowRefs.includes(approvedSample.row_refs[index])
   ) ?? [];
   const selectedCanonicalRowBytes = canonicalRowsByteLength(selectedPreviewRows);
+  const commitmentFormat = resolvedCommitmentFormat(metadata);
 
   const handleBuildCommitment = async () => {
     if (!commitmentListingId) {
@@ -925,7 +931,7 @@ export function ListingPreparation({
           copyright_status: previewCopyrightStatus,
           license_conflict_resolved: previewLicenseConflictResolved,
         },
-        csv_options: dataset.file_type.toLowerCase() === "csv" ? {
+        csv_options: commitmentFormat === "csv" ? {
           encoding: "utf-8",
           delimiter: ",",
           quotechar: '"',
@@ -1409,10 +1415,10 @@ export function ListingPreparation({
                       </Label>
                     </div>
                   ) : null}
-                  {dataset.file_type.toLowerCase() === "csv" ? (
+                  {commitmentFormat === "csv" ? (
                     <p className="rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
-                      Explicit CSV profile: UTF-8, comma delimiter, double-quote quoting, header present,
-                      C locale, and NULL as the null token. A different source profile fails closed.
+                      Resolved CSV source: the parser uses UTF-8, comma delimiters, double-quote quoting,
+                      and a header. The exact token NULL is parsed as null; empty fields remain empty strings.
                     </p>
                   ) : null}
                   {preparedSample.truncatedColumns ? (
