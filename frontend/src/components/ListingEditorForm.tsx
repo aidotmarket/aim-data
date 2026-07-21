@@ -1,4 +1,5 @@
 import { DollarSign, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ interface ListingEditorFormProps {
   onTagInputChange: (value: string) => void;
   priceMin?: number;
   disabled?: boolean;
+  commitmentPreviewTools?: ReactNode;
 }
 
 const categories = [
@@ -50,6 +52,7 @@ export function ListingEditorForm({
   onTagInputChange,
   priceMin = 25,
   disabled = false,
+  commitmentPreviewTools,
 }: ListingEditorFormProps) {
   const update = (patch: Partial<ListingEditorValue>) => onChange({ ...value, ...patch });
 
@@ -174,6 +177,8 @@ export function ListingEditorForm({
           </div>
         ) : null}
       </div>
+
+      {commitmentPreviewTools}
     </div>
   );
 }

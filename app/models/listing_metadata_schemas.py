@@ -41,6 +41,7 @@ class ListingMetadata(BaseModel):
 MAX_TREE_SIZE = (1 << 63) - 1
 MAX_PROOF_SIBLINGS = 63
 MAX_PREVIEW_PROOFS = 50
+SIGNED_AT_MAX_CLOCK_SKEW_SECONDS = 300
 FORBIDDEN_COMMITMENT_KEYS = {
     "row",
     "rows",
@@ -184,7 +185,9 @@ class DatasetCommitmentSubmission(ClosedCommitmentModel):
     aim_data_signer_reference: str = Field(min_length=1, max_length=255)
     signature_algorithm: Literal["ed25519"] = "ed25519"
     seller_signature: str
-    signed_at: datetime
+    signed_at: datetime = Field(
+        description="UTC signing time; client validation permits at most 300 seconds of positive clock skew"
+    )
     proofs: List[DatasetPreviewProofSubmission] = Field(default_factory=list, max_length=MAX_PREVIEW_PROOFS)
 
     _signed_at_utc = field_validator("signed_at")(_utc)

@@ -79,7 +79,7 @@ describe("disclosure payload builder", () => {
     expect(payload.ai_training_notification_text).toBe(AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY);
   });
 
-  it("approved_rows includes only displayed columns and rows with deterministic refs", () => {
+  it("keeps candidate rows local with deterministic refs", () => {
     const prepared = prepareDisclosureSample([
       { a: 1, b: "x", hidden: "not-hidden-until-column-truncation" },
       { a: 2, b: "y", hidden: "not-hidden-until-column-truncation" },
@@ -95,15 +95,28 @@ describe("disclosure payload builder", () => {
     });
   });
 
-  it("truncates over 100 rows and over 25 columns before submit", () => {
-    const wideRow = Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`c${index}`, index]));
+  it("truncates over 50 rows and over 256 review fields before local package construction", () => {
+    const wideRow = Object.fromEntries(Array.from({ length: 260 }, (_, index) => [`c${index}`, ""]));
     const rows = Array.from({ length: 110 }, () => wideRow);
     const prepared = prepareDisclosureSample(rows);
 
-    expect(prepared.sample?.rows).toHaveLength(100);
-    expect(prepared.sample?.columns).toHaveLength(25);
+    expect(prepared.sample?.rows.length).toBeLessThanOrEqual(50);
+    expect(prepared.sample?.columns).toHaveLength(256);
     expect(prepared.truncatedRows).toBe(true);
     expect(prepared.truncatedColumns).toBe(true);
+    expect(prepared.truncatedForBytes).toBe(true);
+    expect(prepared.sizeBytes).toBeLessThanOrEqual(5_120);
+  });
+
+  it("retires the legacy row-bearing disclosure wire path", () => {
+    const prepared = prepareDisclosureSample([{ safe: "value" }]);
+    expect(() => buildDisclosureSnapshotPayload({
+      approvedFields: buildApprovedMetadataDraft(form, metadata, dataset),
+      sampleDecision: "approved_rows",
+      approvedSample: prepared.sample,
+      confirmed: true,
+      sourcePublishOperationId: "op-legacy",
+    })).toThrow("legacy_row_bearing_disclosure_retired");
   });
 
   it("requires final confirmation before building acked payload", () => {

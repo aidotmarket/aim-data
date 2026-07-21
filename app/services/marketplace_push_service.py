@@ -30,6 +30,7 @@ from app.models.listing_metadata_schemas import (
     DatasetCommitmentSubmission,
     DatasetPreviewProofSubmission,
     ListingMetadata,
+    SIGNED_AT_MAX_CLOCK_SKEW_SECONDS,
 )
 from app.models.compliance_schemas import ComplianceReport
 from app.models.attestation_schemas import QualityAttestation
@@ -61,7 +62,7 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 BACKOFF_BASE = 1.0  # seconds: 1, 2, 4
 REQUEST_TIMEOUT = 30.0
-MAX_CLOCK_SKEW_SECONDS = 300
+MAX_CLOCK_SKEW_SECONDS = SIGNED_AT_MAX_CLOCK_SKEW_SECONDS
 MAX_CLOCK_SKEW = timedelta(seconds=MAX_CLOCK_SKEW_SECONDS)
 MAX_ATTESTATION_AGE = timedelta(days=90)
 

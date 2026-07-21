@@ -66,6 +66,8 @@ import {
   type DatasetStatisticsResponse,
   type DatasetReadinessResponse,
   type DatasetListingMetadata,
+  type DatasetCommitmentBuildResponse,
+  type LogicalDatasetField,
   type PIIColumnAction,
   type PIIScanResponse,
 } from "@/lib/api";
@@ -89,10 +91,13 @@ import {
   ListingEditorForm,
   type ListingEditorValue,
 } from "@/components/ListingEditorForm";
+import { CommitmentPreviewBuilder } from "@/components/CommitmentPreviewBuilder";
+import { PreviewOriginReview } from "@/components/PreviewOriginReview";
 import {
   AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY,
   buildApprovedMetadataDraft,
   buildDisclosureSnapshotPayload,
+  canonicalRowsByteLength,
   prepareDisclosureSample,
   type ApprovedMetadataDraft,
   type ApprovedSample,
@@ -216,6 +221,51 @@ const categoryOptions = [
 
 const autoPiiScanAttemptedDatasetIds = new Set<string>();
 
+function logicalCommitmentSchema(dataset: ApiDataset, metadata: DatasetListingMetadata | null): LogicalDatasetField[] {
+  const columns = metadata?.column_summary?.length
+    ? metadata.column_summary
+    : (dataset.metadata?.columns || []).map((column) => ({ ...column, null_percentage: 1 }));
+  if (!columns.length) throw new Error("commitment_schema_unavailable");
+  return columns.map((column) => {
+    const sourceType = String(column.type || "").trim().toLowerCase();
+    const decimal = sourceType.match(/decimal\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)/);
+    let type: string;
+    let type_parameters: Record<string, unknown> = {};
+    if (/^(?:u?int(?:8|16|32|64)?|tinyint|smallint|integer|bigint)$/.test(sourceType)) {
+      type = "signed_integer";
+    } else if (/^(?:bool|boolean)$/.test(sourceType)) {
+      type = "boolean";
+    } else if (decimal) {
+      type = "decimal";
+      type_parameters = { precision: Number(decimal[1]), scale: Number(decimal[2]) };
+    } else if (/^(?:string|str|object|varchar|text|utf8|large_utf8)$/.test(sourceType)) {
+      type = "string";
+    } else if (/^date(?:32|64)?$/.test(sourceType)) {
+      type = "date";
+    } else if (sourceType.includes("timestamp") || sourceType.includes("datetime")) {
+      type = "timestamp";
+      const timestamp_precision = sourceType.includes("ns") ? 9
+        : sourceType.includes("ms") ? 3
+          : sourceType.includes("[s]") ? 0 : 6;
+      type_parameters = { timestamp_precision };
+    } else if (/^(?:binary|bytes|blob)$/.test(sourceType)) {
+      type = "binary";
+    } else {
+      throw new Error(`unsupported_logical_type:${column.name}`);
+    }
+    return {
+      name: column.name,
+      type,
+      nullable: Number(column.null_percentage || 0) > 0,
+      type_parameters,
+    };
+  });
+}
+
+function sellerDatasetVersion(dataset: ApiDataset): string {
+  return `${dataset.id}:${dataset.updated_at}`.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 255);
+}
+
 const METADATA_REVIEW_INSIGHTS_ENABLED = false;
 // TODO: Wire this shell to the future SEO/discoverability scoring engine.
 
@@ -315,12 +365,24 @@ export function ListingPreparation({
   const [approvedMetadataDraft, setApprovedMetadataDraft] = useState<ApprovedMetadataDraft | null>(null);
   const [sampleDecision, setSampleDecision] = useState<DisclosureSampleDecision>("none");
   const [preparedSample, setPreparedSample] = useState<PreparedDisclosureSample>(() => prepareDisclosureSample([]));
+  const [selectedPreviewRowRefs, setSelectedPreviewRowRefs] = useState<string[]>([]);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState<string | null>(null);
   const [finalDisclosureConfirmed, setFinalDisclosureConfirmed] = useState(false);
   const [publishStatus, setPublishStatus] = useState<"idle" | "publish_failed" | "snapshot_pending" | "disclosure_unknown" | "complete">("idle");
   const [publishedListingId, setPublishedListingId] = useState<string | null>(dataset.listing_id ?? null);
   const [retrySnapshotPayload, setRetrySnapshotPayload] = useState<DisclosureSnapshotPayload | null>(null);
+  const [previewOriginUrl, setPreviewOriginUrl] = useState("");
+  const [previewRightsBasis, setPreviewRightsBasis] = useState("");
+  const [previewCopyrightStatus, setPreviewCopyrightStatus] = useState<"" | "seller_owned" | "licensed" | "public_domain">("");
+  const [previewPermissionConfirmed, setPreviewPermissionConfirmed] = useState(false);
+  const [previewLicenseConflictResolved, setPreviewLicenseConflictResolved] = useState(false);
+  const [commitmentBuild, setCommitmentBuild] = useState<DatasetCommitmentBuildResponse | null>(null);
+  const [commitmentBuilding, setCommitmentBuilding] = useState(false);
+  const [commitmentError, setCommitmentError] = useState<string | null>(null);
+  const [originValidationState, setOriginValidationState] = useState<"idle" | "passed" | "failed">("idle");
+  const [originValidating, setOriginValidating] = useState(false);
+  const [commitmentSubmitting, setCommitmentSubmitting] = useState(false);
 
   const datasetReady = dataset.status === "preview_ready";
   const flaggedColumns = piiScan?.column_results ?? [];
@@ -329,6 +391,7 @@ export function ListingPreparation({
   const canContinuePrivacy = Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
   const persistedPrivacySatisfied = privacyAttested || (Boolean(piiScan) && allFlaggedColumnsSaved);
   const draftListingId = initialDraftListingId ?? metadata?.listing_id ?? null;
+  const commitmentListingId = publishedListingId ?? draftListingId;
 
   useEffect(() => {
     const active = activeStep === 2 && Boolean(metadata);
@@ -506,10 +569,12 @@ export function ListingPreparation({
       .then((response) => {
         if (cancelled) return;
         setPreparedSample(prepareDisclosureSample(response.sample || []));
+        setSelectedPreviewRowRefs([]);
       })
       .catch((e) => {
         if (cancelled) return;
         setPreparedSample(prepareDisclosureSample([]));
+        setSelectedPreviewRowRefs([]);
         setSampleError(e instanceof Error ? e.message : "Could not load disclosure preview rows.");
         setSampleDecision("none");
       })
@@ -783,6 +848,145 @@ export function ListingPreparation({
   const piiFlaggedColumnNames = new Set(flaggedColumns.map((column) => column.column));
   const approvedSample: ApprovedSample | null = preparedSample.sample;
   const sampleColumnsWithPii = approvedSample?.columns.filter((column) => piiFlaggedColumnNames.has(column)) ?? [];
+  const selectedPreviewRows = approvedSample?.rows.filter(
+    (_row, index) => selectedPreviewRowRefs.includes(approvedSample.row_refs[index])
+  ) ?? [];
+  const selectedCanonicalRowBytes = canonicalRowsByteLength(selectedPreviewRows);
+
+  const handleBuildCommitment = async () => {
+    if (!commitmentListingId) {
+      setCommitmentError("listing_id_required");
+      return;
+    }
+    if (!approvedSample?.rows.length || !selectedPreviewRowRefs.length) {
+      setCommitmentError("empty_preview_selection");
+      return;
+    }
+    if (sampleColumnsWithPii.length) {
+      setCommitmentError("personal_data_detected");
+      return;
+    }
+    if (preparedSample.truncatedColumns) {
+      setCommitmentError("preview_review_incomplete");
+      return;
+    }
+    if (!previewOriginUrl.startsWith("https://")) {
+      setCommitmentError("preview_origin_https_required");
+      return;
+    }
+    if (!previewRightsBasis.trim() || !previewCopyrightStatus || !previewPermissionConfirmed) {
+      setCommitmentError("preview_rights_confirmation_required");
+      return;
+    }
+    setCommitmentBuilding(true);
+    setCommitmentError(null);
+    setCommitmentBuild(null);
+    setOriginValidationState("idle");
+    try {
+      const schema = logicalCommitmentSchema(dataset, metadata);
+      const sourceIndices = selectedPreviewRowRefs.map((reference) => Number(reference.split(":")[1]));
+      if (sourceIndices.some((index) => !Number.isSafeInteger(index) || index < 0)) {
+        throw new Error("invalid_preview_selection");
+      }
+      const result = await marketplaceApi.buildDatasetCommitment(commitmentListingId, {
+        dataset_id: dataset.id,
+        schema,
+        seller_dataset_version: sellerDatasetVersion(dataset),
+        selected_source_row_indices: sourceIndices,
+        preview_package_url: previewOriginUrl,
+        rights_basis: {
+          basis: previewRightsBasis.trim(),
+          public_preview_permitted: previewPermissionConfirmed,
+          copyright_status: previewCopyrightStatus,
+          license_conflict_resolved: previewLicenseConflictResolved,
+        },
+        csv_options: dataset.file_type.toLowerCase() === "csv" ? {
+          encoding: "utf-8",
+          delimiter: ",",
+          quotechar: '"',
+          header: true,
+          locale: "C",
+          null_token: "NULL",
+        } : null,
+      });
+      setCommitmentBuild(result);
+    } catch (error) {
+      setCommitmentError(error instanceof Error ? error.message : "commitment_build_failed");
+    } finally {
+      setCommitmentBuilding(false);
+    }
+  };
+
+  const handlePreviewOriginUrlChange = (url: string) => {
+    setPreviewOriginUrl(url);
+    setCommitmentBuild(null);
+    setOriginValidationState("idle");
+    setCommitmentError(null);
+  };
+
+  const handlePreviewRowSelection = (reference: string, selected: boolean) => {
+    setSelectedPreviewRowRefs((current) => selected
+      ? [...current, reference]
+      : current.filter((item) => item !== reference));
+    setCommitmentBuild(null);
+    setOriginValidationState("idle");
+    setCommitmentError(null);
+  };
+
+  const handleDownloadPreviewPackage = () => {
+    if (!commitmentBuild) return;
+    const blob = new Blob([JSON.stringify(commitmentBuild.preview_package)], {
+      type: commitmentBuild.preview_package_media_type,
+    });
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = `aim-preview-${commitmentBuild.commitment.commitment_id}.json`;
+    anchor.click();
+    URL.revokeObjectURL(objectUrl);
+  };
+
+  const handleValidatePreviewOrigin = async () => {
+    if (!commitmentBuild) {
+      setCommitmentError("build_commitment_before_origin_validation");
+      return;
+    }
+    setOriginValidating(true);
+    setCommitmentError(null);
+    try {
+      await marketplaceApi.validatePreviewOrigin(
+        previewOriginUrl,
+        commitmentBuild.commitment.commitment_id,
+      );
+      setOriginValidationState("passed");
+    } catch (error) {
+      setOriginValidationState("failed");
+      setCommitmentError(error instanceof Error ? error.message : "preview_origin_invalid");
+    } finally {
+      setOriginValidating(false);
+    }
+  };
+
+  const handleSubmitCommitment = async () => {
+    if (!commitmentListingId || !commitmentBuild || originValidationState !== "passed") return;
+    setCommitmentSubmitting(true);
+    setCommitmentError(null);
+    try {
+      await marketplaceApi.submitDatasetCommitment(commitmentListingId, {
+        dataset_id: dataset.id,
+        schema: logicalCommitmentSchema(dataset, metadata),
+        commitment: commitmentBuild.commitment,
+      });
+      toast({
+        title: "Commitment accepted",
+        description: "Only commitment, proof, scan, attestation, and origin metadata crossed into ai.market.",
+      });
+    } catch (error) {
+      setCommitmentError(error instanceof Error ? error.message : "commitment_submission_failed");
+    } finally {
+      setCommitmentSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -1115,13 +1319,140 @@ export function ListingPreparation({
               tagInput={tagInput}
               onTagInputChange={setTagInput}
               disabled={publishing}
+              commitmentPreviewTools={(
+                <div className="space-y-3">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="preview-rights-basis">Public preview rights basis</Label>
+                      <Input
+                        id="preview-rights-basis"
+                        value={previewRightsBasis}
+                        onChange={(event) => {
+                          setPreviewRightsBasis(event.target.value);
+                          setCommitmentBuild(null);
+                          setOriginValidationState("idle");
+                        }}
+                        placeholder="Describe ownership or license authority"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="preview-copyright-status">Copyright status</Label>
+                      <Select
+                        value={previewCopyrightStatus}
+                        onValueChange={(value: "seller_owned" | "licensed" | "public_domain") => {
+                          setPreviewCopyrightStatus(value);
+                          setCommitmentBuild(null);
+                          setOriginValidationState("idle");
+                        }}
+                      >
+                        <SelectTrigger id="preview-copyright-status"><SelectValue placeholder="Select status" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="seller_owned">Seller owned</SelectItem>
+                          <SelectItem value="licensed">Licensed</SelectItem>
+                          <SelectItem value="public_domain">Public domain</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-md border p-3">
+                    <Checkbox
+                      id="preview-permission-confirmed"
+                      checked={previewPermissionConfirmed}
+                      onCheckedChange={(checked) => {
+                        setPreviewPermissionConfirmed(checked === true);
+                        setCommitmentBuild(null);
+                        setOriginValidationState("idle");
+                      }}
+                    />
+                    <Label htmlFor="preview-permission-confirmed" className="font-normal">
+                      I confirm that these seller-selected rows may be published from my origin.
+                    </Label>
+                  </div>
+                  {previewCopyrightStatus === "licensed" ? (
+                    <div className="flex items-start gap-3 rounded-md border p-3">
+                      <Checkbox
+                        id="preview-license-conflict-resolved"
+                        checked={previewLicenseConflictResolved}
+                        onCheckedChange={(checked) => {
+                          setPreviewLicenseConflictResolved(checked === true);
+                          setCommitmentBuild(null);
+                          setOriginValidationState("idle");
+                        }}
+                      />
+                      <Label htmlFor="preview-license-conflict-resolved" className="font-normal">
+                        I confirmed that the license permits this public preview.
+                      </Label>
+                    </div>
+                  ) : null}
+                  {dataset.file_type.toLowerCase() === "csv" ? (
+                    <p className="rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
+                      Explicit CSV profile: UTF-8, comma delimiter, double-quote quoting, header present,
+                      C locale, and NULL as the null token. A different source profile fails closed.
+                    </p>
+                  ) : null}
+                  {preparedSample.truncatedColumns ? (
+                    <p role="alert" className="text-sm text-destructive">
+                      preview_review_incomplete: all fields must be visible before a row can be selected.
+                    </p>
+                  ) : null}
+                  <PreviewOriginReview
+                    url={previewOriginUrl}
+                    onUrlChange={handlePreviewOriginUrlChange}
+                    onValidate={handleValidatePreviewOrigin}
+                    validating={originValidating}
+                    validationState={originValidationState}
+                    errorCode={originValidationState === "failed" ? commitmentError : null}
+                  />
+                  <CommitmentPreviewBuilder
+                    datasetVersion={sellerDatasetVersion(dataset)}
+                    leafCount={commitmentBuild?.leaf_count ?? null}
+                    selectedRowCount={selectedPreviewRowRefs.length}
+                    canonicalRowBytes={selectedCanonicalRowBytes}
+                    merkleRoot={commitmentBuild ? String(commitmentBuild.commitment.dataset_merkle_root || "") : null}
+                    validationErrorCode={commitmentError}
+                    building={commitmentBuilding}
+                    readyToBuild={Boolean(
+                      commitmentListingId
+                      && selectedPreviewRowRefs.length
+                      && selectedCanonicalRowBytes <= 5_120
+                      && !sampleColumnsWithPii.length
+                      && !preparedSample.truncatedColumns
+                      && previewOriginUrl.startsWith("https://")
+                      && previewRightsBasis.trim()
+                      && previewCopyrightStatus
+                      && previewPermissionConfirmed
+                      && (previewCopyrightStatus !== "licensed" || previewLicenseConflictResolved)
+                    )}
+                    onBuild={handleBuildCommitment}
+                  />
+                  {!commitmentListingId ? (
+                    <p className="text-xs text-muted-foreground">Create the draft listing before building its commitment.</p>
+                  ) : null}
+                  {commitmentBuild ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="outline" onClick={handleDownloadPreviewPackage}>
+                        Save seller-hostable package
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleSubmitCommitment}
+                        disabled={originValidationState !== "passed" || commitmentSubmitting}
+                      >
+                        {commitmentSubmitting ? "Submitting commitment…" : "Submit verified commitment"}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             />
 
             <div className="space-y-3 rounded-md border p-3">
               <div>
                 <h3 className="text-sm font-medium">Public sample</h3>
                 <p className="text-xs text-muted-foreground">
-                  Choose whether real preview rows become public. The displayed set is the complete public sample.
+                  Row-bearing disclosure snapshots are retired. Preview rows may be published only through a
+                  full-dataset commitment and a seller-controlled preview origin.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1136,18 +1467,6 @@ export function ListingPreparation({
                   }}
                 >
                   No sample rows
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={sampleDecision === "approved_rows" ? "default" : "outline"}
-                  disabled={publishing || sampleLoading || !approvedSample}
-                  onClick={() => {
-                    setSampleDecision("approved_rows");
-                    setFinalDisclosureConfirmed(false);
-                  }}
-                >
-                  Publish these real sample rows
                 </Button>
               </div>
 
@@ -1167,19 +1486,21 @@ export function ListingPreparation({
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <Badge variant="outline">{approvedSample.rows.length} row{approvedSample.rows.length === 1 ? "" : "s"}</Badge>
                     <Badge variant="outline">{approvedSample.columns.length} column{approvedSample.columns.length === 1 ? "" : "s"}</Badge>
-                    {preparedSample.truncatedRows && <Badge variant="secondary">Rows truncated to public limit</Badge>}
-                    {preparedSample.truncatedColumns && <Badge variant="secondary">Columns truncated to public limit</Badge>}
-                    {preparedSample.truncatedForBytes && <Badge variant="secondary">Sample reduced to 250 KB</Badge>}
+                    {preparedSample.truncatedRows && <Badge variant="secondary">Rows truncated to 50-row package limit</Badge>}
+                    {preparedSample.truncatedColumns && <Badge variant="secondary">Columns truncated for local review</Badge>}
+                    {preparedSample.truncatedForBytes && <Badge variant="secondary">Rows reduced to 5,120 canonical bytes</Badge>}
                   </div>
                   {sampleColumnsWithPii.length > 0 && (
                     <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 text-sm">
-                      Personal-data flagged columns in this sample: {sampleColumnsWithPii.join(", ")}. Choose no sample rows or confirm the exact row content below before publishing.
+                      Personal-data flagged columns in these local candidates: {sampleColumnsWithPii.join(", ")}.
+                      They cannot be selected for a commitment preview.
                     </div>
                   )}
                   <ScrollArea className="w-full rounded-md border">
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-12">Select</TableHead>
                           {approvedSample.columns.map((column) => (
                             <TableHead key={column}>
                               <span className="inline-flex items-center gap-1">
@@ -1193,6 +1514,16 @@ export function ListingPreparation({
                       <TableBody>
                         {approvedSample.rows.map((row, index) => (
                           <TableRow key={approvedSample.row_refs[index]}>
+                            <TableCell>
+                              <Checkbox
+                                aria-label={`Select preview row ${index + 1}`}
+                                checked={selectedPreviewRowRefs.includes(approvedSample.row_refs[index])}
+                                onCheckedChange={(checked) => handlePreviewRowSelection(
+                                  approvedSample.row_refs[index],
+                                  checked === true,
+                                )}
+                              />
+                            </TableCell>
                             {approvedSample.columns.map((column) => (
                               <TableCell key={column} className="max-w-[220px] truncate">
                                 {String(row[column] ?? "")}
@@ -1217,7 +1548,7 @@ export function ListingPreparation({
                 </div>
                 <div>
                   <span className="text-muted-foreground">Sample choice</span>
-                  <p className="font-medium">{sampleDecision === "none" ? "No sample rows" : "Publish these real sample rows"}</p>
+                  <p className="font-medium">No legacy row disclosure</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Category</span>

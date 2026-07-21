@@ -2,7 +2,7 @@ import type { ApiDataset, DatasetListingMetadata } from "@/lib/api";
 import type { ListingEditorValue } from "@/components/ListingEditorForm";
 
 export const AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY =
-  "When I publish, my approved title, description, tags, category, schema, and sample-row choice become public on ai.market. They may be shared with search engines, AI assistants, HuggingFace, and other AI discovery systems. If I approve sample rows, exactly the rows shown here will be public. I understand this public listing may be used by AI-training crawlers.";
+  "When I publish, my approved title, description, tags, category, and schema become public on ai.market. Optional sample rows remain at my seller-controlled preview origin; ai.market receives only commitments, proofs, scan evidence, attestations, and the public origin reference.";
 
 export const AIM_CHANNEL_DISCLOSURE_LICENSE = "standard_marketplace";
 export const AIM_CHANNEL_DISCLOSURE_APPROVAL_SOURCE = "aim_channel";
@@ -35,8 +35,8 @@ export interface ApprovedSample {
 
 export interface DisclosureSnapshotPayload {
   approved_fields: ApprovedMetadataDraft;
-  sample_decision: DisclosureSampleDecision;
-  approved_sample: ApprovedSample | null;
+  sample_decision: "none";
+  approved_sample: null;
   ai_training_notification_ack: boolean;
   ai_training_notification_text: string;
   license: string;
@@ -52,9 +52,9 @@ export interface PreparedDisclosureSample {
   sizeBytes: number;
 }
 
-const MAX_SAMPLE_ROWS = 100;
-const MAX_SAMPLE_COLUMNS = 25;
-const MAX_SAMPLE_BYTES = 250 * 1024;
+const MAX_SAMPLE_ROWS = 50;
+const MAX_SAMPLE_COLUMNS = 256;
+const MAX_SAMPLE_BYTES = 5_120;
 
 export function buildApprovedMetadataDraft(
   form: ListingEditorValue,
@@ -106,7 +106,7 @@ export function prepareDisclosureSample(rows: Record<string, unknown>[]): Prepar
   };
 
   let truncatedForBytes = false;
-  while (byteLength(sample) > MAX_SAMPLE_BYTES && sample.rows.length > 0) {
+  while (canonicalRowsByteLength(sample.rows) > MAX_SAMPLE_BYTES && sample.rows.length > 0) {
     truncatedForBytes = true;
     candidateRows = candidateRows.slice(0, -1);
     sample = {
@@ -116,7 +116,7 @@ export function prepareDisclosureSample(rows: Record<string, unknown>[]): Prepar
     };
   }
 
-  while (byteLength(sample) > MAX_SAMPLE_BYTES && columns.length > 0) {
+  while (canonicalRowsByteLength(sample.rows) > MAX_SAMPLE_BYTES && columns.length > 0) {
     truncatedForBytes = true;
     columns = columns.slice(0, -1);
     candidateRows = projectRows(candidateRows, columns);
@@ -132,7 +132,7 @@ export function prepareDisclosureSample(rows: Record<string, unknown>[]): Prepar
     truncatedRows: rows.length > MAX_SAMPLE_ROWS,
     truncatedColumns: Object.keys(rows[0] || {}).length > MAX_SAMPLE_COLUMNS,
     truncatedForBytes,
-    sizeBytes: sample.columns.length > 0 && sample.rows.length > 0 ? byteLength(sample) : 0,
+    sizeBytes: sample.columns.length > 0 && sample.rows.length > 0 ? canonicalRowsByteLength(sample.rows) : 0,
   };
 }
 
@@ -156,13 +156,13 @@ export function buildDisclosureSnapshotPayload({
     throw new Error("No sample rows must submit approved_sample=null.");
   }
   if (sampleDecision === "approved_rows") {
-    validateApprovedSample(approvedSample);
+    throw new Error("legacy_row_bearing_disclosure_retired");
   }
 
   return {
     approved_fields: approvedFields,
-    sample_decision: sampleDecision,
-    approved_sample: sampleDecision === "approved_rows" ? approvedSample : null,
+    sample_decision: "none",
+    approved_sample: null,
     ai_training_notification_ack: true,
     ai_training_notification_text: AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY,
     license: AIM_CHANNEL_DISCLOSURE_LICENSE,
@@ -173,7 +173,7 @@ export function buildDisclosureSnapshotPayload({
 
 export function validateApprovedSample(sample: ApprovedSample | null): asserts sample is ApprovedSample {
   if (!sample) throw new Error("Approved sample rows are required.");
-  if (sample.rows.length > MAX_SAMPLE_ROWS) throw new Error("Approved sample exceeds 100 rows.");
+  if (sample.rows.length > MAX_SAMPLE_ROWS) throw new Error("Approved sample exceeds 50 rows.");
   if (sample.columns.length > MAX_SAMPLE_COLUMNS) throw new Error("Approved sample exceeds 25 columns.");
   if (sample.rows.length !== sample.row_refs.length) throw new Error("Approved sample row_refs must match rows.");
   const expected = JSON.stringify([...sample.columns].sort());
@@ -182,7 +182,7 @@ export function validateApprovedSample(sample: ApprovedSample | null): asserts s
       throw new Error("Every approved sample row must contain exactly the approved columns.");
     }
   }
-  if (byteLength(sample) > MAX_SAMPLE_BYTES) throw new Error("Approved sample exceeds 250 KB.");
+  if (canonicalRowsByteLength(sample.rows) > MAX_SAMPLE_BYTES) throw new Error("Approved sample exceeds 5,120 canonical row bytes.");
 }
 
 function projectRows(rows: Record<string, unknown>[], columns: string[]): Record<string, unknown>[] {
@@ -197,4 +197,20 @@ function projectRows(rows: Record<string, unknown>[], columns: string[]): Record
 
 function byteLength(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).length;
+}
+
+export function canonicalRowsByteLength(rows: Record<string, unknown>[]): number {
+  return rows.reduce((total, row) => total + byteLength(sortObjectKeys(row)), 0);
+}
+
+function sortObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortObjectKeys);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+        .map(([key, child]) => [key.normalize("NFC"), sortObjectKeys(child)])
+    );
+  }
+  return typeof value === "string" ? value.normalize("NFC") : value;
 }

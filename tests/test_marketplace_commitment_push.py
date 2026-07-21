@@ -8,6 +8,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from types import SimpleNamespace
 
 from app.routers import marketplace_publish
+from app.models.listing_metadata_schemas import (
+    DatasetCommitmentSubmission,
+    SIGNED_AT_MAX_CLOCK_SKEW_SECONDS,
+)
 from app.services.dataset_canonicalization import canonicalize_row, compute_schema_digest
 from app.services.dataset_merkle_service import DatasetMerkleService
 from app.services.marketplace_push_service import (
@@ -230,6 +234,8 @@ def test_clock_skew_bound_is_explicit_inclusive_and_stable():
             now=signed_at - timedelta(minutes=5, microseconds=1),
         )
     assert exc.value.code == "attestation_timestamp_in_future"
+    assert SIGNED_AT_MAX_CLOCK_SKEW_SECONDS == 300
+    assert "300 seconds" in DatasetCommitmentSubmission.model_json_schema()["properties"]["signed_at"]["description"]
 
 
 def test_pre_sign_validation_fails_before_any_signature(monkeypatch):

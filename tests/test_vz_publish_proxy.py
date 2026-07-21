@@ -734,7 +734,7 @@ async def test_disclosure_snapshot_proxy_rejects_missing_listing_id():
 
 
 @pytest.mark.asyncio
-async def test_disclosure_snapshot_proxy_persists_local_audit(monkeypatch):
+async def test_disclosure_snapshot_proxy_persists_non_content_local_audit(monkeypatch):
     record = DatasetRecord("ds-1", "customers.csv", "csv")
     record.status = ProcessingStatus.PREVIEW_READY
     processing = _Processing(record)
@@ -759,14 +759,7 @@ async def test_disclosure_snapshot_proxy_persists_local_audit(monkeypatch):
 
     await marketplace_publish.create_disclosure_snapshot(
         "listing-1",
-        _disclosure_body(
-            sample_decision="approved_rows",
-            approved_sample={
-                "columns": ["segment"],
-                "row_refs": ["preview:0"],
-                "rows": [{"segment": "enterprise"}],
-            },
-        ),
+        _disclosure_body(),
         request,
         user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
         processing=processing,
@@ -779,8 +772,20 @@ async def test_disclosure_snapshot_proxy_persists_local_audit(monkeypatch):
     assert audit["listing_id"] == "listing-1"
     assert audit["source_publish_operation_id"] == "op-1"
     assert audit["disclosure_version"] == "dsv_20260708000000_abcd1234"
-    assert audit["sample_decision"] == "approved_rows"
-    assert audit["approved_sample_row_count"] == 1
-    assert audit["approved_sample_columns"] == ["segment"]
+    assert audit["sample_decision"] == "none"
+    assert audit["approved_sample_row_count"] == 0
+    assert audit["approved_sample_columns"] == []
     assert audit["approved_fields_hash"]
-    assert audit["approved_sample_hash"]
+    assert audit["approved_sample_hash"] is None
+
+
+def test_disclosure_snapshot_contract_rejects_legacy_rows_before_network():
+    with pytest.raises(ValueError):
+        _disclosure_body(
+            sample_decision="approved_rows",
+            approved_sample={
+                "columns": ["segment"],
+                "row_refs": ["preview:0"],
+                "rows": [{"segment": "enterprise"}],
+            },
+        )

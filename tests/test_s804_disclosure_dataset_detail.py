@@ -11,7 +11,13 @@ def test_dataset_detail_keeps_three_step_disclosure_flow():
     assert "3. Listing Details and Disclosure" in source
     assert "Step 4" not in source
     assert "No sample rows" in source
-    assert "Publish these real sample rows" in source
+    assert "Publish these real sample rows" not in source
+    assert "Row-bearing disclosure snapshots are retired" in source
+    assert "seller-controlled preview origin" in source
+    assert "CommitmentPreviewBuilder" in source
+    assert "PreviewOriginReview" in source
+    assert "Select preview row" in source
+    assert "Submit verified commitment" in source
     assert "Synthetic" not in source
     assert "Listing published, disclosure snapshot pending" in source
     assert "Retry disclosure snapshot" in source
@@ -32,6 +38,6 @@ def test_confirmation_copy_contract_is_exported_verbatim():
 
     assert "export const AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY" in source
     assert "become public on ai.market" in source
-    assert "search engines, AI assistants, HuggingFace" in source
-    assert "exactly the rows shown here will be public" in source
-    assert "AI-training crawlers" in source
+    assert "seller-controlled preview origin" in source
+    assert "ai.market receives only commitments, proofs, scan evidence, attestations" in source
+    assert "exactly the rows shown here will be public" not in source

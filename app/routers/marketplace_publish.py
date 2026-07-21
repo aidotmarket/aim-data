@@ -178,6 +178,13 @@ class PreviewOriginValidationRequest(BaseModel):
     commitment_id: UUID
 
 
+def _parse_logical_schema(items: list[dict[str, Any]]) -> list[LogicalField]:
+    try:
+        return [LogicalField(**item) for item in items]
+    except (TypeError, ValueError) as exc:
+        raise CommitmentClientValidationError("invalid_schema_descriptor") from exc
+
+
 class VersionPublishEmit(BaseModel):
     """Strict allowlist for the receiver's VersionPublish contract."""
 
@@ -641,7 +648,7 @@ async def submit_dataset_commitment(
     try:
         result = await MarketplacePushService().push_dataset_commitment(
             body.commitment,
-            schema=[LogicalField(**item) for item in body.logical_schema],
+            schema=_parse_logical_schema(body.logical_schema),
             public_key=public_key,
             expected_signer_reference=str(signer_reference),
             auth_headers=auth_headers,
@@ -689,7 +696,7 @@ async def build_dataset_commitment(
             raise HTTPException(status_code=409, detail="local_commitment_state_invalid") from exc
 
     try:
-        logical_schema = [LogicalField(**item) for item in body.logical_schema]
+        logical_schema = _parse_logical_schema(body.logical_schema)
         source = resolve_local_commitment_source(body.dataset_id, processing=processing)
         csv_options = CsvParseOptions(**body.csv_options.model_dump()) if body.csv_options else None
         if source.file_format == "csv" and csv_options is None:

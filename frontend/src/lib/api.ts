@@ -463,17 +463,84 @@ export interface MarketplacePublishResponse {
 export interface DisclosureSnapshotProxyRequest {
   dataset_id: string;
   approved_fields: Record<string, unknown>;
-  sample_decision: 'none' | 'approved_rows';
-  approved_sample: {
-    columns: string[];
-    row_refs: string[];
-    rows: Record<string, unknown>[];
-  } | null;
+  sample_decision: 'none';
+  approved_sample: null;
   ai_training_notification_ack: boolean;
   ai_training_notification_text: string;
   license: string;
   approval_source: 'aim_channel';
   source_publish_operation_id: string;
+}
+
+export interface DatasetCommitmentSubmissionRequest {
+  dataset_id: string;
+  schema: Array<{
+    name: string;
+    type: string;
+    nullable: boolean;
+    type_parameters: Record<string, unknown>;
+  }>;
+  update_cadence_days?: number | null;
+  commitment: Record<string, unknown>;
+}
+
+export interface LogicalDatasetField {
+  name: string;
+  type: string;
+  nullable: boolean;
+  type_parameters: Record<string, unknown>;
+}
+
+export interface DatasetCommitmentBuildRequest {
+  dataset_id: string;
+  schema: LogicalDatasetField[];
+  seller_dataset_version: string;
+  selected_leaf_indices?: number[] | null;
+  selected_source_row_indices?: number[] | null;
+  preview_package_url: string;
+  rights_basis: {
+    basis: string;
+    public_preview_permitted: boolean;
+    copyright_status: 'seller_owned' | 'licensed' | 'public_domain';
+    license_conflict_resolved: boolean;
+  };
+  commitment_id?: string | null;
+  previous_commitment_id?: string | null;
+  csv_options?: {
+    encoding: string;
+    delimiter: string;
+    quotechar: string;
+    header: boolean;
+    locale: string;
+    null_token: string;
+  } | null;
+}
+
+export interface DatasetCommitmentBuildResponse {
+  status: 'built_locally';
+  commitment: Record<string, unknown> & { commitment_id: string };
+  preview_package: Record<string, unknown>;
+  preview_package_media_type: 'application/vnd.aim.preview+json';
+  preview_package_bytes: number;
+  canonical_row_bytes: number;
+  leaf_count: number;
+}
+
+export interface PreviewOriginValidationResponse {
+  status: 'passed';
+  profile: 'aim-preview-package-v1';
+  entry_count: number;
+  canonical_row_bytes: number;
+  package_bytes: number;
+}
+
+export interface DatasetCommitmentSubmissionResponse {
+  status: 'accepted';
+  commitment_id: string;
+  local_validation: 'passed';
+  backend_accepted: boolean;
+  transparency_sequence?: number | null;
+  checkpoint_size?: number | null;
 }
 
 export interface DisclosureSnapshotProxyResponse {
@@ -931,6 +998,63 @@ export const marketplaceApi = {
       throw new Error(message);
     }
 
+    return response.json();
+  },
+
+  submitDatasetCommitment: async (
+    listingId: string,
+    req: DatasetCommitmentSubmissionRequest
+  ): Promise<DatasetCommitmentSubmissionResponse> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const accessToken = getStoredAccessToken();
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    const response = await fetch(`${getApiUrl()}/api/marketplace/listings/${listingId}/commitments`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(req),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'commitment_submission_failed' })) as { detail?: string };
+      throw new Error(error.detail || 'commitment_submission_failed');
+    }
+    return response.json();
+  },
+
+  buildDatasetCommitment: async (
+    listingId: string,
+    req: DatasetCommitmentBuildRequest
+  ): Promise<DatasetCommitmentBuildResponse> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const accessToken = getStoredAccessToken();
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    const response = await fetch(`${getApiUrl()}/api/marketplace/listings/${listingId}/commitments/build`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(req),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'commitment_build_failed' })) as { detail?: string };
+      throw new Error(error.detail || 'commitment_build_failed');
+    }
+    return response.json();
+  },
+
+  validatePreviewOrigin: async (
+    url: string,
+    commitmentId: string
+  ): Promise<PreviewOriginValidationResponse> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const accessToken = getStoredAccessToken();
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    const response = await fetch(`${getApiUrl()}/api/marketplace/preview-origins/validate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url, commitment_id: commitmentId }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'preview_origin_invalid' })) as { detail?: string };
+      throw new Error(error.detail || 'preview_origin_invalid');
+    }
     return response.json();
   },
 };
