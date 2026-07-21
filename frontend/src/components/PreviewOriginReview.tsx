@@ -10,7 +10,6 @@ export interface PreviewOriginReviewProps {
   validationState?: "idle" | "passed" | "failed";
   errorCode?: string | null;
 }
-
 export function PreviewOriginReview({
   url,
   onUrlChange,
@@ -51,4 +50,3 @@ export function PreviewOriginReview({
     </section>
   );
 }
-
