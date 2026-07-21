@@ -4,15 +4,19 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from fastapi import HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from pydantic import ValidationError
 from types import SimpleNamespace
 
 from app.routers import marketplace_publish
+from app.core.errors.middleware import commitment_request_validation_error_handler
 from app.models.listing_metadata_schemas import (
     DatasetCommitmentSubmission,
     SIGNED_AT_MAX_CLOCK_SKEW_SECONDS,
 )
-from app.services.dataset_canonicalization import canonicalize_row, compute_schema_digest
+from app.services.dataset_canonicalization import canonicalize_row, compute_schema_digest, encode_base64url
 from app.services.dataset_merkle_service import DatasetMerkleService
 from app.services.marketplace_push_service import (
     CommitmentClientValidationError,
@@ -41,6 +45,7 @@ def _signed(*, at: datetime, version="v1", rows=None, commitment_id=None, key=No
         commitment,
         commitment_id=commitment_id,
         selected_leaf_indices=[0],
+        selected_base_row_digests=[encode_base64url(commitment.leaves[0].record.base_row_digest)],
         proof_ids=proof_ids,
     )
     policy = PreviewContentPolicy(require_presidio=False).scan_rows(
@@ -250,6 +255,7 @@ def test_pre_sign_validation_fails_before_any_signature(monkeypatch):
         commitment,
         commitment_id=commitment_id,
         selected_leaf_indices=[0],
+        selected_base_row_digests=[encode_base64url(commitment.leaves[0].record.base_row_digest)],
     )
     policy = PreviewContentPolicy(require_presidio=False).scan_rows(
         [package.body["entries"][0]["row"]],
@@ -300,6 +306,33 @@ def test_changed_dataset_version_cannot_reuse_root_payload_or_proof_ids():
     assert exc.value.code == "dataset_version_reuse"
 
 
+@pytest.mark.parametrize("code", ["schema_digest_mismatch", "dataset_version_reuse"])
+def test_conflict_commitment_codes_map_to_409_with_stable_code(code):
+    exc = marketplace_publish._commitment_http_exception(code)
+    assert exc.status_code == 409
+    assert exc.detail == code
+
+
+@pytest.mark.asyncio
+async def test_raw_content_validation_error_preserves_stable_422_envelope():
+    now = datetime(2026, 7, 21, 12, tzinfo=timezone.utc)
+    payload, _key, _package = _signed(at=now)
+    wire = payload.model_dump(mode="json")
+    wire["raw_content"] = "must-not-survive-validation"
+    try:
+        marketplace_publish.LocalCommitmentSubmitRequest.model_validate(
+            {"dataset_id": "ds-1", "schema": SCHEMA, "commitment": wire}
+        )
+    except ValidationError as exc:
+        validation_error = RequestValidationError(exc.errors())
+    else:
+        raise AssertionError("raw commitment content must fail validation")
+    request = Request({"type": "http", "method": "POST", "path": "/api/marketplace/listings/x/commitments"})
+    response = await commitment_request_validation_error_handler(request, validation_error)
+    assert response.status_code == 422
+    assert json.loads(response.body) == {"detail": "raw_content_forbidden"}
+
+
 def test_opaque_dataset_version_cannot_carry_a_source_path():
     now = datetime(2026, 7, 21, 12, tzinfo=timezone.utc)
     with pytest.raises(ValueError, match="invalid_seller_dataset_version"):
@@ -337,6 +370,9 @@ async def test_local_build_route_reads_full_dataset_and_returns_hostable_package
             "schema": SCHEMA,
             "seller_dataset_version": "v1",
             "selected_source_row_indices": [0],
+            "selected_base_row_digests": [
+                encode_base64url(canonicalize_row(SCHEMA, {"id": "1", "label": "first safe row"}).base_row_digest)
+            ],
             "preview_package_url": "https://seller.example/preview.json",
             "rights_basis": {
                 "basis": "seller owned",
@@ -367,3 +403,77 @@ async def test_local_build_route_reads_full_dataset_and_returns_hostable_package
     assert "first safe row" not in wire_text
     assert "second safe row" not in wire_text
     assert str(source) not in wire_text
+
+
+@pytest.mark.asyncio
+async def test_commitment_sample_capture_binds_reviewed_content_to_base_digest(tmp_path):
+    source = tmp_path / "customer.csv"
+    source.write_text("id,label\n1,first safe row\n2,second safe row\n", encoding="utf-8")
+    record = SimpleNamespace(processed_path=None, upload_path=source, metadata={})
+    processing = SimpleNamespace(get_dataset=lambda dataset_id: record if dataset_id == "ds-1" else None)
+    body = marketplace_publish.LocalCommitmentSampleRequest.model_validate(
+        {
+            "schema": SCHEMA,
+            "rows": [
+                {"id": 1, "label": "first safe row"},
+                {"id": 2, "label": "second safe row"},
+            ],
+        }
+    )
+    result = await marketplace_publish.capture_commitment_sample(
+        "ds-1",
+        body,
+        processing=processing,
+    )
+    assert [sample["source_row_index"] for sample in result["samples"]] == [0, 1]
+    assert all("row" not in sample for sample in result["samples"])
+    expected = canonicalize_row(SCHEMA, {"id": 1, "label": "first safe row"})
+    assert result["samples"][0]["base_row_digest"] == encode_base64url(expected.base_row_digest)
+
+
+@pytest.mark.asyncio
+async def test_local_build_rejects_sample_digest_mismatch_before_proof_assembly(tmp_path):
+    source = tmp_path / "customer.csv"
+    source.write_text("id,label\n1,first safe row\n2,second safe row\n", encoding="utf-8")
+    listing_id = uuid4()
+    record = SimpleNamespace(
+        processed_path=None,
+        upload_path=source,
+        listing_id=str(listing_id),
+        metadata={},
+    )
+    processing = SimpleNamespace(get_dataset=lambda dataset_id: record if dataset_id == "ds-1" else None)
+    wrong_reviewed_row = canonicalize_row(SCHEMA, {"id": 2, "label": "second safe row"})
+    body = marketplace_publish.LocalCommitmentBuildRequest.model_validate(
+        {
+            "dataset_id": "ds-1",
+            "schema": SCHEMA,
+            "seller_dataset_version": "v1",
+            "selected_source_row_indices": [0],
+            "selected_base_row_digests": [encode_base64url(wrong_reviewed_row.base_row_digest)],
+            "preview_package_url": "https://seller.example/preview.json",
+            "rights_basis": {
+                "basis": "seller owned",
+                "public_preview_permitted": True,
+                "copyright_status": "seller_owned",
+            },
+            "csv_options": {
+                "encoding": "utf-8",
+                "delimiter": ",",
+                "quotechar": "\"",
+                "header": True,
+                "locale": "C",
+                "null_token": "NULL",
+            },
+        }
+    )
+    with pytest.raises(HTTPException) as exc:
+        await marketplace_publish.build_dataset_commitment(
+            str(listing_id),
+            body,
+            SimpleNamespace(headers={}),
+            user=SimpleNamespace(user_id="seller-1", key_id="ai_market_bearer"),
+            processing=processing,
+        )
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "sample_row_digest_mismatch"

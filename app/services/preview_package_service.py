@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ipaddress
+import hmac
 import json
 import socket
 from dataclasses import dataclass
@@ -62,6 +63,7 @@ class PreviewPackageService:
         *,
         commitment_id: UUID | str,
         selected_leaf_indices: Sequence[int],
+        selected_base_row_digests: Sequence[str],
         proof_ids: Sequence[UUID | str] | None = None,
     ) -> PreviewPackage:
         if not selected_leaf_indices:
@@ -70,6 +72,8 @@ class PreviewPackageService:
             raise PreviewPackageError("preview_row_limit_exceeded")
         if len(set(selected_leaf_indices)) != len(selected_leaf_indices):
             raise PreviewPackageError("duplicate_leaf_index")
+        if len(selected_base_row_digests) != len(selected_leaf_indices):
+            raise PreviewPackageError("sample_row_digest_mismatch")
         if proof_ids is None:
             proof_ids = [
                 uuid5(NAMESPACE_URL, f"aim-preview-proof:{commitment_id}:{index}")
@@ -79,10 +83,20 @@ class PreviewPackageService:
             raise PreviewPackageError("proof_id_mismatch")
         entries: list[dict[str, Any]] = []
         canonical_size = 0
-        for proof_id, index in zip(proof_ids, selected_leaf_indices):
+        for proof_id, index, selected_digest in zip(
+            proof_ids,
+            selected_leaf_indices,
+            selected_base_row_digests,
+        ):
             if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < commitment.leaf_count:
                 raise PreviewPackageError("invalid_leaf_index")
             leaf = commitment.leaves[index]
+            try:
+                expected_digest = decode_base64url(selected_digest, expected_size=32)
+            except (TypeError, ValueError) as exc:
+                raise PreviewPackageError("sample_row_digest_mismatch") from exc
+            if not hmac.compare_digest(leaf.record.base_row_digest, expected_digest):
+                raise PreviewPackageError("sample_row_digest_mismatch")
             row = _public_row(leaf.record.canonical_row)
             canonical_size += len(jcs_canonical_bytes(row))
             if canonical_size > MAX_CANONICAL_ROW_BYTES:

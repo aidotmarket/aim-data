@@ -497,6 +497,7 @@ export interface DatasetCommitmentBuildRequest {
   seller_dataset_version: string;
   selected_leaf_indices?: number[] | null;
   selected_source_row_indices?: number[] | null;
+  selected_base_row_digests: string[];
   preview_package_url: string;
   rights_basis: {
     basis: string;
@@ -514,6 +515,15 @@ export interface DatasetCommitmentBuildRequest {
     locale: string;
     null_token: string;
   } | null;
+}
+
+export interface DatasetCommitmentSampleResponse {
+  dataset_id: string;
+  samples: Array<{
+    source_row_index: number;
+    base_row_digest: string;
+  }>;
+  count: number;
 }
 
 export interface DatasetCommitmentBuildResponse {
@@ -1035,6 +1045,26 @@ export const marketplaceApi = {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'commitment_build_failed' })) as { detail?: string };
       throw new Error(error.detail || 'commitment_build_failed');
+    }
+    return response.json();
+  },
+
+  getCommitmentSample: async (
+    datasetId: string,
+    schema: LogicalDatasetField[],
+    rows: Record<string, unknown>[]
+  ): Promise<DatasetCommitmentSampleResponse> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const accessToken = getStoredAccessToken();
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    const response = await fetch(`${getApiUrl()}/api/marketplace/datasets/${datasetId}/commitment-sample`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ schema, rows }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'commitment_sample_failed' })) as { detail?: string };
+      throw new Error(error.detail || 'commitment_sample_failed');
     }
     return response.json();
   },

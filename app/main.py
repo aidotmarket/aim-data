@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import faulthandler
@@ -21,7 +22,10 @@ from app.core.database import init_db, close_db
 from app.core.structured_logging import setup_logging
 from app.core.errors import AIMDataError
 from app.core.errors.registry import error_registry
-from app.core.errors.middleware import aim_data_error_handler
+from app.core.errors.middleware import (
+    aim_data_error_handler,
+    commitment_request_validation_error_handler,
+)
 from app.core.log_middleware import CorrelationMiddleware
 from app.core.issue_tracker import issue_tracker
 from app.core.resource_guards import resource_monitor_loop, ensure_log_fallback
@@ -414,6 +418,7 @@ def create_app() -> FastAPI:
 
     # BQ-123A: Structured error handler for AIMDataError
     app.add_exception_handler(AIMDataError, aim_data_error_handler)
+    app.add_exception_handler(RequestValidationError, commitment_request_validation_error_handler)
 
     # BQ-VZ-SERIAL-CLIENT: Credit wall exception handlers
     @app.exception_handler(CreditExhaustedException)

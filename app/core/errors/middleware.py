@@ -8,12 +8,27 @@ JSON error response. Unknown codes get a safe fallback.
 import logging
 
 from fastapi import Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.core.errors import AIMDataError
 from app.core.errors.registry import error_registry
 
 logger = logging.getLogger(__name__)
+
+
+async def commitment_request_validation_error_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """Preserve stable commitment codes hidden inside Pydantic validation errors."""
+    for error in exc.errors():
+        context_error = error.get("ctx", {}).get("error")
+        message = str(context_error or error.get("msg", ""))
+        if "raw_content_forbidden" in message:
+            return JSONResponse(status_code=422, content={"detail": "raw_content_forbidden"})
+    return await request_validation_exception_handler(request, exc)
 
 
 async def aim_data_error_handler(request: Request, exc: AIMDataError) -> JSONResponse:

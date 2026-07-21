@@ -366,6 +366,7 @@ export function ListingPreparation({
   const [sampleDecision, setSampleDecision] = useState<DisclosureSampleDecision>("none");
   const [preparedSample, setPreparedSample] = useState<PreparedDisclosureSample>(() => prepareDisclosureSample([]));
   const [selectedPreviewRowRefs, setSelectedPreviewRowRefs] = useState<string[]>([]);
+  const [sampleDigestByRowRef, setSampleDigestByRowRef] = useState<Record<string, string>>({});
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState<string | null>(null);
   const [finalDisclosureConfirmed, setFinalDisclosureConfirmed] = useState(false);
@@ -565,15 +566,34 @@ export function ListingPreparation({
     let cancelled = false;
     setSampleLoading(true);
     setSampleError(null);
+    let schema: LogicalDatasetField[];
+    try {
+      schema = logicalCommitmentSchema(dataset, metadata);
+    } catch (error) {
+      setPreparedSample(prepareDisclosureSample([]));
+      setSampleDigestByRowRef({});
+      setSelectedPreviewRowRefs([]);
+      setSampleError(error instanceof Error ? error.message : "commitment_schema_unavailable");
+      setSampleDecision("none");
+      setSampleLoading(false);
+      return;
+    }
     datasetsApi.getDisclosureSample(dataset.id, 100)
-      .then((response) => {
+      .then(async (response) => {
+        const reviewedRows = (response.sample || []).slice(0, 50);
+        const captured = await marketplaceApi.getCommitmentSample(dataset.id, schema, reviewedRows);
         if (cancelled) return;
-        setPreparedSample(prepareDisclosureSample(response.sample || []));
+        const rowRefs = captured.samples.map((sample) => `source:${sample.source_row_index}`);
+        setPreparedSample(prepareDisclosureSample(response.sample || [], rowRefs));
+        setSampleDigestByRowRef(Object.fromEntries(
+          captured.samples.map((sample) => [`source:${sample.source_row_index}`, sample.base_row_digest]),
+        ));
         setSelectedPreviewRowRefs([]);
       })
       .catch((e) => {
         if (cancelled) return;
         setPreparedSample(prepareDisclosureSample([]));
+        setSampleDigestByRowRef({});
         setSelectedPreviewRowRefs([]);
         setSampleError(e instanceof Error ? e.message : "Could not load disclosure preview rows.");
         setSampleDecision("none");
@@ -584,7 +604,7 @@ export function ListingPreparation({
     return () => {
       cancelled = true;
     };
-  }, [activeStep, dataset.id]);
+  }, [activeStep, dataset, metadata]);
 
   const handleApproveMetadata = () => {
     if (!metadata) return;
@@ -885,14 +905,19 @@ export function ListingPreparation({
     try {
       const schema = logicalCommitmentSchema(dataset, metadata);
       const sourceIndices = selectedPreviewRowRefs.map((reference) => Number(reference.split(":")[1]));
+      const selectedBaseRowDigests = selectedPreviewRowRefs.map((reference) => sampleDigestByRowRef[reference]);
       if (sourceIndices.some((index) => !Number.isSafeInteger(index) || index < 0)) {
         throw new Error("invalid_preview_selection");
+      }
+      if (selectedBaseRowDigests.some((digest) => !digest)) {
+        throw new Error("sample_row_digest_mismatch");
       }
       const result = await marketplaceApi.buildDatasetCommitment(commitmentListingId, {
         dataset_id: dataset.id,
         schema,
         seller_dataset_version: sellerDatasetVersion(dataset),
         selected_source_row_indices: sourceIndices,
+        selected_base_row_digests: selectedBaseRowDigests,
         preview_package_url: previewOriginUrl,
         rights_basis: {
           basis: previewRightsBasis.trim(),

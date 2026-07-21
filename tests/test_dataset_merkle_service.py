@@ -1,9 +1,20 @@
 import json
+import hashlib
 
 import pytest
 
-from app.services.dataset_canonicalization import canonicalize_row, compute_schema_digest, encode_base64url
-from app.services.dataset_merkle_service import DatasetMerkleService, verify_inclusion_proof
+from app.services.dataset_canonicalization import (
+    canonicalize_row,
+    compute_schema_digest,
+    encode_base64url,
+    jcs_canonical_bytes,
+)
+from app.services.dataset_merkle_service import (
+    DatasetMerkleService,
+    build_merkle_root,
+    compute_leaf_hash,
+    verify_inclusion_proof,
+)
 
 
 def _vector_commitment(rows=None, *, source_path=None, chunk_size=50_000):
@@ -28,10 +39,17 @@ def _vector_commitment(rows=None, *, source_path=None, chunk_size=50_000):
 
 def test_golden_root_duplicate_ordinals_and_all_proofs():
     vector, commitment = _vector_commitment()
+    assert encode_base64url(commitment.schema_digest) == vector["schema_digest"]
     assert encode_base64url(commitment.dataset_merkle_root) == vector["dataset_merkle_root"]
     assert [leaf.duplicate_ordinal for leaf in commitment.leaves] == [0, 0, 0, 1, 0]
-    for leaf in commitment.leaves:
+    for leaf, expected in zip(commitment.leaves, vector["rows"]):
         proof = commitment.proof_for_index(leaf.leaf_index)
+        assert leaf.record.canonical_row_bytes == jcs_canonical_bytes(expected["canonical_row"])
+        assert encode_base64url(leaf.record.base_row_digest) == expected["base_row_digest"]
+        assert leaf.duplicate_ordinal == expected["duplicate_ordinal"]
+        assert leaf.leaf_index == expected["leaf_index"]
+        assert encode_base64url(leaf.leaf_hash) == expected["leaf_hash"]
+        assert proof == expected["proof"]
         assert verify_inclusion_proof(
             leaf.leaf_hash, leaf.leaf_index, commitment.leaf_count, proof, commitment.dataset_merkle_root
         )
@@ -48,6 +66,16 @@ def test_reordering_matches_but_duplicate_count_value_and_membership_change_root
     assert fewer_duplicates.dataset_merkle_root != baseline.dataset_merkle_root
     assert value_changed.dataset_merkle_root != baseline.dataset_merkle_root
     assert membership_added.dataset_merkle_root != baseline.dataset_merkle_root
+    vector, _ = _vector_commitment()
+    leaves = [leaf.leaf_hash for leaf in baseline.leaves]
+    assert encode_base64url(build_merkle_root([leaf for index, leaf in enumerate(leaves) if index != 3])) == (
+        vector["root_variants"]["without_one_duplicate"]
+    )
+    changed = leaves.copy()
+    changed[0] = compute_leaf_hash(hashlib.sha256(b"changed-row").digest(), 0)
+    assert encode_base64url(build_merkle_root(changed)) == vector["root_variants"]["value_changed"]
+    added = leaves + [compute_leaf_hash(hashlib.sha256(b"added-row").digest(), 0)]
+    assert encode_base64url(build_merkle_root(added)) == vector["root_variants"]["membership_added"]
 
 
 def test_schema_change_alters_root_even_when_values_match():

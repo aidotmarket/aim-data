@@ -20,7 +20,7 @@ from uuid import UUID, uuid4
 import httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.auth.api_key_auth import get_current_user
 from app.config import settings
@@ -31,7 +31,13 @@ from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
 from app.models.listing_metadata_schemas import DatasetCommitmentSubmission
-from app.services.dataset_canonicalization import CsvParseOptions, LogicalField, compute_schema_digest
+from app.services.dataset_canonicalization import (
+    CsvParseOptions,
+    LogicalField,
+    canonicalize_row,
+    compute_schema_digest,
+    encode_base64url,
+)
 from app.services.dataset_merkle_service import DatasetMerkleService
 from app.services.duckdb_service import DuckDBService
 from app.services.marketplace_push_service import (
@@ -58,6 +64,16 @@ from sqlmodel import select
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+COMMITMENT_ERROR_STATUS = {
+    "schema_digest_mismatch": 409,
+    "dataset_version_reuse": 409,
+}
+
+
+def _commitment_http_exception(code: str) -> HTTPException:
+    """Map stable commitment codes to their public HTTP conflict class."""
+    return HTTPException(status_code=COMMITMENT_ERROR_STATUS.get(code, 422), detail=code)
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +160,7 @@ class PreviewRightsBasisRequest(BaseModel):
 
 
 class LocalCommitmentBuildRequest(BaseModel):
-    """Closed local build inputs; selected rows are resolved by leaf index only."""
+    """Closed local build inputs with content-bound seller row selections."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -153,6 +169,7 @@ class LocalCommitmentBuildRequest(BaseModel):
     seller_dataset_version: str = Field(min_length=1, max_length=255)
     selected_leaf_indices: Optional[list[int]] = Field(default=None, min_length=1, max_length=50)
     selected_source_row_indices: Optional[list[int]] = Field(default=None, min_length=1, max_length=50)
+    selected_base_row_digests: list[str] = Field(min_length=1, max_length=50)
     preview_package_url: str = Field(min_length=1, max_length=2_048)
     rights_basis: PreviewRightsBasisRequest
     commitment_id: Optional[UUID] = None
@@ -168,7 +185,30 @@ class LocalCommitmentBuildRequest(BaseModel):
             raise ValueError("invalid_preview_selection")
         if len(set(values)) != len(values):
             raise ValueError("duplicate_preview_selection")
+        if len(values) != len(self.selected_base_row_digests):
+            raise ValueError("sample_row_digest_mismatch")
         return self
+
+    @field_validator("selected_base_row_digests")
+    @classmethod
+    def validate_selected_digests(cls, values: list[str]) -> list[str]:
+        from app.services.dataset_canonicalization import decode_base64url
+
+        try:
+            for value in values:
+                decode_base64url(value, expected_size=32)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("sample_row_digest_mismatch") from exc
+        return values
+
+
+class LocalCommitmentSampleRequest(BaseModel):
+    """Local-only request for content-bound seller review candidates."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    logical_schema: list[dict[str, Any]] = Field(alias="schema", min_length=1, max_length=500)
+    rows: list[dict[str, Any]] = Field(min_length=1, max_length=50)
 
 
 class PreviewOriginValidationRequest(BaseModel):
@@ -656,7 +696,7 @@ async def submit_dataset_commitment(
             previous_submission=previous_submission,
         )
     except CommitmentClientValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.code) from exc
+        raise _commitment_http_exception(exc.code) from exc
     except MarketplacePushError as exc:
         raise HTTPException(status_code=exc.status_code or 502, detail=str(exc)) from exc
     record.metadata["dataset_commitment_submission"] = body.commitment.model_dump(mode="json")
@@ -664,6 +704,41 @@ async def submit_dataset_commitment(
     storage_filename = record.upload_path.name if record.upload_path else record.id
     processing._save_record(record, storage_filename)
     return result
+
+
+@router.post("/marketplace/datasets/{dataset_id}/commitment-sample")
+async def capture_commitment_sample(
+    dataset_id: str,
+    body: LocalCommitmentSampleRequest,
+    _user=Depends(get_current_user),
+    processing: ProcessingService = Depends(get_processing_service),
+):
+    """Capture reviewed-row digests locally; no row or digest is sent to ai.market."""
+    record = processing.get_dataset(dataset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="dataset_not_found")
+    try:
+        logical_schema = _parse_logical_schema(body.logical_schema)
+        schema_digest = compute_schema_digest(logical_schema)
+        samples = []
+        for source_row_index, row in enumerate(body.rows):
+            digest = canonicalize_row(
+                logical_schema,
+                row,
+                schema_digest=schema_digest,
+            ).base_row_digest
+            samples.append(
+                {
+                    "source_row_index": source_row_index,
+                    "base_row_digest": encode_base64url(digest),
+                }
+            )
+        return {"dataset_id": dataset_id, "samples": samples, "count": len(samples)}
+    except CommitmentClientValidationError as exc:
+        raise _commitment_http_exception(exc.code) from exc
+    except ValueError as exc:
+        code = getattr(exc, "code", "commitment_sample_invalid")
+        raise _commitment_http_exception(code) from exc
 
 
 @router.post("/marketplace/listings/{listing_id}/commitments/build")
@@ -733,6 +808,7 @@ async def build_dataset_commitment(
             commitment,
             commitment_id=commitment_id,
             selected_leaf_indices=selected_leaf_indices,
+            selected_base_row_digests=body.selected_base_row_digests,
         )
         rights = PreviewRightsBasis(**body.rights_basis.model_dump())
         policy_result = PreviewContentPolicy().scan_rows(
@@ -760,7 +836,7 @@ async def build_dataset_commitment(
             now=signed_at,
         )
     except (CommitmentClientValidationError, PreviewPackageError, PreviewPolicyError) as exc:
-        raise HTTPException(status_code=422, detail=exc.code) from exc
+        raise _commitment_http_exception(exc.code) from exc
     except S3PublishSourceResolutionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:

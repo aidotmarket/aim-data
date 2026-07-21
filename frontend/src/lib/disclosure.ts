@@ -94,14 +94,17 @@ export function buildApprovedMetadataDraft(
   };
 }
 
-export function prepareDisclosureSample(rows: Record<string, unknown>[]): PreparedDisclosureSample {
+export function prepareDisclosureSample(
+  rows: Record<string, unknown>[],
+  rowRefs?: string[],
+): PreparedDisclosureSample {
   const sourceRows = rows.slice(0, MAX_SAMPLE_ROWS);
   const sourceColumns = Object.keys(sourceRows[0] || {}).slice(0, MAX_SAMPLE_COLUMNS);
   let columns = [...sourceColumns];
   let candidateRows = projectRows(sourceRows, columns);
   let sample: ApprovedSample = {
     columns,
-    row_refs: candidateRows.map((_, index) => `preview:${index}`),
+    row_refs: candidateRows.map((_, index) => rowRefs?.[index] ?? `preview:${index}`),
     rows: candidateRows,
   };
 
@@ -111,7 +114,7 @@ export function prepareDisclosureSample(rows: Record<string, unknown>[]): Prepar
     candidateRows = candidateRows.slice(0, -1);
     sample = {
       columns,
-      row_refs: candidateRows.map((_, index) => `preview:${index}`),
+      row_refs: candidateRows.map((_, index) => rowRefs?.[index] ?? `preview:${index}`),
       rows: candidateRows,
     };
   }
@@ -122,7 +125,7 @@ export function prepareDisclosureSample(rows: Record<string, unknown>[]): Prepar
     candidateRows = projectRows(candidateRows, columns);
     sample = {
       columns,
-      row_refs: candidateRows.map((_, index) => `preview:${index}`),
+      row_refs: candidateRows.map((_, index) => rowRefs?.[index] ?? `preview:${index}`),
       rows: candidateRows,
     };
   }
