@@ -6,6 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Changed
+- Data verification is now on by default. Sellers see the paid verification flow in dataset detail without setting `DATA_VERIFICATION_ENABLED`; set `AIM_DATA_DATA_VERIFICATION_ENABLED=false` in `.env` to hide it.
+
 ### Added
 - Initial AIM Data repo forked from vectoraiz-monorepo on 2026-05-27
 - AIM Data-specific surfaces retained: buyer portal, raw file listings, marketplace publish, S3 STS connector seller flows, aim-data release pipeline

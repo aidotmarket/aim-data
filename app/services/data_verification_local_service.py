@@ -67,7 +67,7 @@ class DataVerificationLocalError(RuntimeError):
 def data_verification_enabled() -> bool:
     value = os.environ.get(
         "DATA_VERIFICATION_ENABLED",
-        os.environ.get("AIM_DATA_DATA_VERIFICATION_ENABLED", "false"),
+        os.environ.get("AIM_DATA_DATA_VERIFICATION_ENABLED", "true"),
     )
     return value.lower() in {"1", "true", "yes", "on"}
 
