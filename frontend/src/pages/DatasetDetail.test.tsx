@@ -1,10 +1,22 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { datasetsApi, marketplaceApi, piiApi, type ApiDataset, type DatasetListingMetadata, type PIIScanResponse } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY } from "@/lib/disclosure";
-import { DisclosureSnapshotFailurePanel, ListingPreparation } from "./DatasetDetail";
+import DatasetDetail, { DisclosureSnapshotFailurePanel, ListingPreparation } from "./DatasetDetail";
+
+import { MarketplaceProvider, useMarketplace } from "@/contexts/MarketplaceContext";
+
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ onboarding_required: false }) }));
+vi.mock("@/contexts/ModeContext", () => ({ useMode: () => ({ hasFeature: () => true, channel: "aim-data" }) }));
+vi.mock("@/components/PublishModal", () => ({ default: () => null }));
+vi.mock("@/components/copilot/ChatPanel", () => ({ default: () => null }));
+
+function MarketplaceProbe() {
+  const { isPublished } = useMarketplace();
+  return <div data-testid="context-published">{String(isPublished("ds-1"))}</div>;
+}
 
 vi.mock("@/hooks/use-toast", () => ({ toast: vi.fn() }));
 
@@ -82,6 +94,8 @@ function dataset(metadata: DatasetListingMetadata | null = null): ApiDataset {
 function renderPreparation(apiDataset: ApiDataset, onDatasetRefresh = vi.fn()) {
   return render(
     <MemoryRouter>
+      <MarketplaceProvider>
+      <MarketplaceProbe />
       <ListingPreparation
         dataset={apiDataset}
         onDatasetRefresh={onDatasetRefresh}
@@ -90,12 +104,22 @@ function renderPreparation(apiDataset: ApiDataset, onDatasetRefresh = vi.fn()) {
         onDelete={vi.fn()}
         isDeleting={false}
       />
+      </MarketplaceProvider>
     </MemoryRouter>
   );
 }
 
+beforeEach(() => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+  });
+});
+
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.clearAllMocks();
 });
@@ -219,6 +243,7 @@ describe("publish completion", () => {
 
     await waitFor(() => expect(onDatasetRefresh).toHaveBeenCalledWith(refreshed));
     expectSuccessToast();
+    expect(screen.getByTestId("context-published")).toHaveTextContent("true");
     expect(refetch).toHaveBeenCalledWith("ds-1");
     expect(screen.getByText("Complete")).toBeInTheDocument();
     const published = screen.getByRole("button", { name: "Published" });
@@ -267,5 +292,49 @@ describe("publish completion", () => {
     expect(screen.getByText("Complete")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Published" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Retry disclosure snapshot" })).not.toBeInTheDocument();
+  });
+});
+
+
+describe("dataset detail publication state", () => {
+  async function renderDetail(listingId: string | null) {
+    vi.spyOn(datasetsApi, "get").mockResolvedValue({ ...dataset(listingMetadata), listing_id: listingId });
+    vi.spyOn(datasetsApi, "getSample").mockResolvedValue({ dataset_id: "ds-1", sample: [], count: 0 });
+    vi.spyOn(datasetsApi, "getStatistics").mockRejectedValue(new Error("Unavailable"));
+    vi.spyOn(datasetsApi, "getReadiness").mockRejectedValue(new Error("Unavailable"));
+    vi.spyOn(piiApi, "getConfig").mockResolvedValue({
+      dataset_id: "ds-1", column_actions: {}, privacy_attested: false, updated_at: null,
+    });
+    vi.spyOn(piiApi, "getScan").mockResolvedValue(cleanScan);
+    vi.spyOn(datasetsApi, "getDisclosureSample").mockResolvedValue({ dataset_id: "ds-1", sample: [], count: 0 });
+    render(
+      <MemoryRouter initialEntries={["/datasets/ds-1"]}>
+        <MarketplaceProvider>
+          <MarketplaceProbe />
+          <Routes><Route path="/datasets/:id" element={<DatasetDetail />} /></Routes>
+        </MarketplaceProvider>
+      </MemoryRouter>
+    );
+  }
+
+  it("shows a server-published listing with an empty marketplace registry", async () => {
+    await renderDetail("listing-1");
+    expect(await screen.findByText("Published")).toBeInTheDocument();
+    expect(screen.getByTestId("context-published")).toHaveTextContent("false");
+    expect(screen.queryByRole("button", { name: "Publish to ai.market" })).not.toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Marketplace" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("Listing ID: listing-1")).toBeInTheDocument();
+    expect(screen.getByText("Published to ai.market")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View Listing" })).toHaveAttribute("href", "https://ai.market/listing/listing-1");
+    expect(screen.queryByText("Views")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Unpublish" })).not.toBeInTheDocument();
+  });
+
+  it("keeps publication available when listing_id is null", async () => {
+    await renderDetail(null);
+    fireEvent.click(await screen.findByRole("button", { name: "Accept all & continue" }));
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeInTheDocument();
+    expect(screen.queryByText("Published")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Marketplace" })).not.toBeInTheDocument();
   });
 });
