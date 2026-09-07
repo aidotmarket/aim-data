@@ -319,6 +319,7 @@ export function ListingPreparation({
   onDatasetRefresh?: (dataset: ApiDataset) => void;
 }) {
   const navigate = useNavigate();
+  const { publishDataset } = useMarketplace();
   const {
     allieAvailable,
     listingDraftUpdates,
@@ -644,6 +645,12 @@ export function ListingPreparation({
     setRetrySnapshotPayload(null);
     setDisclosureFailure(null);
     setPublishComplete(true);
+    publishDataset(dataset.id, {
+      title: form.title.trim(),
+      description: form.description.trim(),
+      tags: form.tags,
+      price: Number.parseFloat(form.priceUsd),
+    });
     toast({
       title: "Dataset published to ai.market",
       description: (
@@ -1513,8 +1520,8 @@ const DatasetDetail = () => {
   const startRow = (currentPage - 1) * rowsPerPage + 1;
   const endRow = Math.min(currentPage * rowsPerPage, dataset.rows);
 
-  // Check marketplace context for published status
-  const datasetIsPublished = isPublished(dataset.id) || dataset.marketplace?.isPublished;
+  // Server publication survives refetches and an empty local marketplace registry.
+  const datasetIsPublished = isPublished(dataset.id) || dataset.marketplace?.isPublished || Boolean(apiDataset.listing_id);
   const publishedData = getPublishedData(dataset.id);
   const marketplaceData = publishedData || dataset.marketplace;
 
@@ -2192,19 +2199,27 @@ const DatasetDetail = () => {
                     <div>
                       <h3 className="text-lg font-semibold text-foreground">Live on Marketplace</h3>
                       <p className="text-sm text-muted-foreground">
-                        Listed at ${marketplaceData?.price || 450}
+                        {marketplaceData ? `Listed at $${marketplaceData.price}` : "Published to ai.market"}
                       </p>
+                      {apiDataset.listing_id && (
+                        <p className="text-sm text-muted-foreground">Listing ID: {apiDataset.listing_id}</p>
+                      )}
                     </div>
                   </div>
-                  <Button variant="outline" className="gap-2">
-                    <ExternalLink className="w-4 h-4" />
-                    View Listing
-                  </Button>
+                  {apiDataset.listing_id && (
+                    <Button variant="outline" className="gap-2" asChild>
+                      <a href={`https://ai.market/listing/${encodeURIComponent(apiDataset.listing_id)}`} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="w-4 h-4" />
+                        View Listing
+                      </a>
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Stats Grid */}
+            {/* Stats are available only when marketplace data is known. */}
+            {marketplaceData && <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="bg-card border-border">
                 <CardContent className="p-6">
@@ -2215,7 +2230,7 @@ const DatasetDetail = () => {
                     <div>
                       <p className="text-sm text-muted-foreground">Views</p>
                       <p className="text-2xl font-bold text-foreground">
-                        {marketplaceData?.views || 145}
+                        {marketplaceData.views ?? 0}
                       </p>
                     </div>
                   </div>
@@ -2231,7 +2246,7 @@ const DatasetDetail = () => {
                     <div>
                       <p className="text-sm text-muted-foreground">Purchases</p>
                       <p className="text-2xl font-bold text-foreground">
-                        {marketplaceData?.purchases || 3}
+                        {marketplaceData.purchases ?? 0}
                       </p>
                     </div>
                   </div>
@@ -2247,7 +2262,7 @@ const DatasetDetail = () => {
                     <div>
                       <p className="text-sm text-muted-foreground">Earnings</p>
                       <p className="text-2xl font-bold text-[hsl(var(--haven-success))]">
-                        ${(marketplaceData?.earnings || 1080).toLocaleString()}
+                        ${(marketplaceData.earnings ?? 0).toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -2268,6 +2283,7 @@ const DatasetDetail = () => {
                 Unpublish
               </Button>
             </div>
+            </>}
           </TabsContent>
         )}
       </Tabs>
