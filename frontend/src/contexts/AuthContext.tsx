@@ -1,9 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
-import { authApi, getApiUrl, type AuthLoginResponse } from "@/lib/api";
+import { authApi, getApiUrl, clearAuthTokens, storeAuthTokens, getAuthMode, AUTH_CHANGED, type AuthLoginResponse } from "@/lib/api";
 
 const ACCESS_TOKEN_KEY = "aim_data_access_token";
 const REFRESH_TOKEN_KEY = "aim_data_refresh_token";
-const LEGACY_KEY = "vectoraiz_api_key";
 
 interface UserInfo {
   user_id: string;
@@ -31,6 +30,7 @@ interface AuthContextType {
   verify2fa: (code: string) => Promise<void>;
   refreshUser: () => Promise<void>;
   logout: () => void;
+  completeLogin: (data: AuthLoginResponse) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,26 +70,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
   const [pending2fa, setPending2fa] = useState<{ email: string; preAuthToken: string } | null>(null);
   const refreshUserInFlight = useRef(false);
+  const authGeneration = useRef(0);
 
   const clearAuth = useCallback(() => {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(LEGACY_KEY);
+    clearAuthTokens();
     setApiKey(null);
     setUser(null);
     setPending2fa(null);
   }, []);
 
   const completeLogin = useCallback((data: AuthLoginResponse) => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
-    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
-    setApiKey(data.access_token);
-    setUser(normalizeUser({
-      ...data.user,
-      onboarding_required: data.onboarding_required,
-      onboarding_step: data.onboarding_step ?? null,
-    }));
-    setPending2fa(null);
+    storeAuthTokens(data);
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -98,8 +89,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     refreshUserInFlight.current = true;
+    const generation = authGeneration.current;
     try {
       const data = await authApi.me();
+      if (generation !== authGeneration.current) return;
       setApiKey(localStorage.getItem(ACCESS_TOKEN_KEY));
       setUser(normalizeUser(data));
     } catch {
@@ -118,51 +111,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      const generation = authGeneration.current;
       try {
-        const meRes = await fetch(`${getApiUrl()}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-
-        if (meRes.ok) {
-          const data = await meRes.json();
-          setApiKey(accessToken);
-          setUser(normalizeUser(data));
-        } else if (meRes.status === 401) {
-          const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-          if (!refreshToken) {
-            clearAuth();
-            return;
-          }
-
-          const refreshRes = await fetch(`${getApiUrl()}/api/auth/aim-market-refresh`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ refresh_token: refreshToken }),
-          });
-
-          if (!refreshRes.ok) {
-            clearAuth();
-            return;
-          }
-
-          const tokens = await refreshRes.json();
-          localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-          localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
-          setApiKey(tokens.access_token);
-
-          const retryRes = await fetch(`${getApiUrl()}/api/auth/me`, {
-            headers: { Authorization: `Bearer ${tokens.access_token}` },
-          });
-
-          if (retryRes.ok) {
-            const data = await retryRes.json();
-            setUser(normalizeUser(data));
-          } else {
-            clearAuth();
-          }
-        } else if (!meRes.ok) {
-          clearAuth();
-        }
+        getAuthMode();
+        const data = await authApi.me();
+        if (generation !== authGeneration.current) return;
+        setApiKey(localStorage.getItem(ACCESS_TOKEN_KEY));
+        setUser(normalizeUser(data));
       } catch {
         // Network error: keep tokens so a transient outage does not sign the user out.
       } finally {
@@ -171,6 +126,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     validate();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const sync = (event: Event) => {
+      const generation = ++authGeneration.current;
+      try { getAuthMode(); } catch { return; }
+      const data = (event as CustomEvent<AuthLoginResponse>).detail;
+      setApiKey(localStorage.getItem(ACCESS_TOKEN_KEY));
+      setPending2fa(null);
+      setUser(data?.user ? normalizeUser({ ...data.user,
+        onboarding_required: data.onboarding_required, onboarding_step: data.onboarding_step }) : null);
+      if (!data && localStorage.getItem(ACCESS_TOKEN_KEY)) {
+        void authApi.me().then(me => {
+          if (generation === authGeneration.current) setUser(normalizeUser(me));
+        }).catch(() => {});
+      }
+    };
+    const storage = (event: StorageEvent) => {
+      if (event.key === null || [ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, "aim_data_auth_mode"].includes(event.key)) sync(event);
+    };
+    window.addEventListener(AUTH_CHANGED, sync);
+    window.addEventListener("storage", storage);
+    return () => {
+      window.removeEventListener(AUTH_CHANGED, sync);
+      window.removeEventListener("storage", storage);
+    };
+  }, []);
 
   useEffect(() => {
     if (!apiKey || !user) {
@@ -253,6 +234,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         verify2fa,
         refreshUser,
         logout,
+        completeLogin,
       }}
     >
       {children}

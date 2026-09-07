@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from app.routers import aim_market_oauth as routes
 from app.services import aim_market_oauth as flow
 
+REAL_READINESS = flow.readiness
+
 
 @pytest.fixture
 def client(monkeypatch):
@@ -47,7 +49,7 @@ def test_start_callback_complete_atomic(client, monkeypatch):
     assert client.get(callback).status_code == 410
     assert exchange.await_count == 1
     assert complete(client).json() == {"auth_mode": "oauth"}
-    assert complete(client).status_code == 410
+    assert complete(client).status_code == 403
     assert all("verifier" not in record for record in flow.records.values())
 
 
@@ -57,7 +59,7 @@ def test_state_cookie_nonce_cross_install_matrix(client, monkeypatch, fault):
     monkeypatch.setattr(flow, "exchange_tokens", exchange)
     if fault in ("nonce", "origin"):
         nonce = client.get(flow.PATH + "/bootstrap").json()["csrf_nonce"]
-        response = client.post(flow.PATH + "/start", json={"csrf_nonce": "wrong" if fault == "nonce" else nonce}, headers={"Origin": "http://localhost:8080" if fault == "origin" else flow.origin()})
+        response = client.post(flow.PATH + "/start", json={"csrf_nonce": "wrong" if fault == "nonce" else nonce}, headers={"Origin": "https://attacker.test" if fault == "origin" else flow.origin()})
         assert response.status_code == 403
     else:
         state = start(client)["state"][0]
@@ -162,7 +164,8 @@ def test_expired_attempt_and_completion(client, monkeypatch):
     monkeypatch.setattr(flow, "exchange_tokens", exchange)
     assert client.get(flow.PATH + "/callback", params={"code": "unused", "state": state}).status_code == 410
     exchange.assert_not_awaited()
-    assert key not in flow.records
+    assert flow.records[key]["status"] == "expired"
+    assert "verifier" not in flow.records[key]
     flow.allocate(key, {"status": "complete", "body": {"access_token": "secret"}, "http_status": 200}, ttl=-1)
     assert complete(client).status_code == 410 and key not in flow.records
 
@@ -192,3 +195,87 @@ def test_stored_transaction_contract_cannot_change(client, monkeypatch, field):
     response = client.get(flow.PATH + "/callback", params={"code": "unused", "state": state})
     assert response.status_code == 400
     exchange.assert_not_awaited()
+
+
+@pytest.mark.parametrize("binding", [None, "unknown-binding"])
+def test_complete_unknown_binding_is_403(client, binding):
+    if binding:
+        client.cookies.set(routes.cookie_name("binding"), binding)
+    response = complete(client)
+    assert response.status_code == 403 and response.json() == {"error_code": "binding_failed"}
+    assert "Max-Age=0" in response.headers["set-cookie"]
+
+
+def test_localhost_start_requires_numeric_loopback(client):
+    nonce = client.get(flow.PATH + "/bootstrap").json()["csrf_nonce"]
+    response = client.post(flow.PATH + "/start", json={"csrf_nonce": nonce},
+                           headers={"Origin": "http://localhost:8080"})
+    assert response.status_code == 400 and response.json() == {"error_code": "loopback_origin_required"}
+    assert not any("status" in record for record in flow.records.values())
+
+
+@pytest.mark.parametrize("status,detail,expected,code", [
+    (400, {"error_code": "arbitrary-secret"}, 400, "access_denied"),
+    (401, {"error_code": "identity_failed"}, 400, "access_denied"),
+    (403, "policy-secret", 400, "access_denied"),
+    (403, {"error_code": "client_disabled"}, 409, "client_disabled"),
+    (429, {"error_code": "secret"}, 503, "upstream_unavailable"),
+    (502, "secret", 502, "upstream_invalid_response"),
+    (503, "secret", 503, "upstream_unavailable"),
+    (504, "secret", 504, "upstream_timeout"),
+])
+def test_callback_bound_error_parity(client, monkeypatch, status, detail, expected, code):
+    from fastapi import HTTPException
+    exchange = AsyncMock(return_value={"access_token": "a", "refresh_token": "r"})
+    monkeypatch.setattr(flow, "exchange_tokens", exchange)
+    monkeypatch.setattr(routes, "complete_connected_login", AsyncMock(side_effect=HTTPException(status, detail)))
+    state = start(client)["state"][0]
+    url = flow.PATH + "/callback?code=secret&state=" + state
+    response = client.get(url)
+    assert response.status_code == 303 and response.headers["location"] == "/login/complete"
+    assert client.get(url).status_code == 410
+    response = complete(client)
+    assert response.status_code == expected and response.json() == {"error_code": code}
+    assert "Max-Age=0" in response.headers["set-cookie"]
+    assert exchange.await_count == 1
+
+
+def test_forged_binding_and_expired_terminal_clear(client, monkeypatch):
+    state = start(client)["state"][0]
+    binding = client.cookies[routes.cookie_name("binding")]
+    client.cookies.clear()
+    client.cookies.set(routes.cookie_name("binding"), "forged")
+    exchange = AsyncMock()
+    monkeypatch.setattr(flow, "exchange_tokens", exchange)
+    assert client.get(flow.PATH + "/callback", params={"code": "secret", "state": state}).json() == {"error_code": "invalid_callback"}
+    exchange.assert_not_awaited()
+    client.cookies.clear()
+    client.cookies.set(routes.cookie_name("binding"), binding)
+    flow.records[flow.digest(binding)]["expires"] = 0
+    response = complete(client)
+    assert response.status_code == 410 and response.json() == {"error_code": "completion_expired"}
+    assert "Max-Age=0" in response.headers["set-cookie"]
+
+
+def test_disabled_bootstrap_erases_credentials_but_preserves_bound_failure(client, monkeypatch):
+    start(client)
+    key = flow.digest(client.cookies[routes.cookie_name("binding")])
+    flow.allocate(key, {"status": "complete", "body": {"access_token": "secret"}}, ttl=60)
+    monkeypatch.setattr(flow.settings, "oauth_enabled", False)
+    monkeypatch.setattr(flow, "readiness", REAL_READINESS)
+    response = complete(client)
+    assert response.status_code == 409 and response.json() == {"error_code": "client_disabled"}
+    assert key not in flow.records and "secret" not in response.text
+
+
+@pytest.mark.parametrize("fault", ["origin", "nonce", "content_type"])
+def test_complete_csrf_error_parity_preserves_binding(client, fault):
+    start(client)
+    binding = client.cookies[routes.cookie_name("binding")]
+    nonce = client.get(flow.PATH + "/bootstrap").json()["csrf_nonce"]
+    response = client.post(flow.PATH + "/complete", json={"csrf_nonce": "wrong" if fault == "nonce" else nonce},
+        headers={"Origin": "https://attacker.test" if fault == "origin" else flow.origin(),
+                 "Content-Type": "text/plain" if fault == "content_type" else "application/json"})
+    assert response.status_code == 403 and response.json() == {"error_code": "csrf_failed"}
+    assert flow.records[flow.digest(binding)]["status"] == "pending"
+    assert "set-cookie" not in response.headers

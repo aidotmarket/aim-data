@@ -29,6 +29,7 @@ import CreateDataRequestPage from "./pages/CreateDataRequestPage";
 import DataRequestDetailPage from "./pages/DataRequestDetailPage";
 import DashboardRequestsPage from "./pages/DashboardRequestsPage";
 import SetupPage from "./pages/SetupPage";
+import LoginCompletePage from "./pages/LoginCompletePage";
 import LoginPage from "./pages/LoginPage";
 import RawFileDetail from "./pages/RawFileDetail";
 import NotFound from "./pages/NotFound";
@@ -114,6 +115,7 @@ const App = () => (
                   {/* Public routes — outside MainLayout */}
                   <Route path="/setup" element={<SetupPage />} />
                   <Route path="/login" element={<LoginPage />} />
+                  <Route path="/login/complete" element={<LoginCompletePage />} />
 
                   {/* Portal routes — own layout, own auth (BQ-VZ-SHARED-SEARCH) */}
                   <Route path="/portal" element={<PortalLayout />}>

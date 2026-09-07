@@ -20,9 +20,9 @@ def cookie(response, kind, value, request, age=600):
     response.set_cookie(cookie_name(kind), value, max_age=age, path=flow.PATH, httponly=True, samesite="lax", secure=request.url.scheme == "https" or request.url.hostname != "127.0.0.1")
 
 
-async def csrf(request):
+async def csrf(request, origin_error="origin_mismatch"):
     if request.headers.get("origin") != flow.origin():
-        raise failure(403, "origin_mismatch")
+        raise failure(403, origin_error)
     if request.headers.get("content-type", "").split(";")[0] != "application/json":
         raise failure(403, "csrf_failed")
     try:
@@ -70,6 +70,8 @@ async def bootstrap(request: Request):
 
 @router.post("/start")
 async def start(request: Request):
+    if request.headers.get("origin") == f"http://localhost:{flow.settings.oauth_loopback_port}":
+        raise failure(400, "loopback_origin_required")
     async with flow.lock:
         flow.cleanup()
         await csrf(request)
@@ -112,7 +114,9 @@ async def callback(request: Request):
     async with flow.lock:
         flow.cleanup()
         record = flow.records.get(key)
-        if record is None or record.get("status") != "pending":
+        if record is None or "status" not in record:
+            raise failure(400, "invalid_callback")
+        if record.get("status") != "pending":
             raise failure(410, "transaction_expired")
         if not hmac.compare_digest(record["state"], flow.digest(data["state"])) or record["issuer"] != flow.issuer() or record["uri"] != flow.origin() + flow.PATH + "/callback":
             raise failure(400, "invalid_callback")
@@ -131,11 +135,18 @@ async def callback(request: Request):
             result = await complete_connected_login(tokens, "oauth")
             status = 200
     except HTTPException as exc:
-        status, result = exc.status_code, exc.detail
-        if status == 403 and result.get("error_code") == "client_disabled":
-            status = 409
-        elif status not in (400, 409, 502, 503, 504):
-            status, result = 502, {"error_code": "upstream_invalid_response"}
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        if exc.status_code == 403 and detail.get("error_code") == "client_disabled":
+            status, code = 409, "client_disabled"
+        elif exc.status_code in (400, 401, 403):
+            status, code = 400, "access_denied"
+        else:
+            status = 503 if exc.status_code == 429 else exc.status_code if exc.status_code in (409, 502, 503, 504) else 502
+            code = {409: "client_disabled", 502: "upstream_invalid_response",
+                    503: "upstream_unavailable", 504: "upstream_timeout"}[status]
+        result = {"error_code": code}
+    except Exception:
+        status, result = 502, {"error_code": "upstream_invalid_response"}
     finally:
         verifier = None
         data.clear()
@@ -149,16 +160,23 @@ async def callback(request: Request):
 async def complete(request: Request):
     async with flow.lock:
         flow.cleanup()
-        await csrf(request)
+        await csrf(request, origin_error="csrf_failed")
         key = flow.digest(request.cookies.get(cookie_name("binding"), ""))
         record = flow.records.get(key)
+        if not record or "status" not in record:
+            response = JSONResponse({"error_code": "binding_failed"}, status_code=403, headers=flow.HEADERS)
+            cookie(response, "binding", "", request, age=0)
+            return response
         if not flow.settings.oauth_enabled:
             flow.records.pop(key, None)
             response = JSONResponse({"error_code": "client_disabled"}, status_code=409, headers=flow.HEADERS)
             cookie(response, "binding", "", request, age=0)
             return response
-        if not record or record.get("status") != "complete":
-            raise failure(410, "completion_expired")
+        if record.get("status") != "complete":
+            flow.records.pop(key, None)
+            response = JSONResponse({"error_code": "completion_expired"}, status_code=410, headers=flow.HEADERS)
+            cookie(response, "binding", "", request, age=0)
+            return response
         del flow.records[key]
     response = JSONResponse(record["body"], status_code=record["http_status"], headers=flow.HEADERS)
     cookie(response, "binding", "", request, age=0)

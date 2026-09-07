@@ -123,3 +123,13 @@ async def test_registration_failure_never_publish_ready(upstream, monkeypatch, t
     monkeypatch.setattr("app.services.registration_service.ensure_vz_install_registered", AsyncMock(side_effect=RuntimeError("upstream-secret")))
     result = await connected.complete_connected_login({"access_token": "a", "refresh_token": "r"}, "password")
     assert result["registration_status"] == "not_ready" and "upstream-secret" not in str(result)
+
+
+@pytest.mark.parametrize("status,expected", [(403, 403), (502, 502)])
+def test_string_policy_exception_never_leaks(upstream, monkeypatch, status, expected):
+    monkeypatch.setattr(connected, "refresh_connected_login", AsyncMock(side_effect=HTTPException(status, "policy-secret")))
+    app = FastAPI()
+    app.include_router(auth.router, prefix="/api/auth")
+    with TestClient(app) as client:
+        response = client.post("/api/auth/aim-market-refresh", json={"refresh_token": "old", "auth_mode": "oauth"})
+    assert response.status_code == expected and "policy-secret" not in response.text

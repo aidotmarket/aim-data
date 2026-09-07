@@ -47,7 +47,7 @@ async def readiness():
         async with lock:
             for key in list(records):
                 if "status" in records[key]:
-                    del records[key]
+                    records[key] = {"status": "disabled", "expires": records[key]["expires"]}
         return "local_disabled"
     try:
         async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
@@ -92,7 +92,12 @@ def cleanup():
     now = time.monotonic()
     for key in list(records):
         if records[key]["expires"] <= now:
-            del records[key]
+            if records[key].get("status") in ("pending", "exchanging", "complete"):
+                # Bounded tombstone distinguishes an expired attempt from a forged cookie.
+                # No state, verifier or completed credentials survive their TTL.
+                records[key] = {"status": "expired", "expires": now + 600}
+            else:
+                del records[key]
 
 
 async def cleanup_loop():
@@ -148,7 +153,7 @@ class AuthRoute(APIRoute):
             try:
                 response = await handler(request)
             except HTTPException as exc:
-                body = exc.detail if isinstance(exc.detail, dict) else {"detail": exc.detail}
+                body = exc.detail if isinstance(exc.detail, dict) else {"error_code": "access_denied" if exc.status_code == 403 else "upstream_invalid_response"}
                 response = JSONResponse(body, status_code=exc.status_code, headers=exc.headers)
             except Exception:
                 response = JSONResponse({"error_code": "upstream_invalid_response"}, status_code=502)
