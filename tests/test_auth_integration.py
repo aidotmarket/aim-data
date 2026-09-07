@@ -216,3 +216,39 @@ async def test_get_current_user_ws_connected_rejects_invalid_access_token(monkey
 
     assert user is None
     mock_fetch.assert_awaited_once_with("garbage.invalid.token")
+
+
+def test_local_operator_api_key_and_jwt_cookie_unchanged(monkeypatch):
+    from uuid import uuid4
+    from fastapi import FastAPI, Depends, Request
+    from app.routers import auth
+    from app.auth.api_key_auth import get_current_user
+    from app.middleware.auth import create_jwt_token
+    from app.core.database import get_session_context
+    from app.models.user import User
+    from app.models.local_auth import LocalUser
+
+    monkeypatch.setenv("VECTORAIZ_AUTH_ENABLED", "true")
+    monkeypatch.setattr(auth.settings, "oauth_enabled", False)
+    identity = str(uuid4())
+    with get_session_context() as db:
+        db.add(User(id=identity, username=identity, role="admin"))
+        db.add(LocalUser(id=identity, username=identity, password_hash="unused", role="admin"))
+        db.commit()
+    key = auth._create_api_key_for_user(identity, "regression", ["read", "write", "admin"])["full_key"]
+    app = FastAPI()
+    @app.get("/protected")
+    async def protected(request: Request, user=Depends(get_current_user)):
+        return {"id": user.user_id, "scopes": user.scopes, "role": request.state.user_role}
+    with TestClient(app) as client:
+        by_key = client.get("/protected", headers={"X-API-Key": key})
+        assert key.startswith("vz_") and by_key.status_code == 200
+        client.cookies.set("vz_session", create_jwt_token(identity, "admin"))
+        by_cookie = client.get("/protected")
+        assert by_cookie.status_code == 200 and by_cookie.json() == by_key.json()
+        assert by_cookie.json() == {"id": identity, "scopes": ["read", "write", "admin"], "role": "admin"}
+        client.cookies.set("vz_session", "invalid")
+        assert client.get("/protected").status_code == 401
+        client.cookies.clear()
+        assert client.get("/protected", headers={"X-API-Key": key + "wrong"}).status_code == 401
+        assert client.get("/protected").status_code == 401

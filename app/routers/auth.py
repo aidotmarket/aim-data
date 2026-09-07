@@ -43,7 +43,9 @@ from app.core.database import get_session
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+from app.services.aim_market_oauth import AuthRoute
+
+router = APIRouter(route_class=AuthRoute)
 
 # ---------------------------------------------------------------------------
 # Rate limiting (simple in-memory, per spec: 3/min for setup)
@@ -465,46 +467,10 @@ async def aim_market_login(
     pre_auth_token = payload.get("pre_auth_token")
     code = payload.get("code")
 
-    async def finish_token_login(data: dict) -> dict:
-        access_token = data["access_token"]
-        me = None
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            me_r = await client.get(
-                f"{settings.ai_market_url}/api/v1/auth/me",
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-        if me_r.status_code == 200:
-            me = me_r.json()
-            await _handle_ai_market_token(access_token, user_data=me, db=db)
-            if settings.keystore_passphrase:
-                try:
-                    from app.core.crypto import DeviceCrypto
-                    from app.services.registration_service import ensure_vz_install_registered
-
-                    crypto = DeviceCrypto(
-                        keystore_path=settings.keystore_path,
-                        passphrase=settings.keystore_passphrase,
-                    )
-                    crypto.get_or_create_keypairs()
-                    await ensure_vz_install_registered(
-                        crypto,
-                        access_token=access_token,
-                        seller_id=str(me.get("id") or ""),
-                    )
-                except Exception:
-                    logger.warning("VZ install registration during ai.market login failed", exc_info=True)
-
-        return {
-            "access_token": data["access_token"],
-            "refresh_token": data["refresh_token"],
-            "token_type": data.get("token_type", "bearer"),
-            "onboarding_required": data.get("onboarding_required", False),
-            "onboarding_step": data.get("onboarding_step"),
-            "user": me,
-        }
+    from app.services.connected_login import complete_connected_login, password_tokens
 
     if pre_auth_token and code:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
             try:
                 r = await client.post(
                     f"{settings.ai_market_url}/api/v1/auth/2fa/verify",
@@ -529,12 +495,12 @@ async def aim_market_login(
                 status_code=502,
                 detail="ai.market 2FA verification response missing access token",
             )
-        return await finish_token_login(data)
+        return await complete_connected_login(password_tokens(r), "password", db=db)
 
     if not email or not password:
         raise HTTPException(status_code=400, detail="email and password required")
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
         try:
             r = await client.post(
                 f"{settings.ai_market_url}/api/v1/auth/login",
@@ -550,12 +516,12 @@ async def aim_market_login(
     if r.status_code == 403:
         raise HTTPException(
             status_code=403,
-            detail=r.json().get("detail", "Account access denied"),
+            detail="Account access denied. Please retry or contact support.",
         )
     if r.status_code != 200:
         raise HTTPException(
             status_code=r.status_code,
-            detail=r.json().get("detail", "ai.market login failed"),
+            detail="ai.market login failed. Please retry or contact support.",
         )
 
     data = r.json()
@@ -568,59 +534,18 @@ async def aim_market_login(
         raise HTTPException(
             status_code=501,
             detail=(
-                "Two-factor accounts not yet supported. Please disable 2FA in your "
-                "ai.market account or contact support."
+                "Login could not be completed. Please retry or contact support."
             ),
         )
 
-    return await finish_token_login(data)
+    return await complete_connected_login(password_tokens(r), "password", db=db)
 
 
 @router.post("/aim-market-refresh", response_model=None)
 async def aim_market_refresh(payload: dict):
-    refresh_token = payload.get("refresh_token")
-    if not refresh_token:
-        raise HTTPException(status_code=400, detail="refresh_token required")
+    from app.services.connected_login import refresh_connected_login
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            r = await client.post(
-                f"{settings.ai_market_url}/api/v1/auth/refresh",
-                json={"refresh_token": refresh_token},
-            )
-        except (httpx.TimeoutException, httpx.RequestError):
-            raise HTTPException(
-                status_code=503,
-                detail="ai.market auth service unavailable",
-            )
-
-    if r.status_code != 200:
-        raise HTTPException(
-            status_code=r.status_code,
-            detail=r.json().get("detail", "Refresh failed"),
-        )
-    data = r.json()
-    access_token = data.get("access_token")
-    if access_token:
-        try:
-            me, _ = await _handle_ai_market_token(access_token)
-            if settings.keystore_passphrase:
-                from app.core.crypto import DeviceCrypto
-                from app.services.registration_service import ensure_vz_install_registered
-
-                crypto = DeviceCrypto(
-                    keystore_path=settings.keystore_path,
-                    passphrase=settings.keystore_passphrase,
-                )
-                crypto.get_or_create_keypairs()
-                await ensure_vz_install_registered(
-                    crypto,
-                    access_token=access_token,
-                    seller_id=str(me.get("id") or ""),
-                )
-        except Exception:
-            logger.warning("Failed to persist refreshed ai.market token", exc_info=True)
-    return data
+    return await refresh_connected_login(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -664,10 +589,14 @@ async def get_me(user: AuthenticatedUser = Depends(get_current_user)):
 
     with get_session_context() as session:
         mu_user = session.get(User, user.user_id)
+        if mu_user is None and user.key_id == "ai_market_bearer":
+            from sqlmodel import select
+            mu_user = session.exec(select(User).where(User.ai_market_user_id == user.user_id)).first()
+
 
     if mu_user:
         return UserInfo(
-            user_id=mu_user.id,
+            user_id=user.user_id,
             username=mu_user.username,
             display_name=mu_user.display_name,
             role=mu_user.role,
@@ -691,14 +620,7 @@ async def get_me(user: AuthenticatedUser = Depends(get_current_user)):
             created_at=local_user.created_at.isoformat() if local_user.created_at else "",
         )
 
-    # Fallback for ai.market users in connected mode
-    return UserInfo(
-        user_id=user.user_id,
-        username=user.user_id,
-        role="user",
-        is_active=True,
-        created_at="",
-    )
+    raise HTTPException(status_code=401, detail="Local account link unavailable; retry sign-in")
 
 
 # ---------------------------------------------------------------------------

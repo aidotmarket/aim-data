@@ -61,7 +61,9 @@ if [[ ! -f .env ]]; then
 POSTGRES_PASSWORD=$(generate_secret)
 VECTORAIZ_SECRET_KEY=$(generate_secret)
 VECTORAIZ_CHANNEL=aim-data
-AIM_DATA_PORT=8080
+AIM_DATA_PORT=${AIM_DATA_PORT:-8080}
+AIM_DATA_OAUTH_LOOPBACK_PORT=${AIM_DATA_PORT:-8080}
+AIM_DATA_OAUTH_ENABLED=false
 VECTORAIZ_MODE=connected
 # Per-install marketplace signing identity. Derives the keystore that signs
 # your publish requests to ai.market. Generated once on install — back up this
@@ -96,7 +98,7 @@ pass "AIM Data ${VERSION} installed"
 
 PORT=$(grep '^AIM_DATA_PORT=' .env | cut -d= -f2)
 PORT="${PORT:-8080}"
-URL="http://localhost:${PORT}"
+URL="http://127.0.0.1:${PORT}"
 
 echo
 echo -e "${GREEN}${BOLD}  ✅ AIM-Data is running${NC}"

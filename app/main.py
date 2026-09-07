@@ -148,15 +148,8 @@ async def lifespan(app: FastAPI):
     issue_tracker.reload()
     ensure_log_fallback()
 
-    # BQ-116: Co-Pilot requires single-worker mode
-    web_concurrency = int(os.environ.get("WEB_CONCURRENCY", "1"))
-    uvicorn_workers = int(os.environ.get("UVICORN_WORKERS", "1"))
-    if web_concurrency > 1 or uvicorn_workers > 1:
-        logger.critical(
-            f"Co-Pilot requires single-worker mode but "
-            f"WEB_CONCURRENCY={web_concurrency}, UVICORN_WORKERS={uvicorn_workers}"
-        )
-        raise RuntimeError("Co-Pilot requires single-worker mode")
+    from app.config import enforce_single_worker
+    enforce_single_worker()
 
     # BQ-116: File lock to prevent multiple processes
     import fcntl
@@ -299,7 +292,14 @@ async def lifespan(app: FastAPI):
 
     logger.info("API ready — all background tasks launched")
 
+    from app.services.aim_market_oauth import cleanup_loop
+    oauth_cleanup_task = asyncio.create_task(cleanup_loop())
     yield
+    oauth_cleanup_task.cancel()
+    try:
+        await oauth_cleanup_task
+    except asyncio.CancelledError:
+        pass
 
     # Shutdown
     logger.info("Shutting down AIM Data API...")
@@ -486,6 +486,8 @@ def create_app() -> FastAPI:
         tags=["portal-admin"],
         dependencies=admin_route_dependency,
     )
+    from app.routers.aim_market_oauth import router as aim_oauth_router
+    app.include_router(aim_oauth_router)
     app.include_router(
         auth_router_module.router,
         prefix="/api/auth",

@@ -1,5 +1,11 @@
 #!/bin/bash
 set -e
+for worker_setting in "${WORKERS:-1}" "${WEB_CONCURRENCY:-1}" "${UVICORN_WORKERS:-1}" "${VECTORAIZ_WORKERS:-1}"; do
+    if [ "$worker_setting" != "1" ]; then
+        echo "AIM Data requires one uvicorn worker; set WORKERS, WEB_CONCURRENCY, UVICORN_WORKERS and VECTORAIZ_WORKERS to 1" >&2
+        exit 1
+    fi
+done
 
 # Prevent thread-stack exhaustion under ARM64 emulation (OrbStack/Rosetta2)
 ulimit -s 4096 2>/dev/null || true
