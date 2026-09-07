@@ -409,6 +409,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # This guard must wrap CORS so rejected bootstrap responses are unreadable.
+    from app.services.aim_market_oauth import BootstrapOriginMiddleware
+    app.add_middleware(BootstrapOriginMiddleware)
+
     # BQ-123A: Correlation ID middleware (request_id + correlation_id in every log)
     app.add_middleware(CorrelationMiddleware)
 

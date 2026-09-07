@@ -142,7 +142,7 @@ class SensitiveAuthFilter(logging.Filter):
 class AuthRoute(APIRoute):
     def get_route_handler(self):
         handler = super().get_route_handler()
-        if "aim-market" not in self.path:
+        if not self.path.startswith(PATH + "/"):
             return handler
         async def guarded(request):
             guard = SensitiveAuthFilter()
@@ -167,3 +167,19 @@ class AuthRoute(APIRoute):
 
 
 logging.getLogger("uvicorn.access").addFilter(SensitiveAuthFilter())
+
+
+class BootstrapOriginMiddleware:
+    """Reject foreign browser bootstrap requests before CORS or nonce allocation."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"].rstrip("/") == PATH + "/bootstrap":
+            origins = [value for name, value in scope["headers"] if name.lower() == b"origin"]
+            if origins and origins != [origin().encode("ascii")]:
+                response = JSONResponse({"error_code": "origin_mismatch"}, status_code=403, headers=HEADERS)
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)

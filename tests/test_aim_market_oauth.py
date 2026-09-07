@@ -279,3 +279,82 @@ def test_complete_csrf_error_parity_preserves_binding(client, fault):
     assert response.status_code == 403 and response.json() == {"error_code": "csrf_failed"}
     assert flow.records[flow.digest(binding)]["status"] == "pending"
     assert "set-cookie" not in response.headers
+
+
+@pytest.fixture
+def real_app_client(monkeypatch):
+    from app.main import create_app
+
+    flow.records.clear()
+    monkeypatch.setattr(flow, "readiness", AsyncMock(return_value=None))
+    # No context entry: do not activate lifespan services or startup network calls.
+    client = TestClient(create_app(), base_url=flow.origin(), follow_redirects=False)
+    yield client
+    client.close()
+    flow.records.clear()
+
+
+def test_real_router_password_detail_and_callback_envelope(real_app_client, monkeypatch):
+    real_client = httpx.AsyncClient
+    def upstream(request):
+        assert request.method == "POST"
+        assert str(request.url) == flow.settings.ai_market_url + "/api/v1/auth/login"
+        return httpx.Response(401, json={"detail": "provider-secret"})
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(upstream), **kw))
+    response = real_app_client.post("/api/auth/aim-market-login", json={"email": "synthetic@example.test", "password": "wrong"})
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Incorrect email or password"}
+    response = real_app_client.get(flow.PATH + "/callback?code=provider-secret")
+    assert response.status_code == 400
+    assert response.json() == {"error_code": "invalid_callback"}
+    assert "provider-secret" not in response.text and "detail" not in response.json()
+    from fastapi import HTTPException
+    monkeypatch.setattr(flow.settings, "ai_market_url", "https://api.ai.market")
+    state = start(real_app_client)["state"][0]
+    def broken_issuer():
+        raise HTTPException(403, "provider-secret")
+    monkeypatch.setattr(flow, "issuer", broken_issuer)
+    response = real_app_client.get(flow.PATH + "/callback", params={"code": "synthetic", "state": state})
+    assert response.status_code == 403 and response.json() == {"error_code": "access_denied"}
+
+
+@pytest.mark.parametrize("browser_origin", list(dict.fromkeys(flow.settings.cors_origins + [
+    "null", "http://localhost:8080", "http://127.0.0.1:8080/", "https://attacker.test",
+])))
+def test_real_bootstrap_rejects_cross_origin_without_cors(real_app_client, browser_origin):
+    if browser_origin == flow.origin():
+        return  # Covered by numeric same-origin success below.
+    response = real_app_client.get(flow.PATH + "/bootstrap", headers={
+        "Origin": browser_origin, "Host": browser_origin.removeprefix("http://"),
+        "X-Forwarded-Host": "127.0.0.1", "X-Forwarded-Proto": "http",
+    })
+    assert response.status_code == 403 and response.json() == {"error_code": "origin_mismatch"}
+    assert "access-control-allow-origin" not in response.headers
+    assert "set-cookie" not in response.headers and "csrf_nonce" not in response.text
+    assert flow.records == {}
+    flow.readiness.assert_not_awaited()
+
+
+@pytest.mark.parametrize("port", [8080, 8099, 18081])
+@pytest.mark.parametrize("reason", [None, "local_disabled", "backend_unsupported"])
+def test_real_bootstrap_same_origin_and_navigation(real_app_client, monkeypatch, port, reason):
+    monkeypatch.setattr(flow.settings, "oauth_loopback_port", port)
+    flow.readiness.return_value = reason
+    for headers in ({"Origin": flow.origin()}, {}):
+        response = real_app_client.get(flow.origin() + flow.PATH + "/bootstrap", headers=headers)
+        assert response.status_code == 200 and response.json()["csrf_nonce"]
+        assert response.json()["enabled"] is (reason is None)
+        assert response.json()["reason"] == reason
+        assert "set-cookie" in response.headers
+
+
+@pytest.mark.parametrize("mode", ["password", None])
+def test_real_password_refresh_keeps_string_detail(real_app_client, monkeypatch, mode):
+    from fastapi import HTTPException
+    from app.services import connected_login
+    monkeypatch.setattr(connected_login, "refresh_connected_login", AsyncMock(side_effect=HTTPException(401, "Invalid refresh token")))
+    payload = {"refresh_token": "synthetic"}
+    if mode:
+        payload["auth_mode"] = mode
+    response = real_app_client.post("/api/auth/aim-market-refresh", json=payload)
+    assert response.status_code == 401 and response.json() == {"detail": "Invalid refresh token"}

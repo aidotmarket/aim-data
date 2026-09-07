@@ -545,7 +545,18 @@ async def aim_market_login(
 async def aim_market_refresh(payload: dict):
     from app.services.connected_login import refresh_connected_login
 
-    return await refresh_connected_login(payload)
+    try:
+        return await refresh_connected_login(payload)
+    except HTTPException as exc:
+        # Preserve typed transport failures and OAuth sanitization without wrapping
+        # the password fallback's human-readable HTTPException details.
+        if isinstance(exc.detail, dict) or payload.get("auth_mode") == "oauth":
+            from fastapi.responses import JSONResponse
+            body = exc.detail if isinstance(exc.detail, dict) else {
+                "error_code": "access_denied" if exc.status_code == 403 else "upstream_invalid_response"
+            }
+            return JSONResponse(body, status_code=exc.status_code, headers=exc.headers)
+        raise
 
 
 # ---------------------------------------------------------------------------
