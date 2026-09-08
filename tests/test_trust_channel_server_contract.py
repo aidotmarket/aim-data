@@ -19,6 +19,7 @@ from tests.fixtures import backend_schemas_e97d0de4 as backend
 from tests.fixtures.backend_acks_e97d0de4 import complete_ack, response_ack
 
 BACKEND = '/Users/max/Projects/ai-market/ai-market-backend'
+# Schema source merged in ai-market-backend 1c96b257c (PR #350).
 PIN = 'e97d0de49e6aa86def3a45538aa2b94cb8c8fa99'
 ORDER = '00000000-0000-4000-8000-000000000002'
 LISTING = '00000000-0000-4000-8000-000000000003'
@@ -131,7 +132,7 @@ async def test_s3_wire_schema_response_ack_and_bounded_retry(wire_client, rate_l
 def test_pinned_schema_and_response_fast_path():
     if not Path(BACKEND).exists():
         pytest.skip("Optional live pin cross-check requires the backend object repository")
-    # Read commit objects, never the moving backend worktree; the candidate is immutable.
+    # Read immutable commit objects, never the moving backend worktree.
     def source(path):
         return subprocess.check_output(['rtk', 'proxy', 'git', '-C', BACKEND, 'show', f'{PIN}:{path}'], text=True)
     tree = ast.parse(source('app/api/v1/endpoints/trust_websocket.py'))
