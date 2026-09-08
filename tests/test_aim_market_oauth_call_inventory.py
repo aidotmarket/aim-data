@@ -30,6 +30,13 @@ async def test_runtime_account_and_install_credential_inventory(monkeypatch, tmp
         calls.append((request.method, str(request.url), request.headers.get("authorization")))
         if request.url.path == "/api/v1/auth/me":
             return httpx.Response(200, json=account)
+        if request.url.path == "/api/v1/trust/register":
+            assert "x-api-key" not in request.headers
+            return httpx.Response(200, json={
+                "ai_market_ed25519_public_key": "synthetic-ed25519",
+                "ai_market_x25519_public_key": "synthetic-x25519",
+                "certificate": "synthetic-certificate",
+            })
         assert request.url.path == "/api/v1/vz/register"
         return httpx.Response(201, json={"install_id": "synthetic-install", "install_token": "synthetic-install-token"})
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: real_client(transport=httpx.MockTransport(upstream), **kwargs))
@@ -50,6 +57,7 @@ async def test_runtime_account_and_install_credential_inventory(monkeypatch, tmp
     assert calls == [
         ("GET", "https://api.ai.market/api/v1/auth/me", "Bearer synthetic-account"),
         ("POST", "https://api.ai.market/api/v1/vz/register", "Bearer synthetic-account"),
+        ("POST", "https://api.ai.market/api/v1/trust/register", "Bearer synthetic-account"),
     ]
     with get_session_context() as db:
         linked = db.exec(select(User).where(User.ai_market_user_id == identity)).one()

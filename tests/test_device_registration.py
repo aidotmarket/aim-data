@@ -347,3 +347,47 @@ class TestPlatformKeyStorage:
             data = json.load(f)
 
         assert data["ed25519_public_key"] == orig_pub_hex
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("access_token,api_key,internal_key,expected", [
+    ("login-secret", "aim_explicit", "aim_internal", {"Authorization": "Bearer login-secret"}),
+    (None, "aim_explicit", "aim_internal", {"X-API-Key": "aim_explicit"}),
+    (None, None, "aim_internal", {"X-API-Key": "aim_internal"}),
+])
+@pytest.mark.parametrize("outcome", [200, 401, 409, 500, "exception"])
+async def test_registration_credentials(crypto, caplog, monkeypatch, access_token, api_key, internal_key, expected, outcome):
+    from app.services.registration_service import register_with_marketplace
+
+    crypto.get_or_create_keypairs()
+    import logging
+    from app.services import registration_service
+
+    # Other auth tests install global logging filters; capture this unit directly.
+    test_logger = logging.Logger("trust-registration-credentials", level=logging.INFO)
+    test_logger.addHandler(caplog.handler)
+    monkeypatch.setattr(registration_service, "logger", test_logger)
+    secrets = "login-secret aim_explicit aim_internal"
+    response = MagicMock(status_code=outcome, text=secrets)
+    response.json.return_value = ({
+        "ai_market_ed25519_public_key": base64.b64encode(b"A" * 32).decode(),
+        "ai_market_x25519_public_key": base64.b64encode(b"B" * 32).decode(),
+        "certificate": "test-cert",
+    } if outcome == 200 else {"detail": secrets})
+    client = AsyncMock()
+    client.__aenter__.return_value = client
+    if outcome == "exception":
+        client.post.side_effect = RuntimeError(secrets)
+    else:
+        client.post.return_value = response
+    with patch("app.services.registration_service.httpx.AsyncClient", return_value=client), \
+         patch("app.services.registration_service.settings") as config, \
+         patch("asyncio.sleep", new_callable=AsyncMock), caplog.at_level("INFO"):
+        config.internal_api_key = internal_key
+        config.ai_market_url = "https://test.ai.market"
+        result = await register_with_marketplace(crypto, api_key=api_key, access_token=access_token)
+    assert result is (outcome == 200)
+    assert client.post.call_args.kwargs["headers"] == {**expected, "Content-Type": "application/json"}
+    assert caplog.records
+    for secret in secrets.split():
+        assert secret not in caplog.text

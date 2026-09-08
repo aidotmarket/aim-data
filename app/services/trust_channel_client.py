@@ -220,15 +220,12 @@ class TrustChannelClient:
     async def _connect_and_listen(self) -> None:
         """Connect, authenticate, and enter the message dispatch loop."""
         api_key = settings.internal_api_key
-        if not api_key:
-            logger.error("Cannot connect to Trust Channel — no VECTORAIZ_INTERNAL_API_KEY")
-            raise ConnectionError("No API key for Trust Channel")
 
         # Read the existing registration snapshot; never create or rotate keys here.
         device_id, ed_private, ed_public, x_private, x_public = await asyncio.to_thread(
             self._load_identity
         )
-        headers = {"X-API-Key": api_key}
+        headers = {"X-API-Key": api_key} if api_key else {}
         logger.info("Connecting to Trust Channel: %s", self._ws_url)
         try:
             async with websockets.connect(

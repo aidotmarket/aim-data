@@ -185,7 +185,7 @@ async def lifespan(app: FastAPI):
 
     # BQ-102: Initialize device cryptographic identity
     from app.core.crypto import DeviceCrypto
-    from app.services.registration_service import register_with_marketplace
+    from app.services.registration_service import ensure_trust_device_registered
 
     if settings.keystore_passphrase:
         try:
@@ -199,7 +199,7 @@ async def lifespan(app: FastAPI):
             # BQ-102 ST-3: Register with ai.market (non-blocking background task)
             async def _register_background():
                 try:
-                    await register_with_marketplace(crypto)
+                    await ensure_trust_device_registered(crypto)
                 except Exception as e:
                     logger.warning(f"Background registration failed: {e}")
 

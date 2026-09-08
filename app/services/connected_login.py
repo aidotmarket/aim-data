@@ -68,6 +68,17 @@ async def complete_connected_login(data, mode, db=None):
         except Exception:
             # Registration is best effort; never disclose upstream exception bodies.
             registered = None
+    if settings.keystore_passphrase:
+        try:
+            from app.core.crypto import DeviceCrypto
+            from app.services.registration_service import ensure_trust_device_registered
+
+            crypto = DeviceCrypto(keystore_path=settings.keystore_path, passphrase=settings.keystore_passphrase)
+            crypto.get_or_create_keypairs()
+            await ensure_trust_device_registered(crypto, access_token=data["access_token"])
+        except Exception:
+            # Trust registration is independent of VZ registration and best effort.
+            pass
     return {
         "access_token": data["access_token"], "refresh_token": data["refresh_token"],
         "token_type": data.get("token_type", "bearer"), "user": me, "auth_mode": mode,
