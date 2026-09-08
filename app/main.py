@@ -185,7 +185,7 @@ async def lifespan(app: FastAPI):
 
     # BQ-102: Initialize device cryptographic identity
     from app.core.crypto import DeviceCrypto
-    from app.services.registration_service import register_with_marketplace
+    from app.services.registration_service import ensure_trust_device_registered
 
     if settings.keystore_passphrase:
         try:
@@ -199,7 +199,7 @@ async def lifespan(app: FastAPI):
             # BQ-102 ST-3: Register with ai.market (non-blocking background task)
             async def _register_background():
                 try:
-                    await register_with_marketplace(crypto)
+                    await ensure_trust_device_registered(crypto)
                 except Exception as e:
                     logger.warning(f"Background registration failed: {e}")
 
@@ -214,7 +214,7 @@ async def lifespan(app: FastAPI):
 
     # BQ-D1: Trust Channel client + fulfillment service (connected mode only)
     trust_channel_task = None
-    if settings.internal_api_key:
+    if settings.keystore_passphrase:
         from app.services.trust_channel_client import get_trust_channel_client
         from app.services.fulfillment_service import get_fulfillment_service
 
@@ -225,7 +225,7 @@ async def lifespan(app: FastAPI):
         )
         logger.info("BQ-D1: Trust Channel client + fulfillment handler started")
     else:
-        logger.warning("BQ-D1: Trust Channel skipped — no VECTORAIZ_INTERNAL_API_KEY")
+        logger.warning("BQ-D1: Trust Channel skipped — no keystore passphrase")
 
     # BQ-110: Start queue processor with cancellation support
     queue_task = asyncio.create_task(
