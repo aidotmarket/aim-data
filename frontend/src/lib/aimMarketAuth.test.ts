@@ -156,3 +156,13 @@ it("serial fallback queues independent tabs and stores no lock values", async ()
   expect(transactions).toEqual(["readwrite", "readwrite"]);
   expect(database.close).toHaveBeenCalledTimes(2);
 });
+
+it.each(["google", "github", undefined] as const)("startAuth preserves nonce with provider %s", async provider => {
+  const bootstrap = { enabled: true, reason: null, csrf_nonce: "nonce", loopback_origin: location.origin };
+  const fetcher = vi.fn().mockResolvedValue(response({ authorization_url: "https://api.ai.market/authorize" }));
+  vi.stubGlobal("fetch", fetcher);
+  await startAuth(bootstrap, provider);
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+    csrf_nonce: "nonce", ...(provider === undefined ? {} : { provider }),
+  });
+});

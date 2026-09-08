@@ -19,22 +19,22 @@ export function authGuidance(reason: string): string {
   };
   return `${messages[reason] ?? "Sign-in could not finish. Please start again or contact support."} ${fallbackGuidance}`;
 }
-async function request<T>(path: string, nonce?: string): Promise<T> {
+async function request<T>(path: string, nonce?: string, provider?: "google" | "github"): Promise<T> {
   const response = await fetch(PATH + path, {
     method: nonce === undefined ? "GET" : "POST",
     credentials: "same-origin", cache: "no-store", redirect: "error",
     headers: nonce === undefined ? {} : { "Content-Type": "application/json" },
-    ...(nonce === undefined ? {} : { body: JSON.stringify({ csrf_nonce: nonce }) }),
+    ...(nonce === undefined ? {} : { body: JSON.stringify({ csrf_nonce: nonce, ...(provider === undefined ? {} : { provider }) }) }),
   });
   const body = await response.json();
   if (!response.ok) throw new Error(authGuidance(body.error_code));
   return body;
 }
 export const bootstrapAuth = () => request<Bootstrap>("/bootstrap");
-export async function startAuth(bootstrap: Bootstrap): Promise<string> {
+export async function startAuth(bootstrap: Bootstrap, provider?: "google" | "github"): Promise<string> {
   if (!bootstrap.enabled) throw new Error(authGuidance(bootstrap.reason ?? "backend_unavailable"));
   if (location.origin !== bootstrap.loopback_origin) throw new Error(authGuidance("loopback_origin_required"));
-  const result = await request<{ authorization_url: string }>("/start", bootstrap.csrf_nonce);
+  const result = await request<{ authorization_url: string }>("/start", bootstrap.csrf_nonce, provider);
   // The server owns the issuer, PKCE and continuation. Never append browser credentials.
   return result.authorization_url;
 }
