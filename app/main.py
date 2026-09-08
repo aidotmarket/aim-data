@@ -214,7 +214,7 @@ async def lifespan(app: FastAPI):
 
     # BQ-D1: Trust Channel client + fulfillment service (connected mode only)
     trust_channel_task = None
-    if settings.internal_api_key:
+    if settings.keystore_passphrase:
         from app.services.trust_channel_client import get_trust_channel_client
         from app.services.fulfillment_service import get_fulfillment_service
 
@@ -225,7 +225,7 @@ async def lifespan(app: FastAPI):
         )
         logger.info("BQ-D1: Trust Channel client + fulfillment handler started")
     else:
-        logger.warning("BQ-D1: Trust Channel skipped — no VECTORAIZ_INTERNAL_API_KEY")
+        logger.warning("BQ-D1: Trust Channel skipped — no keystore passphrase")
 
     # BQ-110: Start queue processor with cancellation support
     queue_task = asyncio.create_task(

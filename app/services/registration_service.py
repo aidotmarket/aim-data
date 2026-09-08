@@ -66,6 +66,7 @@ async def register_with_marketplace(
     crypto: DeviceCrypto,
     api_key: Optional[str] = None,
     access_token: Optional[str] = None,
+    max_retries: int = MAX_RETRIES,
 ) -> bool:
     """
     Register this device with ai.market's Trust Channel.
@@ -77,15 +78,29 @@ async def register_with_marketplace(
         crypto: Initialized DeviceCrypto with keypairs generated.
         api_key: API key for authentication. If None, uses internal_api_key.
         access_token: ai.market bearer token; takes precedence over API keys.
+        max_retries: Maximum attempts; login uses one, startup defaults to three.
 
     Returns:
         True if registration succeeded or device already registered with keys.
         False if registration failed (non-fatal).
     """
+    registered, _auth_status = await _register_with_marketplace(
+        crypto, api_key=api_key, access_token=access_token, max_retries=max_retries,
+    )
+    return registered
+
+
+async def _register_with_marketplace(
+    crypto: DeviceCrypto,
+    api_key: Optional[str] = None,
+    access_token: Optional[str] = None,
+    max_retries: int = MAX_RETRIES,
+) -> tuple[bool, Optional[int]]:
+    """Return registration success and an auth refusal status for credential recovery."""
     # Skip if already have platform keys
     if crypto.has_platform_keys():
         logger.info("Platform keys already present in keystore — skipping registration")
-        return True
+        return True, None
 
     ed25519_pub_b64, x25519_pub_b64 = crypto.get_public_keys_b64()
     device_id = _get_device_id()
@@ -103,7 +118,7 @@ async def register_with_marketplace(
     auth_key = api_key or settings.internal_api_key
     if not access_token and not auth_key:
         logger.warning("No credential available for device registration — skipping")
-        return False
+        return False, None
 
     headers = {
         **({"Authorization": f"Bearer {access_token}"} if access_token else {"X-API-Key": auth_key}),
@@ -113,7 +128,7 @@ async def register_with_marketplace(
     url = f"{settings.ai_market_url}/api/v1/trust/register"
     backoff = INITIAL_BACKOFF_S
 
-    for attempt in range(1, MAX_RETRIES + 1):
+    for attempt in range(1, max_retries + 1):
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(url, json=payload, headers=headers)
@@ -126,7 +141,7 @@ async def register_with_marketplace(
                     certificate=data.get("certificate", ""),
                 )
                 logger.info(f"Device registered with ai.market (device_id={device_id[:16]}...)")
-                return True
+                return True, None
 
             elif resp.status_code == 409:
                 # AG Council: handle "already registered" — response may include platform keys
@@ -139,52 +154,73 @@ async def register_with_marketplace(
                         certificate=data.get("certificate", ""),
                     )
                     logger.info("Device already registered — platform keys recovered from 409")
-                    return True
+                    return True, None
                 else:
                     logger.warning("Device already registered but no platform keys in response")
-                    return False
+                    return False, None
 
             elif resp.status_code in (401, 403):
                 logger.error(f"Registration auth failed ({resp.status_code})")
-                return False  # Don't retry auth failures
+                return False, resp.status_code  # Don't retry auth failures
 
             else:
                 logger.warning(
-                    f"Registration attempt {attempt}/{MAX_RETRIES} failed: "
+                    f"Registration attempt {attempt}/{max_retries} failed: "
                     f"{resp.status_code}"
                 )
 
         except httpx.TimeoutException:
-            logger.warning(f"Registration attempt {attempt}/{MAX_RETRIES} timed out")
+            logger.warning(f"Registration attempt {attempt}/{max_retries} timed out")
         except httpx.ConnectError:
-            logger.warning(f"Registration attempt {attempt}/{MAX_RETRIES} connection error")
+            logger.warning(f"Registration attempt {attempt}/{max_retries} connection error")
         except Exception:
-            logger.error(f"Registration attempt {attempt}/{MAX_RETRIES} unexpected error")
+            logger.error(f"Registration attempt {attempt}/{max_retries} unexpected error")
 
         # Exponential backoff (skip sleep on last attempt)
-        if attempt < MAX_RETRIES:
+        if attempt < max_retries:
             import asyncio
             logger.info(f"Retrying in {backoff:.0f}s...")
             await asyncio.sleep(backoff)
             backoff *= 2
 
-    logger.error(f"Device registration failed after {MAX_RETRIES} attempts — will retry on next startup")
-    return False
+    logger.error(f"Device registration failed after {max_retries} attempts — will retry on next startup")
+    return False, None
 
 
 async def ensure_trust_device_registered(
     crypto: DeviceCrypto,
     access_token: Optional[str] = None,
+    max_retries: int = MAX_RETRIES,
 ) -> bool:
-    """Ensure Trust registration using sign-in credentials before the internal key."""
+    """Ensure Trust registration: explicit token > internal API key > stored token.
+
+    API-key installs are unchanged and never send a stored bearer first. If a
+    stored token is refused with 401/403 and an internal key has become configured,
+    recover with one key attempt, without retrying the refused credential.
+    OAuth-only installs with an expired stored token self-heal on the next token
+    refresh or sign-in: both pass through complete_connected_login with a fresh
+    token. No restart is needed; the client re-reads the keystore on every reconnect.
+    Startup defaults to three attempts; login requests one to avoid retry backoff.
+    """
     if crypto.has_platform_keys():
         return True
 
-    if not access_token:
-        from app.services.serial_store import get_serial_store
+    if access_token or settings.internal_api_key:
+        return await register_with_marketplace(
+            crypto, access_token=access_token, max_retries=max_retries,
+        )
 
-        access_token = get_serial_store().state.ai_market_access_token
-    return await register_with_marketplace(crypto, access_token=access_token)
+    from app.services.serial_store import get_serial_store
+
+    stored_token = get_serial_store().state.ai_market_access_token
+    registered, auth_status = await _register_with_marketplace(
+        crypto, access_token=stored_token, max_retries=max_retries,
+    )
+    if stored_token and auth_status in (401, 403) and settings.internal_api_key:
+        return await register_with_marketplace(
+            crypto, api_key=settings.internal_api_key, max_retries=1,
+        )
+    return registered
 
 
 async def ensure_vz_install_registered(

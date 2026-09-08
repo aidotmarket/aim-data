@@ -13,7 +13,7 @@ encrypted data envelopes carrying JSON actions; event frames remain plaintext.
 
 Connection lifecycle:
   1. Connect to ws://{ai_market_url}/api/v1/trust/stream
-  2. Authenticate with internal API key
+  2. Attach the optional internal API key header (not used for socket authentication)
   3. Perform Ed25519/X25519 handshake and dispatch AES-GCM decrypted actions
   4. Reconnect with exponential backoff on disconnect
 """

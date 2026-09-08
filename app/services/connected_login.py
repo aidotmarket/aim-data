@@ -75,7 +75,7 @@ async def complete_connected_login(data, mode, db=None):
 
             crypto = DeviceCrypto(keystore_path=settings.keystore_path, passphrase=settings.keystore_passphrase)
             crypto.get_or_create_keypairs()
-            await ensure_trust_device_registered(crypto, access_token=data["access_token"])
+            await ensure_trust_device_registered(crypto, access_token=data["access_token"], max_retries=1)
         except Exception:
             # Trust registration is independent of VZ registration and best effort.
             pass

@@ -1,4 +1,5 @@
 """T-2026-000780: OAuth installs register a Trust device and recover on refresh."""
+import asyncio
 import base64
 import json
 from types import SimpleNamespace
@@ -16,7 +17,8 @@ from app.services.trust_channel_client import TrustChannelClient
 @pytest.mark.asyncio
 @pytest.mark.parametrize("explicit,stored,key,expected", [
     ("explicit-token", "stored-token", "aim_key", {"Authorization": "Bearer explicit-token"}),
-    (None, "stored-token", "aim_key", {"Authorization": "Bearer stored-token"}),
+    (None, "stored-token", "aim_key", {"X-API-Key": "aim_key"}),
+    (None, "stored-token", None, {"Authorization": "Bearer stored-token"}),
     (None, None, "aim_key", {"X-API-Key": "aim_key"}),
     (None, None, None, None),
 ])
@@ -35,6 +37,7 @@ async def test_helper_precedence(monkeypatch, explicit, stored, key, expected):
         factory.return_value = client
         assert await registration.ensure_trust_device_registered(crypto, explicit) is bool(expected)
     if expected:
+        client.post.assert_awaited_once()
         assert client.post.call_args.kwargs["headers"] == {**expected, "Content-Type": "application/json"}
     else:
         factory.assert_not_called()
@@ -104,7 +107,7 @@ async def test_trust_failure_independent_of_vz(login_setup):
          patch.object(registration, "ensure_trust_device_registered", new_callable=AsyncMock, side_effect=RuntimeError) as trust:
         result = await connected_login.complete_connected_login(login_setup, "oauth")
     trust.assert_awaited_once()
-    assert trust.call_args.kwargs == {"access_token": "new-login-token"}
+    assert trust.call_args.kwargs == {"access_token": "new-login-token", "max_retries": 1}
     assert result["access_token"] == "new-login-token"
     assert result["registration_status"] == "not_ready"
 
@@ -141,3 +144,104 @@ async def test_socket_certificate_without_api_key(monkeypatch, tmp_path, api_key
     else:
         connect.assert_not_called()
         handshake.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", [500, 401, 403, "timeout", "connection"])
+async def test_login_failure_returns_after_one_post_without_backoff(login_setup, outcome):
+    client = AsyncMock()
+    client.__aenter__.return_value = client
+    client.get.return_value = httpx.Response(200, json={"id": "seller"})
+    if outcome == "timeout":
+        client.post.side_effect = httpx.ReadTimeout("unavailable")
+    elif outcome == "connection":
+        client.post.side_effect = httpx.ConnectError("unavailable")
+    else:
+        client.post.return_value = httpx.Response(outcome)
+    # Real sleep: a retry's first 2-second backoff would exceed this deadline.
+    with patch("app.services.connected_login.httpx.AsyncClient", return_value=client):
+        result = await asyncio.wait_for(
+            connected_login.complete_connected_login(login_setup, "oauth"), timeout=1.5,
+        )
+    client.post.assert_awaited_once()
+    assert result["access_token"] == login_setup["access_token"]
+
+
+@pytest.mark.asyncio
+async def test_startup_helper_retains_three_attempts(monkeypatch):
+    crypto = MagicMock()
+    crypto.has_platform_keys.return_value = False
+    crypto.get_public_keys_b64.return_value = ("ed", "x")
+    monkeypatch.setattr(registration.settings, "internal_api_key", "aim_key")
+    client = AsyncMock()
+    client.__aenter__.return_value = client
+    client.post.return_value = httpx.Response(503)
+    with patch("app.services.registration_service.httpx.AsyncClient", return_value=client), \
+         patch("asyncio.sleep", new_callable=AsyncMock) as sleep:
+        assert not await registration.ensure_trust_device_registered(crypto)
+    assert client.post.await_count == 3
+    assert [call.args[0] for call in sleep.await_args_list] == [2.0, 4.0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.parametrize("recovery_status", [200, 503])
+async def test_stored_token_refusal_recovers_once_with_newly_configured_key(
+    monkeypatch, tmp_path, status, recovery_status,
+):
+    crypto = DeviceCrypto(str(tmp_path / "keystore.json"), "test-passphrase")
+    crypto.get_or_create_keypairs()
+    monkeypatch.setattr(registration.settings, "internal_api_key", None)
+    store = SimpleNamespace(state=SimpleNamespace(ai_market_access_token="stale-token"))
+    client = AsyncMock()
+    client.__aenter__.return_value = client
+
+    async def post(*args, **kwargs):
+        if client.post.await_count == 1:
+            # A key present at selection time is covered by test_helper_precedence.
+            monkeypatch.setattr(registration.settings, "internal_api_key", "aim_key")
+            return httpx.Response(status)
+        return httpx.Response(recovery_status, json={
+            "ai_market_ed25519_public_key": "platform-ed",
+            "ai_market_x25519_public_key": "platform-x", "certificate": "cert",
+        })
+
+    client.post.side_effect = post
+    with patch("app.services.serial_store.get_serial_store", return_value=store), \
+         patch("app.services.registration_service.httpx.AsyncClient", return_value=client):
+        assert await asyncio.wait_for(
+            registration.ensure_trust_device_registered(crypto), timeout=1.5,
+        ) is (recovery_status == 200)
+    assert [call.kwargs["headers"] for call in client.post.await_args_list] == [
+        {"Authorization": "Bearer stale-token", "Content-Type": "application/json"},
+        {"X-API-Key": "aim_key", "Content-Type": "application/json"},
+    ]
+    assert crypto.has_platform_keys() is (recovery_status == 200)
+    if recovery_status == 200:
+        saved = json.loads((tmp_path / "keystore.json").read_text())
+        assert saved["platform_ed25519_public_key"] == "platform-ed"
+        assert saved["platform_x25519_public_key"] == "platform-x"
+        assert saved["certificate"] == "cert"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("explicit,key", [(None, None), ("fresh-token", "aim_key")])
+@pytest.mark.parametrize("status", [401, 403])
+async def test_auth_refusal_never_retries_same_credential(monkeypatch, explicit, key, status):
+    crypto = MagicMock()
+    crypto.has_platform_keys.return_value = False
+    crypto.get_public_keys_b64.return_value = ("ed", "x")
+    monkeypatch.setattr(registration.settings, "internal_api_key", key)
+    store = SimpleNamespace(state=SimpleNamespace(ai_market_access_token="stale-token"))
+    client = AsyncMock()
+    client.__aenter__.return_value = client
+    client.post.return_value = httpx.Response(status)
+    with patch("app.services.serial_store.get_serial_store", return_value=store), \
+         patch("app.services.registration_service.httpx.AsyncClient", return_value=client):
+        assert not await asyncio.wait_for(
+            registration.ensure_trust_device_registered(crypto, access_token=explicit), timeout=1.5,
+        )
+    client.post.assert_awaited_once()
+    assert client.post.call_args.kwargs["headers"] == {
+        "Authorization": f"Bearer {explicit or 'stale-token'}", "Content-Type": "application/json",
+    }
