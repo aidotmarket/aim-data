@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +61,46 @@ class FulfillmentCompleteMessage(BaseModel):
     transfer_id: str
     order_id: str
     parameters: FulfillmentCompleteParams
+
+
+class FulfillmentResponseParams(BaseModel):
+    success: bool
+    access_url: HttpUrl
+    access_token: Optional[str] = None
+    expires_at: datetime
+    file_hash: Optional[str] = Field(default=None, pattern=r"^[0-9a-fA-F]{64}$")
+    file_size_bytes: Optional[int] = Field(default=None, ge=0)
+    error: Optional[str] = None
+
+    @field_validator("access_url")
+    @classmethod
+    def require_https(cls, value: HttpUrl) -> HttpUrl:
+        if value.scheme != "https":
+            raise ValueError("access_url must use https")
+        return value
+
+
+class FulfillmentResponseMessage(BaseModel):
+    action: str = "vai.fulfillment.response"
+    request_id: str = Field(min_length=1)
+    order_id: UUID
+    # AIM Data fe2cfd75 omits listing_id; resolve it from the owned order.
+    listing_id: Optional[UUID] = None
+    parameters: FulfillmentResponseParams
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_client_identifiers(cls, value):
+        if isinstance(value, dict):
+            value = dict(value)
+            params = value.get("parameters")
+            if isinstance(params, dict):
+                for field in ("order_id", "listing_id"):
+                    if field in params:
+                        if field in value and UUID(str(value[field])) != UUID(str(params[field])):
+                            raise ValueError(f"Conflicting {field}")
+                        value[field] = params[field]
+        return value
 
 
 class FulfillmentErrorParams(BaseModel):

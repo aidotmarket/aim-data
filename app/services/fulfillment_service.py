@@ -219,8 +219,10 @@ class FulfillmentService:
                 file_path, transfer_id, order_id, listing_id, total_chunks, file_size,
             )
 
-            # 8. Send complete
-            await self._client.send_action({
+            # 8. Await server finalization before recording completion.
+            request_id = str(uuid.uuid4())
+            complete_message = {
+                "request_id": request_id,
                 "action": "vai.fulfillment.complete",
                 "transfer_id": transfer_id,
                 "order_id": order_id,
@@ -230,7 +232,20 @@ class FulfillmentService:
                     "chunk_count": chunks_sent,
                     "sha256_hash": sha256_hash,
                 },
-            })
+            }
+            try:
+                ack = await self._client.wait_for_action(
+                    "", request_id, message=complete_message, timeout=ACK_TIMEOUT_S,
+                )
+                result = self._confirmed_result(ack)
+                if not isinstance(result.get("token_id"), str) or not result["token_id"]:
+                    raise ConnectionError("Server did not acknowledge local completion")
+            except (TimeoutError, ConnectionError):
+                self._update_log(log_entry, "failed", error_code="TRANSFER_ABORTED",
+                                 error_message="Local completion was rejected or not acknowledged")
+                await self._send_error(transfer_id, order_id, "TRANSFER_ABORTED",
+                                       "Local completion was rejected or not acknowledged")
+                return
 
             self._update_log(log_entry, "completed", chunks_sent=chunks_sent)
             logger.info(
@@ -360,11 +375,8 @@ class FulfillmentService:
             ack = await self._client.wait_for_action(
                 "", request_id, timeout=ACK_TIMEOUT_S, message=response_message,
             )
-            result = ack.get("data") or {}
-            if (ack.get("success") is not True or ack.get("error")
-                    or not isinstance(result, dict) or result.get("success") is not True
-                    or result.get("error")
-                    or (result.get("status") != "delivered" and not result.get("token_id"))):
+            result = self._confirmed_result(ack)
+            if result.get("status") != "delivered":
                 raise ConnectionError("Server did not acknowledge S3 delivery")
         except (TimeoutError, ConnectionError):
             self._update_log(log_entry, "failed", error_code="TRANSFER_ABORTED",
@@ -376,6 +388,18 @@ class FulfillmentService:
             "S3 fulfillment complete: transfer_id=%s, bytes=%d",
             transfer_id, metadata.size_bytes,
         )
+
+    @staticmethod
+    def _confirmed_result(ack: Any) -> Dict[str, Any]:
+        """Require both levels of the server's final action response to succeed."""
+        if not isinstance(ack, dict):
+            raise ConnectionError("Malformed fulfillment acknowledgement")
+        result = ack.get("data")
+        if (ack.get("success") is not True or ack.get("error")
+                or not isinstance(result, dict) or result.get("success") is not True
+                or result.get("error")):
+            raise ConnectionError("Server did not confirm fulfillment")
+        return result
 
     async def _stream_chunks(
         self,

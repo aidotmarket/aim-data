@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519, padding, rsa, x25
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from tests.fixtures.backend_complete_ack_58a04603 import complete_ack
+from tests.fixtures.backend_acks_e97d0de4 import response_ack
 
 from app.core.crypto import DeviceCrypto
 from app.services import trust_channel_client as module
@@ -509,7 +509,7 @@ async def test_send_preserves_error_when_close_fails(error):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("reply", [
-    complete_ack("s3-request"),
+    response_ack("s3-request"),
     {"request_id": "s3-request", "success": False, "error": "not permitted"},
     {"request_id": "s3-request", "type": "error", "error": "rejected"},
     {"type": "error", "error": "uncorrelated failure"},

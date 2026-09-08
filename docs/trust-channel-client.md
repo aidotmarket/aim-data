@@ -67,30 +67,29 @@ A valid stored dataset SHA-256 (`sha256_hash`, `file_hash`, or `content_hash`)
 becomes optional `file_hash`; an S3 ETag is never treated as SHA-256. No object
 download is added. This path sends neither `vai.fulfillment.url` nor `complete`.
 
-At backend `58a04603`, response is whitelisted (`trust_websocket.py:111`) but
-absent from ActionRegistry's definitions. The executor rejects it at
-`action_executor_service.py:102–105` before reaching the handler at 555–562.
-**S3 delivery is therefore unsupported at that pin and fails safely.** A companion
-server fast path is separate work; this client fold does not prove it exists,
-executes, or is deployed. The contract suite asserts the known registry gap and
-validates the requested response schema independently of that companion.
-Read backend sources with `git show 58a04603:<path>`; the reference checkout's
-moving main/HEAD is not the pin and must not be checked out or reset for this work.
+The delivery contract is pinned to server PR #350 candidate
+`e97d0de49e6aa86def3a45538aa2b94cb8c8fa99`. Its response fast path validates
+`FulfillmentResponseMessage`, including UUID order/listing identifiers, optional
+listing ID, conflicting-identifier rejection, and HTTPS URLs. The contract suite
+vendors `app/schemas/fulfillment.py` byte for byte from that commit and decrypts
+actual client sends before validating them. Read backend sources with
+`git show e97d0de4:<path>`; do not change the backend worktree to inspect the pin.
 
-The client registers its request-ID waiter before sending. It requires outer
-`success` and `data.success` to be true with no errors, plus either the existing
-handler's `data.status == "delivered"` or a complete-style `data.token_id`.
-The pinned complete result is `{success: true, token_id, download_token}`
-(`fulfillment_listener_service.py:451`; idempotent result at 318–322).
-`trust_websocket.py:1287–1299` wraps it in `TrustActionResponse`, echoing the
-request ID; default fields are `error: null`, `needs_confirmation: false`,
-`confirmation_prompt: null`, and `audit_log_id: null`. Tests use this exact
-complete envelope for both complete and response, with synthetic token values.
-These are contract fixtures, not claims of successful server execution.
+The client registers a request-ID waiter before sending either S3 response or
+local complete. Both require outer `success` and `data.success` to be true with
+no errors. S3 requires `data.status == "delivered"`; local complete requires a
+nonempty string `data.token_id`. The candidate's complete result also includes
+`download_token`. The candidate's `TrustActionResponse` envelope echoes the
+request ID and includes `error: null`, `needs_confirmation: false`,
+`confirmation_prompt: null`, and `audit_log_id: null`.
 
-Missing/negative confirmation, disconnect or timeout marks S3 delivery failed.
-Action-less errors fail the correlated waiter; errors without request IDs fail
-all pending waiters. Local error text stays generic to avoid storing presigned URLs.
+Only a confirmed ACK marks the delivery completed. Rejection, malformed final
+ACK, disconnect or timeout marks it failed with `TRANSFER_ABORTED`. Local complete
+failure also attempts to send `vai.fulfillment.error` for the transfer. Chunk-window
+timeouts retain their existing retry and `timed_out` behavior. Action-less errors
+fail the correlated waiter; errors without request IDs fail all pending waiters.
+Local final-ACK error text stays generic. Contract fixtures are not proof of
+server execution, deployment, or successful production delivery.
 
 ## Platform signature limitation
 
@@ -211,3 +210,29 @@ Both completion and response tests use the pinned complete-response envelope; S3
 covers zero/one/two rate limits, delayed identical request replay, fresh encrypted
 sequences, and failure after the retry. Malformed rate-limit fields are ignored.
 The schema and client-loopback results do not prove deployed S3 delivery.
+
+## Council fold 4 validation (2026-09-08)
+
+Built directly on `941d2372938d114b4c7213603c677301cc576c09`, without rebasing.
+Read GLM `glm/response-20260908-194656-197695.md` and DeepSeek
+`deepseek/response-20260908-194701-043466.md`. GLM #2/#3 and DeepSeek F1/F3
+are addressed. Skipped DeepSeek F2 (server error authorization) and F4 (server
+canonical-frame test) because both require changes to the companion server repo.
+The advisory server routing/compatibility redesigns are outside this client fold.
+
+The requested three-file suite passes **101 tests**, with 11 existing deprecation
+warnings, using the existing AIM Data Python 3.12 environment. `git diff --check`
+passes. The vendored candidate schema and the server object both have Git blob ID
+`48b69ec463bc5d0936cb0cdf61c66ad7ef2000d1`. The optional candidate source and
+fast-path cross-check ran successfully (no skips).
+
+Coverage includes the actual delivered S3 ACK, rejection of a token-only S3 ACK,
+local complete success, outer/nested rejection, malformed final results, timeout,
+and disconnect. Failed local completion records `failed`/`TRANSFER_ABORTED` and
+sends an error for the same transfer; only the confirmed token result completes.
+The wire test exercises the production complete waiter with an immediate response.
+
+```sh
+rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/pytest -q tests/test_trust_channel_client.py tests/test_trust_channel_server_contract.py tests/test_fulfillment.py
+rtk git diff --check
+```
