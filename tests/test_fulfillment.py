@@ -12,6 +12,8 @@ Tests the AIM Data fulfillment handler (§7, items 1-7):
   7. Fulfillment log records all fields
 """
 
+from tests.fixtures.backend_complete_ack_58a04603 import complete_ack
+
 import asyncio
 import base64
 import hashlib
@@ -636,9 +638,8 @@ class TestS3PresignedUrlFulfillment:
             assert timeout == 30.0
             await mock_client.send_action(message)
             with get_session_context() as session:
-                assert session.exec(select(FulfillmentLog).where(FulfillmentLog.order_id == message["parameters"]["order_id"])).first().status == "uploading"
-            return {"request_id": correlation, "success": True,
-                    "data": {"success": True, "status": "delivered"}}
+                assert session.exec(select(FulfillmentLog).where(FulfillmentLog.order_id == message["order_id"])).first().status == "uploading"
+            return complete_ack(correlation)
         mock_client.wait_for_action.side_effect = respond
         listing_id = "listing-s3-url"
         _create_s3_backed_dataset(listing_id, dataset_id="s3-url")
@@ -667,7 +668,6 @@ class TestS3PresignedUrlFulfillment:
             "success": True,
             "access_url": "https://seller-bucket.s3.amazonaws.com/exports/object.csv?sig=redacted",
             "file_size_bytes": 12345,
-            "order_id": message["parameters"]["order_id"],
         }
         mock_broker.presign_object.assert_called_once_with(
             role_arn="arn:aws:iam::210987654321:role/aim-data",
@@ -715,7 +715,7 @@ class TestS3PresignedUrlFulfillment:
             dataset.metadata_json = json.dumps({"sha256_hash": "ab" * 32})
             session.add(dataset)
             session.commit()
-        mock_client.wait_for_action.return_value = {"success": True, "data": {"success": True, "status": "delivered"}}
+        mock_client.wait_for_action.return_value = complete_ack("s3-hash")
         with patch("app.services.fulfillment_service.S3BrokerClient") as broker:
             broker.return_value.presign_object.return_value = {"url": "https://example.org/data"}
             await service._handle_deliver(_make_deliver_message("s3-hash"))

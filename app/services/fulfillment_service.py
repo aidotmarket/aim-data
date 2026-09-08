@@ -336,7 +336,6 @@ class FulfillmentService:
 
         parameters = {
             "success": True,
-            "order_id": order_id,
             "access_url": url,
             "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat(),
             "file_size_bytes": metadata.size_bytes,
@@ -352,6 +351,8 @@ class FulfillmentService:
         request_id = log_entry.request_id or str(uuid.uuid4())
         response_message = {
             "action": "vai.fulfillment.response",
+            "order_id": order_id,
+            "listing_id": listing_id,
             "request_id": request_id,
             "parameters": parameters,
         }
@@ -362,7 +363,8 @@ class FulfillmentService:
             result = ack.get("data") or {}
             if (ack.get("success") is not True or ack.get("error")
                     or not isinstance(result, dict) or result.get("success") is not True
-                    or result.get("error") or result.get("status") != "delivered"):
+                    or result.get("error")
+                    or (result.get("status") != "delivered" and not result.get("token_id"))):
                 raise ConnectionError("Server did not acknowledge S3 delivery")
         except (TimeoutError, ConnectionError):
             self._update_log(log_entry, "failed", error_code="TRANSFER_ABORTED",
@@ -414,6 +416,8 @@ class FulfillmentService:
                     window_messages.append({
                         "action": "vai.fulfillment.chunk",
                         "transfer_id": transfer_id,
+                        "order_id": order_id,
+                        "listing_id": listing_id,
                         "chunk_index": chunk_index,
                         "byte_offset": byte_offset,
                         "payload_length": len(chunk_data),

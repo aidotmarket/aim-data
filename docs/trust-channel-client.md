@@ -19,16 +19,22 @@ client does not recompute the machine fingerprint or use the VZ install UUID.
 
 Connection setup retains `X-API-Key`, sends HELLO with a fresh 16-byte nonce, signs
 the exact length-prefixed transcript, derives separate directional keys, and waits
-for ESTABLISHED before allowing application sends. Data and event payloads are decrypted;
-transport ACKs and ping/pong remain JSON control traffic. Both sequence directions start
+for ESTABLISHED before allowing application sends. Data frames are AES-GCM encrypted;
+event frames are plaintext JSON over authenticated WSS and acked by `event_id`.
+Transport ACKs and ping/pong remain JSON control traffic. Both sequence directions start
 at zero, permit gaps, and reject replay and out-of-range values. Session expiry or
 counter exhaustion requires a fresh handshake. Disconnect clears traffic keys,
 cancels session handlers and fails pending waiters. Mutable shared-secret zeroing
 is best effort; Python/native copies cannot be guaranteed erased.
 
-Application actions receive a `request_id`; existing flat fulfillment fields are
-copied into `parameters`, with explicit parameters taking precedence. Encrypted
-backend ACK response `data` is unwrapped before dispatch to existing handlers.
+Application actions receive a `request_id`. Fulfillment wire envelopes retain flat
+identity fields and place the caller's application message inside the outer
+`parameters`: auth fields stay flat there and its nested `parameters` is preserved
+untouched. This mirrors backend `trust_websocket.py:1241,1249–1253`; metadata,
+complete and error validate their nested models at 1257, 1273 and 1277. Chunks
+include `order_id` and `listing_id` for authorization at 1264–1266.
+Encrypted backend ACK response `data` is unwrapped for action/transfer waiters;
+request-ID waiters retain the entire envelope.
 
 ## Event acknowledgements and rate limits
 
@@ -41,41 +47,50 @@ events; each control ACK releases capacity and triggers another pending-event dr
 A `{"type":"rate_limit","retry_after_ms":N}` control frame pauses subsequent
 `send_action` calls for N milliseconds and logs the delay at info level. Further
 rate limits can extend the pause. Incoming events, control ACKs and ping/pong
-continue during the pause; reconnect clears it. The pause does not automatically
-replay the action rejected by the server; fulfillment's existing ACK timeout and
-resend logic remains responsible for recovery.
+continue during the pause; reconnect clears it. Invalid, negative or non-finite
+delays are ignored. Local chunk windows retain their existing one-resend ACK
+timeout behavior. For a pending S3 response, a valid rate-limit control triggers
+one resend of the same request after the pause (with a fresh encryption sequence).
+A second rate limit fails the delivery. Each sent attempt has a 30-second reply
+timeout; the server-directed send pause precedes that timeout. Controls carry no
+request ID, so this recovery applies to pending S3 responses; fulfillment is
+processed sequentially. Timeout or rejection alone does not trigger a resend.
 
 ## S3 delivery and fail-safe completion
 
-S3 delivery sends one `vai.fulfillment.response` with a top-level `request_id`
-(the incoming request ID, or a generated UUID when absent). Its `parameters`
-contain `order_id`, `success: true`, `access_url`, ISO `expires_at`, and
-`file_size_bytes` from the scanned S3 object. A valid stored dataset SHA-256
-(`metadata_json.sha256_hash`, `file_hash`, or `content_hash`) becomes `file_hash`.
-S3 metadata has no SHA-256 field; its ETag is not used as one. If no stored hash
-is available, the hash is omitted: the pinned server uses `payload.get("file_hash")`
-and its `orders.delivery_file_hash` column is nullable. No object download is added.
-This path sends neither `vai.fulfillment.url` nor `vai.fulfillment.complete`.
+S3 delivery sends `vai.fulfillment.response` with `order_id`, `listing_id` and
+`request_id` (the incoming ID, or a generated UUID). Like local fulfillment,
+the outer wire `parameters` contains the application message's auth fields and a
+nested `parameters` object. After the server spread, that object contains
+`success: true`, HTTPS `access_url`, ISO `expires_at`, and `file_size_bytes`.
+A valid stored dataset SHA-256 (`sha256_hash`, `file_hash`, or `content_hash`)
+becomes optional `file_hash`; an S3 ETag is never treated as SHA-256. No object
+download is added. This path sends neither `vai.fulfillment.url` nor `complete`.
 
-At backend `58a04603`, `app/api/v1/endpoints/trust_websocket.py:111` allows
-response actions; lines 1091–1098 reserve the fast path for chunk-protocol actions.
-Lines 1166–1179 pass response parameters to ActionExecutor.
-`app/services/action_executor_service.py:555–562` reads `parameters.order_id`
-as a UUID and passes the parameters to `handle_fulfillment_response`.
-`app/services/fulfillment_service.py:185–227` checks delivery success/access URL
-and stores delivery details; line 262 returns `success: true, status: delivered`.
-ActionExecutor line 232 wraps that result in an execution-success envelope.
-WebSocket lines 1192–1205 echo `request_id` and encrypt the envelope (1334–1349).
-There is no transfer ID correlation or `vai.fulfillment.ack` on this route.
+At backend `58a04603`, response is whitelisted (`trust_websocket.py:111`) but
+absent from ActionRegistry's definitions. The executor rejects it at
+`action_executor_service.py:102–105` before reaching the handler at 555–562.
+**S3 delivery is therefore unsupported at that pin and fails safely.** A companion
+server fast path is separate work; this client fold does not prove it exists,
+executes, or is deployed. The contract suite asserts the known registry gap and
+validates the requested response schema independently of that companion.
+Read backend sources with `git show 58a04603:<path>`; the reference checkout's
+moving main/HEAD is not the pin and must not be checked out or reset for this work.
 
-The client registers `wait_for_action("", request_id, timeout=30)` before sending
-so an immediate reply cannot be lost. It preserves the response envelope and
-marks the local log completed only when outer `success` and `data.success` are
-both true and `data.status` is `delivered`, with no errors. Rejection, missing or
-negative delivery confirmation, disconnect, or a 30-second reply timeout marks
-it failed. Encrypted action-less error responses fail the correlated waiter;
-an error with no request ID fails all pending waiters. Error text stored locally
-is generic so a server response cannot leak a presigned URL into the log.
+The client registers its request-ID waiter before sending. It requires outer
+`success` and `data.success` to be true with no errors, plus either the existing
+handler's `data.status == "delivered"` or a complete-style `data.token_id`.
+The pinned complete result is `{success: true, token_id, download_token}`
+(`fulfillment_listener_service.py:451`; idempotent result at 318–322).
+`trust_websocket.py:1287–1299` wraps it in `TrustActionResponse`, echoing the
+request ID; default fields are `error: null`, `needs_confirmation: false`,
+`confirmation_prompt: null`, and `audit_log_id: null`. Tests use this exact
+complete envelope for both complete and response, with synthetic token values.
+These are contract fixtures, not claims of successful server execution.
+
+Missing/negative confirmation, disconnect or timeout marks S3 delivery failed.
+Action-less errors fail the correlated waiter; errors without request IDs fail
+all pending waiters. Local error text stays generic to avoid storing presigned URLs.
 
 ## Platform signature limitation
 
@@ -172,3 +187,27 @@ environment. `git diff --check` passes. Coverage includes one-response S3 delive
 stored SHA-256 and absent-hash paths, positive confirmation, nested delivery
 failure, malformed confirmation, timeout, disconnect/rejection, encrypted error
 frames, request-ID isolation, and an immediate encrypted reply during send.
+
+## Council fold 3 validation (2026-09-08)
+
+Built directly on `fe2cfd75a99f1d7ef930fe0edcc8fb0b7907f606`, with no rebase.
+Read DeepSeek `response-20260908-185400-750963.md`, GLM
+`response-20260908-185405-880410.md`, and CC
+`response-20260908-185355-751587.md`. All three CC nits are applied; none skipped.
+
+The requested suite passes **86 tests**, with 11 existing deprecation warnings;
+`git diff --check` passes. Exact command:
+
+```sh
+rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/pytest -q tests/test_trust_channel_client.py tests/test_trust_channel_server_contract.py tests/test_fulfillment.py
+rtk git diff --check
+```
+
+Contract tests decrypt actual local/S3 sends. Local schemas are vendored verbatim
+from `58a04603:app/schemas/fulfillment.py`; the local backend object repository
+provides an additional source-equality, whitelist and registry-gap cross-check
+(skipped when that repository is absent). No companion server source is used.
+Both completion and response tests use the pinned complete-response envelope; S3
+covers zero/one/two rate limits, delayed identical request replay, fresh encrypted
+sequences, and failure after the retry. Malformed rate-limit fields are ignored.
+The schema and client-loopback results do not prove deployed S3 delivery.

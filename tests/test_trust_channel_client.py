@@ -16,6 +16,8 @@ from cryptography.hazmat.primitives.asymmetric import ed25519, padding, rsa, x25
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from tests.fixtures.backend_complete_ack_58a04603 import complete_ack
+
 from app.core.crypto import DeviceCrypto
 from app.services import trust_channel_client as module
 from app.services.trust_channel_protocol import (
@@ -336,7 +338,7 @@ async def test_send_envelopes_fulfillment_without_mutating_caller():
         base64.b64decode(frame["ciphertext"]) + base64.b64decode(frame["auth_tag"]), None)
     payload = json.loads(plaintext)
     assert payload["request_id"] == "known"
-    assert payload["parameters"] == {"transfer_id": "transfer", "payload": "YQ==", "chunk_index": 3}
+    assert payload["parameters"] == {"transfer_id": "transfer", "payload": "YQ==", "chunk_index": 2, "parameters": {"chunk_index": 3}}
     assert original["parameters"] == {"chunk_index": 3}
 
 
@@ -507,7 +509,7 @@ async def test_send_preserves_error_when_close_fails(error):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("reply", [
-    {"request_id": "s3-request", "success": True, "data": {"success": True, "status": "delivered"}},
+    complete_ack("s3-request"),
     {"request_id": "s3-request", "success": False, "error": "not permitted"},
     {"request_id": "s3-request", "type": "error", "error": "rejected"},
     {"type": "error", "error": "uncorrelated failure"},

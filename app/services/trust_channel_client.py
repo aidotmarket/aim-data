@@ -9,7 +9,7 @@ BQ-D1: Fulfillment Listener (AIM Data side)
 
 The Trust Channel is the encrypted bidirectional communication channel
 between AIM Data instances and the ai.market platform. Messages are
-JSON-encoded actions identified by an "action" field.
+encrypted data envelopes carrying JSON actions; event frames remain plaintext.
 
 Connection lifecycle:
   1. Connect to ws://{ai_market_url}/api/v1/trust/stream
@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 import json
 import logging
+import math
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 import websockets
@@ -58,6 +59,10 @@ _MAX_BACKOFF_S = 60.0
 _BACKOFF_MULTIPLIER = 2.0
 
 
+class _RateLimited(ConnectionError):
+    """The server rejected traffic before decrypting its request ID."""
+
+
 class TrustChannelClient:
     """
     WebSocket client that connects to ai.market's Trust Channel
@@ -74,6 +79,7 @@ class TrustChannelClient:
         self._send_lock = asyncio.Lock()
         self._send_resume_at = 0.0
         self._waiters: Dict[str, asyncio.Future] = {}
+        self._response_waiters: set[asyncio.Future] = set()
         # Build WS URL from ai_market_url (http → ws, https → wss)
         base = settings.ai_market_url.rstrip("/")
         if base.startswith("https://"):
@@ -107,13 +113,19 @@ class TrustChannelClient:
             try:
                 payload = dict(message)
                 payload.setdefault("request_id", str(uuid4()))
-                if str(payload.get("action", "")).startswith("vai.fulfillment."):
-                    # Existing fulfillment callers use both flat and nested fields.
-                    parameters = {k: v for k, v in message.items() if k not in (
-                        "action", "parameters", "request_id", "action_version", "hitl_token"
+                if payload.get("action") in {
+                    "vai.fulfillment.metadata", "vai.fulfillment.chunk",
+                    "vai.fulfillment.complete", "vai.fulfillment.error",
+                    "vai.fulfillment.response",
+                }:
+                    # Backend 58a04603 trust_websocket.py:1241,1249-1253
+                    # spreads request.parameters into the fulfillment model.
+                    # Preserve the caller's nested parameters, not a flat merge.
+                    payload["parameters"] = {k: v for k, v in message.items() if k not in (
+                        "action", "request_id", "action_version", "hitl_token"
                     )}
-                    parameters.update(message.get("parameters") or {})
-                    payload["parameters"] = parameters
+                if payload.get("action") == "vai.fulfillment.response":
+                    payload["parameters"]["request_id"] = payload["request_id"]
                 await ws.send(json.dumps(session.encrypt(payload)))
             except asyncio.CancelledError:
                 self._session = None
@@ -139,16 +151,39 @@ class TrustChannelClient:
         Returns the parsed message dict, or raises TimeoutError.
         """
         waiter_key = f"{action}:{transfer_id}"
-        future: asyncio.Future[Dict[str, Any]] = asyncio.get_event_loop().create_future()
-        self._waiters[waiter_key] = future
-        try:
-            if message is not None:
-                await self.send_action(message)
-            return await asyncio.wait_for(future, timeout=timeout)
-        except asyncio.TimeoutError:
-            raise TimeoutError(f"Timed out waiting for {action} (transfer_id={transfer_id})")
-        finally:
-            self._waiters.pop(waiter_key, None)
+        is_response = message is not None and message.get("action") == "vai.fulfillment.response"
+        for attempt in range(2 if is_response else 1):
+            future = asyncio.get_running_loop().create_future()
+            self._waiters[waiter_key] = future
+            try:
+                if is_response:
+                    self._response_waiters.add(future)
+                if message is not None:
+                    await self.send_action(message)
+                return await asyncio.wait_for(future, timeout=timeout)
+            except _RateLimited:
+                if attempt:
+                    raise
+                # send_action observes the server's pause before this one resend.
+            except asyncio.TimeoutError:
+                raise TimeoutError(f"Timed out waiting for {action} (transfer_id={transfer_id})")
+            finally:
+                self._response_waiters.discard(future)
+                self._waiters.pop(waiter_key, None)
+
+    def _handle_rate_limit(self, frame):
+        delay = frame.get("retry_after_ms")
+        if type(delay) not in (int, float) or not math.isfinite(delay) or delay < 0:
+            return
+        self._send_resume_at = max(
+            self._send_resume_at, asyncio.get_running_loop().time() + delay / 1000,
+        )
+        logger.info("Trust Channel rate limited; retry_after_ms=%s", delay)
+        # Pre-decryption controls have no request ID. Fulfillment is sequential;
+        # only pending S3 response waiters opt into a single bounded replay.
+        for future in self._response_waiters:
+            if not future.done():
+                future.set_exception(_RateLimited("Trust Channel rate limited delivery"))
 
     async def run(self) -> None:
         """
@@ -224,12 +259,7 @@ class TrustChannelClient:
                         await ws.send(json.dumps({"type": "pong"}))
                         continue
                     if frame_type == "rate_limit":
-                        retry_after_ms = frame["retry_after_ms"]
-                        self._send_resume_at = max(
-                            self._send_resume_at,
-                            asyncio.get_running_loop().time() + retry_after_ms / 1000,
-                        )
-                        logger.info("Trust Channel rate limited; retry_after_ms=%s", retry_after_ms)
+                        self._handle_rate_limit(frame)
                         continue
                     if frame_type not in ("data", "event"):
                         continue
