@@ -34,6 +34,8 @@ AIM Data API + UI  —  PostgreSQL
 
 The API serves your seller dashboard and the buyer portal. PostgreSQL stores listing metadata, ACL, and audit logs.
 
+Sign in with ai.market is on by default; set AIM_DATA_OAUTH_ENABLED=false to switch off (rollback).
+
 ## Architecture
 
 ```

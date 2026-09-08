@@ -7,6 +7,12 @@ from app.config import Settings, enforce_single_worker
 from app.services import aim_market_oauth as flow
 
 
+def test_oauth_enabled_by_default(monkeypatch):
+    monkeypatch.delenv("AIM_DATA_OAUTH_ENABLED", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.oauth_enabled is True
+
+
 @pytest.mark.parametrize("port", [8080, 8099, 18081])
 def test_ports_8080_8099_18081(monkeypatch, port):
     monkeypatch.setenv("AIM_DATA_OAUTH_LOOPBACK_PORT", str(port))
