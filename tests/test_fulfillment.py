@@ -12,6 +12,8 @@ Tests the AIM Data fulfillment handler (§7, items 1-7):
   7. Fulfillment log records all fields
 """
 
+from tests.fixtures.backend_acks_e97d0de4 import complete_ack, response_ack
+
 import asyncio
 import base64
 import hashlib
@@ -84,12 +86,14 @@ def mock_client():
     """Create a mock TrustChannelClient."""
     client = MagicMock(spec=TrustChannelClient)
     client.send_action = AsyncMock()
-    client.wait_for_action = AsyncMock(return_value={
-        "action": "vai.fulfillment.ack",
-        "transfer_id": "mock",
-        "acked_through_index": 3,
-        "status": "continue",
-    })
+    async def respond(action, correlation, timeout, *, message=None):
+        if message is not None:
+            await client.send_action(message)
+            return (response_ack(correlation) if message['action'] == 'vai.fulfillment.response'
+                    else complete_ack(correlation))
+        return {"action": "vai.fulfillment.ack", "transfer_id": correlation,
+                "acked_through_index": 3, "status": "continue"}
+    client.wait_for_action = AsyncMock(side_effect=respond)
     client.register_handler = MagicMock()
     return client
 
@@ -519,13 +523,19 @@ class TestQueuedFulfillments:
 class TestFulfillmentLog:
     """§7.7: Fulfillment log records all fields correctly."""
 
+    @pytest.mark.parametrize("request_location", ["params", "top", "both"])
     @pytest.mark.asyncio
     async def test_successful_fulfillment_logged(
-        self, service, mock_client, sample_dataset, sample_file, tmp_data_dir
+        self, service, mock_client, sample_dataset, sample_file, tmp_data_dir, request_location
     ):
         """Successful fulfillment creates a log entry with all fields."""
         message = _make_deliver_message("listing-abc-123")
         params = message["parameters"]
+        expected_request_id = params["request_id"]
+        if request_location != "params":
+            expected_request_id = message["request_id"] = "top-level-request"
+        if request_location == "top":
+            del params["request_id"]
 
         with patch("app.services.fulfillment_service.settings") as mock_settings:
             mock_settings.upload_directory = str(tmp_data_dir / "uploads")
@@ -547,7 +557,7 @@ class TestFulfillmentLog:
             assert len(log.transfer_id) == 36  # UUID format
             assert log.order_id == params["order_id"]
             assert log.listing_id == params["listing_id"]
-            assert log.request_id == params["request_id"]
+            assert log.request_id == expected_request_id
             assert log.status == "completed"
             assert log.started_at is not None
             assert log.completed_at is not None
@@ -622,9 +632,17 @@ class TestS3PresignedUrlFulfillment:
     """S3-backed datasets are delivered by presigned URL, not chunk streaming."""
 
     @pytest.mark.asyncio
-    async def test_s3_branch_sends_url_then_complete_and_does_not_stream(
+    async def test_s3_branch_sends_response_and_requires_delivery_ack(
         self, service, mock_client
     ):
+        async def respond(action, correlation, timeout, *, message):
+            assert action == "" and correlation == message["request_id"]
+            assert timeout == 30.0
+            await mock_client.send_action(message)
+            with get_session_context() as session:
+                assert session.exec(select(FulfillmentLog).where(FulfillmentLog.order_id == message["order_id"])).first().status == "uploading"
+            return response_ack(correlation)
+        mock_client.wait_for_action.side_effect = respond
         listing_id = "listing-s3-url"
         _create_s3_backed_dataset(listing_id, dataset_id="s3-url")
         message = _make_deliver_message(listing_id)
@@ -641,25 +659,18 @@ class TestS3PresignedUrlFulfillment:
 
         calls = mock_client.send_action.call_args_list
         actions = [c[0][0]["action"] for c in calls]
-        assert actions == ["vai.fulfillment.url", "vai.fulfillment.complete"]
+        assert actions == ["vai.fulfillment.response"]
         mock_stream.assert_not_called()
-
-        url_msg = calls[0][0][0]
-        transfer_id = url_msg["transfer_id"]
-        assert url_msg["parameters"] == {
-            "url": "https://seller-bucket.s3.amazonaws.com/exports/object.csv?sig=redacted",
-            "expires_in": 300,
-            "object_key": "exports/object.csv",
-            "content_type": "text/csv",
-            "size_bytes": 12345,
-            "transfer_id": transfer_id,
-            "order_id": message["parameters"]["order_id"],
-            "listing_id": listing_id,
-            "etag": '"abc123"',
+        response = calls[0][0][0]
+        assert response["request_id"] == message["parameters"]["request_id"]
+        params = response["parameters"]
+        expiry = datetime.fromisoformat(params.pop("expires_at"))
+        assert 290 < (expiry - datetime.now(timezone.utc)).total_seconds() <= 300
+        assert params == {
+            "success": True,
+            "access_url": "https://seller-bucket.s3.amazonaws.com/exports/object.csv?sig=redacted",
+            "file_size_bytes": 12345,
         }
-        complete_msg = calls[1][0][0]
-        assert complete_msg["parameters"]["status"] == "fulfilled"
-        assert complete_msg["parameters"]["delivery_mode"] == "presigned_url"
         mock_broker.presign_object.assert_called_once_with(
             role_arn="arn:aws:iam::210987654321:role/aim-data",
             region="us-east-1",
@@ -674,6 +685,44 @@ class TestS3PresignedUrlFulfillment:
             assert log is not None
             assert log.status == "completed"
             assert log.file_size_bytes == 12345
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reply", [
+        {"success": False, "error": "rejected"},
+        {"success": True, "data": {"success": False, "error": "delivery failed"}},
+        {"success": True},
+        complete_ack("wrong-result"),
+        {"success": True, "data": {"success": True, "status": "queued"}},
+        TimeoutError("no reply"), ConnectionError("rejected"),
+    ])
+    async def test_s3_rejection_never_completes(self, service, mock_client, reply):
+        _create_s3_backed_dataset("s3-reject", dataset_id="s3-reject")
+        async def respond(*args, message, **kwargs):
+            await mock_client.send_action(message)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+        mock_client.wait_for_action.side_effect = respond
+        with patch("app.services.fulfillment_service.S3BrokerClient") as broker:
+            broker.return_value.presign_object.return_value = {"url": "https://example.org/data"}
+            await service._handle_deliver(_make_deliver_message("s3-reject"))
+        assert [c.args[0]["action"] for c in mock_client.send_action.call_args_list] == ["vai.fulfillment.response"]
+        with get_session_context() as session:
+            assert session.exec(select(FulfillmentLog).where(FulfillmentLog.listing_id == "s3-reject").order_by(FulfillmentLog.started_at.desc())).first().status == "failed"
+
+    @pytest.mark.asyncio
+    async def test_s3_uses_stored_dataset_hash(self, service, mock_client):
+        _create_s3_backed_dataset("s3-hash", dataset_id="s3-hash")
+        with get_session_context() as session:
+            dataset = session.get(DatasetRecord, "s3-hash")
+            dataset.metadata_json = json.dumps({"sha256_hash": "ab" * 32})
+            session.add(dataset)
+            session.commit()
+
+        with patch("app.services.fulfillment_service.S3BrokerClient") as broker:
+            broker.return_value.presign_object.return_value = {"url": "https://example.org/data"}
+            await service._handle_deliver(_make_deliver_message("s3-hash"))
+        assert mock_client.wait_for_action.call_args.kwargs["message"]["parameters"]["file_hash"] == "ab" * 32
 
     @pytest.mark.asyncio
     async def test_local_file_path_still_used_when_dataset_not_s3_backed(
@@ -973,15 +1022,19 @@ class TestACKWindowResend:
             session.commit()
 
         # First wait_for_action → timeout, second → ACK success
-        mock_client.wait_for_action = AsyncMock(side_effect=[
-            TimeoutError("no ack"),
-            {
-                "action": "vai.fulfillment.ack",
-                "transfer_id": "mock",
-                "acked_through_index": 3,
-                "status": "continue",
-            },
-        ])
+        replies = iter([TimeoutError("no ack"), {
+            "action": "vai.fulfillment.ack", "transfer_id": "mock",
+            "acked_through_index": 3, "status": "continue"}])
+        original_respond = mock_client.wait_for_action.side_effect
+
+        async def respond(action, correlation, timeout, *, message=None):
+            if message is not None:
+                return await original_respond(action, correlation, timeout, message=message)
+            reply = next(replies)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+        mock_client.wait_for_action = AsyncMock(side_effect=respond)
 
         message = _make_deliver_message("listing-resend")
 
@@ -1140,3 +1193,45 @@ class TestQueueRaceRegression:
         assert len(complete_msgs) == 2, (
             f"Expected 2 complete messages, got {len(complete_msgs)}"
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reply", [
+    "valid", {"success": False, "error": "HASH_MISMATCH"},
+    {"success": True, "data": {"success": False, "error": "MISSING_CHUNKS"}},
+    None, [], {"success": True}, {"success": True, "data": []},
+    {"success": True, "data": {"success": True, "status": "delivered"}},
+    {"success": True, "data": {"success": True, "token_id": True}},
+    {"success": True, "error": "rejected", "data": {"success": True, "token_id": "token"}},
+    {"success": True, "data": {"success": True, "token_id": "token", "error": "rejected"}},
+    TimeoutError("no reply"), ConnectionError("disconnected"),
+])
+async def test_local_complete_requires_confirmed_token(
+    service, mock_client, sample_dataset, sample_file, tmp_data_dir, reply,
+):
+    async def respond(action, correlation, timeout, *, message):
+        assert action == "" and correlation == message["request_id"]
+        assert str(uuid.UUID(correlation)) == correlation
+        assert timeout == 30.0
+        await mock_client.send_action(message)
+        with get_session_context() as session:
+            assert session.exec(select(FulfillmentLog).where(FulfillmentLog.transfer_id == message["transfer_id"])).first().status == "uploading"
+        if isinstance(reply, Exception):
+            raise reply
+        return complete_ack(correlation) if reply == "valid" else reply
+    mock_client.wait_for_action.side_effect = respond
+    with patch("app.services.fulfillment_service.settings") as settings:
+        settings.upload_directory = str(tmp_data_dir / "uploads")
+        settings.processed_directory = str(tmp_data_dir / "processed")
+        await service._handle_deliver(_make_deliver_message())
+    with get_session_context() as session:
+        transfer_id = mock_client.wait_for_action.call_args.kwargs["message"]["transfer_id"]
+        log = session.exec(select(FulfillmentLog).where(FulfillmentLog.transfer_id == transfer_id)).first()
+        assert log.status == ("completed" if reply == "valid" else "failed")
+        if reply != "valid":
+            assert log.error_code == "TRANSFER_ABORTED"
+    sent = [call.args[0] for call in mock_client.send_action.call_args_list]
+    if reply != "valid":
+        assert sent[-1]["action"] == "vai.fulfillment.error"
+        assert sent[-1]["transfer_id"] == sent[-2]["transfer_id"]
+        assert sent[-1]["parameters"]["error_code"] == "TRANSFER_ABORTED"

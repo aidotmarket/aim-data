@@ -23,12 +23,13 @@ Each is independent — failure of one does not block the next.
 import asyncio
 import base64
 import hashlib
+import json
 import logging
 import math
 import mimetypes
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlsplit, urlunsplit
 
@@ -110,7 +111,7 @@ class FulfillmentService:
         params = message.get("parameters", {})
         order_id = params.get("order_id", "")
         listing_id = params.get("listing_id", "")
-        request_id = params.get("request_id", "")
+        request_id = message.get("request_id", params.get("request_id", ""))
         transfer_id = str(uuid.uuid4())
 
         # Create fulfillment log entry
@@ -152,6 +153,7 @@ class FulfillmentService:
                 assert artifact.connection is not None and artifact.metadata is not None
                 await self._deliver_s3_object(
                     log_entry=log_entry,
+                    dataset=dataset,
                     connection=artifact.connection,
                     metadata=artifact.metadata,
                     transfer_id=transfer_id,
@@ -217,8 +219,10 @@ class FulfillmentService:
                 file_path, transfer_id, order_id, listing_id, total_chunks, file_size,
             )
 
-            # 8. Send complete
-            await self._client.send_action({
+            # 8. Await server finalization before recording completion.
+            request_id = str(uuid.uuid4())
+            complete_message = {
+                "request_id": request_id,
                 "action": "vai.fulfillment.complete",
                 "transfer_id": transfer_id,
                 "order_id": order_id,
@@ -228,7 +232,20 @@ class FulfillmentService:
                     "chunk_count": chunks_sent,
                     "sha256_hash": sha256_hash,
                 },
-            })
+            }
+            try:
+                ack = await self._client.wait_for_action(
+                    "", request_id, message=complete_message, timeout=ACK_TIMEOUT_S,
+                )
+                result = self._confirmed_result(ack)
+                if not isinstance(result.get("token_id"), str) or not result["token_id"]:
+                    raise ConnectionError("Server did not acknowledge local completion")
+            except (TimeoutError, ConnectionError):
+                self._update_log(log_entry, "failed", error_code="TRANSFER_ABORTED",
+                                 error_message="Local completion was rejected or not acknowledged")
+                await self._send_error(transfer_id, order_id, "TRANSFER_ABORTED",
+                                       "Local completion was rejected or not acknowledged")
+                return
 
             self._update_log(log_entry, "completed", chunks_sent=chunks_sent)
             logger.info(
@@ -267,6 +284,7 @@ class FulfillmentService:
     async def _deliver_s3_object(
         self,
         log_entry: FulfillmentLog,
+        dataset: DatasetRecord,
         connection: S3Connection,
         metadata: S3ObjectMetadata,
         transfer_id: str,
@@ -331,42 +349,57 @@ class FulfillmentService:
             )
             return
 
-        url_params = {
-            "url": url,
-            "expires_in": expires_in,
-            "object_key": metadata.object_key,
-            "content_type": metadata.content_type,
-            "size_bytes": metadata.size_bytes,
-            "transfer_id": transfer_id,
-            "order_id": order_id,
-            "listing_id": listing_id,
+        parameters = {
+            "success": True,
+            "access_url": url,
+            "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat(),
+            "file_size_bytes": metadata.size_bytes,
         }
-        if metadata.etag:
-            url_params["etag"] = metadata.etag
-
-        await self._client.send_action({
-            "action": "vai.fulfillment.url",
-            "transfer_id": transfer_id,
+        # S3 ETags are not SHA-256 hashes. Use a stored dataset SHA-256 when
+        # available; the server explicitly accepts a missing (nullable) hash.
+        stored = json.loads(dataset.metadata_json or "{}")
+        for field in ("sha256_hash", "file_hash", "content_hash"):
+            value = stored.get(field)
+            if isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdefABCDEF" for c in value):
+                parameters["file_hash"] = value.lower()
+                break
+        request_id = log_entry.request_id or str(uuid.uuid4())
+        response_message = {
+            "action": "vai.fulfillment.response",
             "order_id": order_id,
             "listing_id": listing_id,
-            "parameters": url_params,
-        })
-
-        await self._client.send_action({
-            "action": "vai.fulfillment.complete",
-            "transfer_id": transfer_id,
-            "order_id": order_id,
-            "parameters": {
-                "status": "fulfilled",
-                "delivery_mode": "presigned_url",
-            },
-        })
+            "request_id": request_id,
+            "parameters": parameters,
+        }
+        try:
+            ack = await self._client.wait_for_action(
+                "", request_id, timeout=ACK_TIMEOUT_S, message=response_message,
+            )
+            result = self._confirmed_result(ack)
+            if result.get("status") != "delivered":
+                raise ConnectionError("Server did not acknowledge S3 delivery")
+        except (TimeoutError, ConnectionError):
+            self._update_log(log_entry, "failed", error_code="TRANSFER_ABORTED",
+                             error_message="S3 delivery was rejected or not acknowledged")
+            return
 
         self._update_log(log_entry, "completed")
         logger.info(
             "S3 fulfillment complete: transfer_id=%s, bytes=%d",
             transfer_id, metadata.size_bytes,
         )
+
+    @staticmethod
+    def _confirmed_result(ack: Any) -> Dict[str, Any]:
+        """Require both levels of the server's final action response to succeed."""
+        if not isinstance(ack, dict):
+            raise ConnectionError("Malformed fulfillment acknowledgement")
+        result = ack.get("data")
+        if (ack.get("success") is not True or ack.get("error")
+                or not isinstance(result, dict) or result.get("success") is not True
+                or result.get("error")):
+            raise ConnectionError("Server did not confirm fulfillment")
+        return result
 
     async def _stream_chunks(
         self,
@@ -407,6 +440,8 @@ class FulfillmentService:
                     window_messages.append({
                         "action": "vai.fulfillment.chunk",
                         "transfer_id": transfer_id,
+                        "order_id": order_id,
+                        "listing_id": listing_id,
                         "chunk_index": chunk_index,
                         "byte_offset": byte_offset,
                         "payload_length": len(chunk_data),
