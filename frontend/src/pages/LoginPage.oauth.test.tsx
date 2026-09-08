@@ -32,6 +32,9 @@ it("start disabled race keeps fallback and never navigates", async () => {
   render(<MemoryRouter><LoginPage /></MemoryRouter>);
   const button = screen.getByRole("button", { name: "Sign in with ai.market" });
   await waitFor(() => expect(button).toBeEnabled());
+  expect(screen.getByText("Use your ai.market account (Google, GitHub or email)")).toBeInTheDocument();
+  expect(screen.getByText("Opens ai.market in your browser. Google, GitHub, or email and password all work there.")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Or sign in here with email and password" })).toBeInTheDocument();
   fireEvent.click(button);
   expect(await screen.findByRole("status")).toHaveTextContent("ai.market sign-in is disabled");
   expect(screen.getByLabelText("Password")).toBeEnabled();

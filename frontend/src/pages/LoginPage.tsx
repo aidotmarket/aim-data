@@ -109,7 +109,7 @@ const LoginPage = () => {
           <CardHeader>
             <CardTitle className="text-foreground">{pending2fa ? "Two-factor code" : "Sign in"}</CardTitle>
             <CardDescription>
-              {pending2fa ? "Enter the code from your authenticator app" : "Use your ai.market account"}
+              {pending2fa ? "Enter the code from your authenticator app" : "Use your ai.market account (Google, GitHub or email)"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -117,6 +117,7 @@ const LoginPage = () => {
               <Button type="button" className="w-full" disabled={!bootstrap?.enabled || starting || isSubmitting} onClick={signInWithMarket}>
                 {starting ? "Opening ai.market…" : "Sign in with ai.market"}
               </Button>
+              <p className="text-xs text-muted-foreground">Opens ai.market in your browser. Google, GitHub, or email and password all work there.</p>
               {oauthMessage && <p role="status" className="text-sm">{oauthMessage}</p>}
               <p className="text-xs text-muted-foreground">AIM Data keeps session tokens in this browser’s local storage and a local file restricted to its owner (0600). These stores are not encrypted secure storage.</p>
             </div>}
@@ -148,6 +149,7 @@ const LoginPage = () => {
                 </div>
               ) : (
                 <>
+                  <h2 className="text-sm font-medium">Or sign in here with email and password</h2>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
                     <Input
