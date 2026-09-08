@@ -22,8 +22,8 @@ class FakeAsyncClient:
     async def __aexit__(self, *_args):
         return None
 
-    async def post(self, url, json):
-        self.post_calls.append({"url": url, "json": json})
+    async def post(self, url, **kwargs):
+        self.post_calls.append({"url": url, **kwargs})
         response = self.post_responses.popleft()
         if isinstance(response, Exception):
             raise response
@@ -60,9 +60,10 @@ def mock_ai_market(monkeypatch):
 def token_response(access_token="access-token", refresh_token="refresh-token"):
     return httpx.Response(
         200,
+        headers={"set-cookie": f"refresh_token={refresh_token}; Path=/api/v1/auth; HttpOnly; Secure"} if refresh_token is not None else {},
         json={
             "access_token": access_token,
-            "refresh_token": refresh_token,
+            "refresh_token": None,
             "token_type": "bearer",
             "onboarding_required": False,
             "onboarding_step": None,
@@ -208,3 +209,31 @@ async def test_aim_market_login_2fa_unexpected_status_returns_generic_502(mock_a
     ]
     assert FakeAsyncClient.get_calls == []
     assert mock_ai_market == []
+
+
+@pytest.mark.asyncio
+async def test_password_2fa_cookie_rotation(mock_ai_market):
+    for payload in ({"email": "a", "password": "b"}, {"pre_auth_token": "pre", "code": "123456"}):
+        FakeAsyncClient.post_responses.append(token_response(refresh_token="first"))
+        FakeAsyncClient.get_responses.append(me_response())
+        result = await auth.aim_market_login(payload, request=None, db=None)
+        FakeAsyncClient.post_responses.append(token_response(refresh_token="rotated"))
+        FakeAsyncClient.get_responses.append(me_response())
+        refreshed = await auth.aim_market_refresh({"refresh_token": result["refresh_token"]})
+        assert refreshed["refresh_token"] == "rotated"
+        assert refreshed["auth_mode"] == "password"
+        assert FakeAsyncClient.post_calls[-1] == {
+            "url": "https://ai.market.test/api/v1/auth/refresh",
+            "cookies": {"refresh_token": "first"}, "headers": {"Origin": "https://ai.market"},
+        }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("refresh", [None, "", "null", "undefined"])
+@pytest.mark.parametrize("payload", [{"email": "a", "password": "b"}, {"pre_auth_token": "pre", "code": "123456"}])
+async def test_missing_refresh_rejected(mock_ai_market, refresh, payload):
+    FakeAsyncClient.post_responses.append(token_response(refresh_token=refresh))
+    with pytest.raises(HTTPException) as exc:
+        await auth.aim_market_login(payload, request=None, db=None)
+    assert exc.value.status_code == 502
+    assert not mock_ai_market and not FakeAsyncClient.get_calls

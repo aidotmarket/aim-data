@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { bootstrapAuth, startAuth, authGuidance, type Bootstrap } from "@/lib/aimMarketAuth";
 import VersionBadge from "@/components/VersionBadge";
 
 const LoginPage = () => {
@@ -18,6 +19,32 @@ const LoginPage = () => {
   const [otpCode, setOtpCode] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
+  const [oauthMessage, setOauthMessage] = useState("");
+  const [starting, setStarting] = useState(false);
+  useEffect(() => {
+    let active = true;
+    bootstrapAuth().then(data => {
+      if (!active) return;
+      const local = location.origin === data.loopback_origin;
+      setBootstrap({ ...data, enabled: data.enabled && local });
+      setOauthMessage(!local ? authGuidance("loopback_origin_required") :
+        data.enabled ? "" : authGuidance(data.reason ?? "backend_unavailable"));
+    }).catch(() => { if (active) setOauthMessage(authGuidance("backend_unavailable")); });
+    return () => { active = false; };
+  }, []);
+  const signInWithMarket = async () => {
+    if (!bootstrap) return;
+    setStarting(true);
+    try {
+      window.location.assign(await startAuth(bootstrap));
+    } catch (reason) {
+      setOauthMessage(reason instanceof Error ? reason.message : authGuidance("backend_unavailable"));
+      setBootstrap(null); // A fresh page/start is required after a failed attempt.
+      setStarting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +113,13 @@ const LoginPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {!pending2fa && <div className="space-y-3 mb-4">
+              <Button type="button" className="w-full" disabled={!bootstrap?.enabled || starting || isSubmitting} onClick={signInWithMarket}>
+                {starting ? "Opening ai.market…" : "Sign in with ai.market"}
+              </Button>
+              {oauthMessage && <p role="status" className="text-sm">{oauthMessage}</p>}
+              <p className="text-xs text-muted-foreground">AIM Data keeps session tokens in this browser’s local storage and a local file restricted to its owner (0600). These stores are not encrypted secure storage.</p>
+            </div>}
             <form onSubmit={handleSubmit} className="space-y-4">
               {pending2fa ? (
                 <div className="space-y-2">

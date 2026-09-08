@@ -7,6 +7,12 @@
 # App + migrations always run as the aim_data uid (1001).
 
 set -e
+for worker_setting in "${WORKERS:-1}" "${WEB_CONCURRENCY:-1}" "${UVICORN_WORKERS:-1}" "${VECTORAIZ_WORKERS:-1}"; do
+    if [ "$worker_setting" != "1" ]; then
+        echo "AIM Data requires one uvicorn worker; set WORKERS, WEB_CONCURRENCY, UVICORN_WORKERS and VECTORAIZ_WORKERS to 1" >&2
+        exit 1
+    fi
+done
 
 APP_USER=aim_data
 DIRS="/data/uploads /data/processed /data/temp /data/keystore"
@@ -18,7 +24,7 @@ if [ "$(id -u)" = "0" ]; then
         --host 0.0.0.0 \
         --port "${PORT:-8000}" \
         --workers "${WORKERS:-1}" \
-        --log-level info
+        --log-level info --no-access-log
 fi
 
 # Already non-root: cannot chown; best-effort dir create, then run.
@@ -27,4 +33,4 @@ exec uvicorn app.main:app \
     --host 0.0.0.0 \
     --port "${PORT:-8000}" \
     --workers "${WORKERS:-1}" \
-    --log-level info
+    --log-level info --no-access-log

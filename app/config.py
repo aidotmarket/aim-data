@@ -36,6 +36,12 @@ _DATA_VERIFICATION_PAYMENT_HANDOFF_URL_ERROR = (
 _IAM_PRINCIPAL_ARN_RE = re.compile(r"^arn:aws:iam::\d{12}:(role|user)/.+$")
 
 
+def enforce_single_worker():
+    for key in ("WORKERS", "WEB_CONCURRENCY", "UVICORN_WORKERS", "VECTORAIZ_WORKERS"):
+        if os.environ.get(key, "1") != "1":
+            raise RuntimeError(f"{key} must be 1: AIM Data OAuth and Co-Pilot require a single uvicorn worker")
+
+
 def _env_alias(field_name: str, *extra_names: str) -> AliasChoices:
     env_name = field_name.upper()
     return AliasChoices(f"AIM_DATA_{env_name}", f"VECTORAIZ_{env_name}", *extra_names)
@@ -118,6 +124,26 @@ class Settings(BaseSettings):
         default=_DEFAULT_AI_MARKET_URL,
         validation_alias=_env_alias("ai_market_url"),
     )
+    oauth_enabled: bool = Field(default=False, validation_alias="AIM_DATA_OAUTH_ENABLED")
+    oauth_loopback_port: int = Field(default=8080, validation_alias="AIM_DATA_OAUTH_LOOPBACK_PORT")
+    oauth_frontend_origin: str = Field(default="https://ai.market", validation_alias="AIM_DATA_OAUTH_FRONTEND_ORIGIN")
+    oauth_test_mode: bool = Field(default=False, validation_alias="AIM_DATA_OAUTH_TEST_MODE")
+
+    @field_validator("oauth_loopback_port", mode="before")
+    @classmethod
+    def validate_oauth_port(cls, value):
+        if isinstance(value, bool) or not re.fullmatch(r"[1-9][0-9]{3,4}", str(value)) or not 1024 <= int(value) <= 65535:
+            raise ValueError("AIM_DATA_OAUTH_LOOPBACK_PORT must be a canonical integer 1024-65535")
+        return int(value)
+
+    @field_validator("oauth_frontend_origin")
+    @classmethod
+    def validate_oauth_frontend(cls, value):
+        parsed = urlparse(value)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+            raise ValueError("AIM_DATA_OAUTH_FRONTEND_ORIGIN must be an exact HTTPS origin")
+        return value
+
     data_verification_payment_handoff_url: str = Field(
         default=_DEFAULT_DATA_VERIFICATION_PAYMENT_HANDOFF_URL,
         validation_alias=AliasChoices(

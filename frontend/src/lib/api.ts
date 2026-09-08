@@ -40,18 +40,112 @@ function getStoredAccessToken(): string | null {
   return null;
 }
 
-function getStoredRefreshToken(): string | null {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('aim_data_refresh_token');
-  }
-  return null;
-}
+export type AuthMode = 'oauth' | 'password';
+export const AUTH_CHANGED = 'aim-data-auth-changed';
+const MODE_KEY = 'aim_data_auth_mode';
 
 export function clearAuthTokens(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('aim_data_access_token');
-  localStorage.removeItem('aim_data_refresh_token');
+  for (const key of ['aim_data_access_token', 'aim_data_refresh_token', MODE_KEY, 'vectoraiz_api_key']) {
+    localStorage.removeItem(key);
+  }
+  window.dispatchEvent(new Event(AUTH_CHANGED));
+}
+
+export function getAuthMode(): AuthMode {
+  const mode = localStorage.getItem(MODE_KEY);
+  if (mode === null || mode === 'password') return 'password';
+  if (mode === 'oauth') return mode;
+  clearAuthTokens();
+  throw new Error('Unknown sign-in mode. Please sign in again.');
+}
+
+export function storeAuthTokens(data: AuthLoginResponse): void {
+  const mode = data.auth_mode ?? 'password';
+  if (!['oauth', 'password'].includes(mode) || !data.user?.id ||
+      [data.access_token, data.refresh_token].some(value =>
+        typeof value !== 'string' || !value.trim() || ['null', 'undefined'].includes(value))) {
+    throw new Error('Invalid sign-in response. Please retry.');
+  }
+  // Validate first; replace the whole account session before notifying consumers.
   localStorage.removeItem('vectoraiz_api_key');
+  localStorage.setItem('aim_data_access_token', data.access_token);
+  localStorage.setItem('aim_data_refresh_token', data.refresh_token);
+  localStorage.setItem(MODE_KEY, mode);
+  window.dispatchEvent(new CustomEvent(AUTH_CHANGED, { detail: data }));
+}
+
+export class AuthRefreshError extends Error {
+  constructor(public status: number, public code: string, public retryAfter: string | null = null) {
+    super(code === 'client_disabled'
+      ? 'ai.market sign-in is disabled. Use password sign-in if your account has a password. Provider-only accounts must retry later or contact support.'
+      : 'Session refresh failed. Please retry.');
+  }
+}
+
+// An empty IndexedDB transaction is the serial fallback on browsers without Web Locks.
+// It stores no values and releases automatically if the owning tab closes.
+async function serialFallback<T>(operation: () => Promise<T>): Promise<T> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open('aim-data-auth-lock', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('mutex');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(new Error('Refresh coordination unavailable. Please retry.'));
+  });
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      const transaction = db.transaction('mutex', 'readwrite');
+      let started = false, finished = false;
+      let result: T, error: unknown;
+      const pump = () => {
+        const request = transaction.objectStore('mutex').get('lock');
+        request.onsuccess = () => {
+          if (!started) {
+            started = true;
+            operation().then(value => { result = value; }, reason => { error = reason; })
+              .finally(() => { finished = true; });
+          }
+          if (!finished) pump();
+        };
+      };
+      transaction.oncomplete = () => error ? reject(error) : resolve(result);
+      transaction.onabort = () => reject(new Error('Refresh coordination interrupted. Please retry.'));
+      pump();
+    });
+  } finally {
+    db.close();
+  }
+}
+
+let refreshInFlight: Promise<void> | undefined;
+export function refreshAuth(failedAccess = getStoredAccessToken()): Promise<void> {
+  if (refreshInFlight) return refreshInFlight;
+  const rotate = async () => {
+    const mode = getAuthMode();
+    const access = getStoredAccessToken();
+    // Another tab rotated or switched accounts while we waited for the lock.
+    if (access && access !== failedAccess) return;
+    const refresh = localStorage.getItem('aim_data_refresh_token');
+    if (!access || !refresh) throw new AuthRefreshError(401, 'session_missing');
+    const unchanged = () => access === getStoredAccessToken() &&
+      refresh === localStorage.getItem('aim_data_refresh_token') && mode === getAuthMode();
+    const response = await fetch(`${getApiUrl()}/api/auth/aim-market-refresh`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refresh, auth_mode: mode }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      if (unchanged() && [401, 403].includes(response.status)) clearAuthTokens();
+      throw new AuthRefreshError(response.status, body.error_code, response.headers.get('Retry-After'));
+    }
+    const data = await response.json() as AuthLoginResponse;
+    if (!unchanged()) throw new Error('Account changed during refresh. Please retry.');
+    if (data.auth_mode !== mode) throw new Error('Invalid refresh mode. Please retry.');
+    storeAuthTokens(data);
+  };
+  refreshInFlight = (navigator.locks
+    ? navigator.locks.request('aim-data-auth-refresh', rotate)
+    : serialFallback(rotate)).finally(() => { refreshInFlight = undefined; });
+  return refreshInFlight;
 }
 
 // Generic fetch wrapper with error handling
@@ -77,30 +171,15 @@ async function apiFetch<T>(
   });
 
   if (response.status === 401) {
-    const refreshToken = getStoredRefreshToken();
     const alreadyRetried = (options.headers as Record<string, string> | undefined)?.['X-Refresh-Retry'] === '1';
-    if (refreshToken && !alreadyRetried) {
-      try {
-        const refreshResp = await fetch(`${getApiUrl()}/api/auth/aim-market-refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        });
-        if (refreshResp.ok) {
-          const tokens = await refreshResp.json();
-          localStorage.setItem('aim_data_access_token', tokens.access_token);
-          localStorage.setItem('aim_data_refresh_token', tokens.refresh_token);
-          return apiFetch<T>(endpoint, {
-            ...options,
-            headers: { ...(options.headers as Record<string, string>), 'X-Refresh-Retry': '1' },
-          });
-        }
-      } catch {
-        // Refresh is best-effort; fall through to clear tokens and redirect.
-      }
+    if (!alreadyRetried && localStorage.getItem('aim_data_refresh_token')) {
+      await refreshAuth(accessToken);
+      return apiFetch<T>(endpoint, {
+        ...options,
+        headers: { ...(options.headers as Record<string, string>), 'X-Refresh-Retry': '1' },
+      });
     }
-    clearAuthTokens();
-    if (typeof window !== 'undefined') window.location.href = '/login';
+    if (getStoredAccessToken() === accessToken) clearAuthTokens();
   }
 
   if (!response.ok) {
@@ -1272,6 +1351,8 @@ export interface AuthSetupResponse {
 }
 
 export interface AuthLoginResponse {
+  auth_mode?: AuthMode;
+  registration_status?: "registered" | "not_ready";
   access_token: string;
   refresh_token: string;
   token_type: string;

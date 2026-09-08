@@ -15,7 +15,7 @@ services:
   app:
     image: ghcr.io/aidotmarket/aim-data:${AIM_DATA_VERSION:-v1.22.10}
     ports:
-      - "${AIM_DATA_PORT:-8080}:80"
+      - "127.0.0.1:${AIM_DATA_PORT:-8080}:80"
     volumes:
       - aim-data-data:/data
       # Optional: host directory for local file import (read-only)
@@ -32,6 +32,10 @@ services:
       - DATABASE_URL=postgresql://aim_data:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/aim_data
       - AIM_DATA_MAX_CONCURRENT_PROCESSING=${AIM_DATA_MAX_CONCURRENT_PROCESSING:-2}
       - AIM_DATA_AUTH_ENABLED=true
+      - AIM_DATA_OAUTH_ENABLED=${AIM_DATA_OAUTH_ENABLED:-false}
+      - AIM_DATA_OAUTH_LOOPBACK_PORT=${AIM_DATA_OAUTH_LOOPBACK_PORT:-${AIM_DATA_PORT:-8080}}
+      - AIM_DATA_OAUTH_FRONTEND_ORIGIN=${AIM_DATA_OAUTH_FRONTEND_ORIGIN:-https://ai.market}
+      - AIM_DATA_OAUTH_TEST_MODE=false
       - AIM_DATA_CONNECTIVITY_ENABLED=${AIM_DATA_CONNECTIVITY_ENABLED:-false}
       - AI_MARKET_AWS_ACCOUNT_ID=${AI_MARKET_AWS_ACCOUNT_ID:-948749907373}
       - AIM_DATA_ALLAI_ENABLED=${AIM_DATA_ALLAI_ENABLED:-true}
