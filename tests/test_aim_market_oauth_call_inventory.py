@@ -446,15 +446,27 @@ async def test_trust_registration_and_websocket_stream_inventory(wire, monkeypat
     message = {"action": "synthetic", "transfer_id": wire.state.vz_install_id, "owner": wire.owner}
     future = asyncio.get_running_loop().create_future()
     client._waiters["synthetic:" + wire.state.vz_install_id] = future
-    async def messages():
-        yield json.dumps(message)
+    from datetime import datetime, timedelta, timezone
+    from app.services.trust_channel_protocol import TrafficSession
+    # This inventory checks URL/credential routing. Full crypto interoperability
+    # is covered by test_trust_channel_client's independent loopback server.
+    monkeypatch.setattr(client, "_load_identity", lambda: ("registered-device", None, None, None, None))
+    monkeypatch.setattr(client, "_handshake", AsyncMock(return_value=(
+        TrafficSession(bytes(32), bytes(32), bytes(12)),
+        {"session_id": "inventory", "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()},
+    )))
+    socket = SimpleNamespace(recv=AsyncMock(side_effect=[
+        json.dumps({"type": "event", "sequence": 0, "payload": message}),
+        ConnectionError("inventory complete"),
+    ]))
     @asynccontextmanager
     async def connect(url, **kwargs):
         assert url == "wss://api.ai.market/api/v1/trust/stream"
         assert kwargs["additional_headers"] == {"X-API-Key": wire.key}
-        yield messages()
+        yield socket
     monkeypatch.setattr(trust.websockets, "connect", connect)
-    await client._connect_and_listen()
+    with pytest.raises(ConnectionError, match="inventory complete"):
+        await client._connect_and_listen()
     assert future.result() == message and client._ws is None
 
 
