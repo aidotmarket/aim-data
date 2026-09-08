@@ -23,12 +23,13 @@ Each is independent — failure of one does not block the next.
 import asyncio
 import base64
 import hashlib
+import json
 import logging
 import math
 import mimetypes
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlsplit, urlunsplit
 
@@ -152,6 +153,7 @@ class FulfillmentService:
                 assert artifact.connection is not None and artifact.metadata is not None
                 await self._deliver_s3_object(
                     log_entry=log_entry,
+                    dataset=dataset,
                     connection=artifact.connection,
                     metadata=artifact.metadata,
                     transfer_id=transfer_id,
@@ -267,6 +269,7 @@ class FulfillmentService:
     async def _deliver_s3_object(
         self,
         log_entry: FulfillmentLog,
+        dataset: DatasetRecord,
         connection: S3Connection,
         metadata: S3ObjectMetadata,
         transfer_id: str,
@@ -331,36 +334,40 @@ class FulfillmentService:
             )
             return
 
-        url_params = {
-            "url": url,
-            "expires_in": expires_in,
-            "object_key": metadata.object_key,
-            "content_type": metadata.content_type,
-            "size_bytes": metadata.size_bytes,
-            "transfer_id": transfer_id,
+        parameters = {
+            "success": True,
             "order_id": order_id,
-            "listing_id": listing_id,
+            "access_url": url,
+            "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat(),
+            "file_size_bytes": metadata.size_bytes,
         }
-        if metadata.etag:
-            url_params["etag"] = metadata.etag
-
-        await self._client.send_action({
-            "action": "vai.fulfillment.url",
-            "transfer_id": transfer_id,
-            "order_id": order_id,
-            "listing_id": listing_id,
-            "parameters": url_params,
-        })
-
-        await self._client.send_action({
-            "action": "vai.fulfillment.complete",
-            "transfer_id": transfer_id,
-            "order_id": order_id,
-            "parameters": {
-                "status": "fulfilled",
-                "delivery_mode": "presigned_url",
-            },
-        })
+        # S3 ETags are not SHA-256 hashes. Use a stored dataset SHA-256 when
+        # available; the server explicitly accepts a missing (nullable) hash.
+        stored = json.loads(dataset.metadata_json or "{}")
+        for field in ("sha256_hash", "file_hash", "content_hash"):
+            value = stored.get(field)
+            if isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdefABCDEF" for c in value):
+                parameters["file_hash"] = value.lower()
+                break
+        request_id = log_entry.request_id or str(uuid.uuid4())
+        response_message = {
+            "action": "vai.fulfillment.response",
+            "request_id": request_id,
+            "parameters": parameters,
+        }
+        try:
+            ack = await self._client.wait_for_action(
+                "", request_id, timeout=ACK_TIMEOUT_S, message=response_message,
+            )
+            result = ack.get("data") or {}
+            if (ack.get("success") is not True or ack.get("error")
+                    or not isinstance(result, dict) or result.get("success") is not True
+                    or result.get("error") or result.get("status") != "delivered"):
+                raise ConnectionError("Server did not acknowledge S3 delivery")
+        except (TimeoutError, ConnectionError):
+            self._update_log(log_entry, "failed", error_code="TRANSFER_ABORTED",
+                             error_message="S3 delivery was rejected or not acknowledged")
+            return
 
         self._update_log(log_entry, "completed")
         logger.info(

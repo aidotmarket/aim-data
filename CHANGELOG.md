@@ -22,6 +22,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 - Shared core platform inherited from vectoraiz-monorepo (allAI, RAG, indexing, search, copilot, billing, attestation)
 
 ### Fixed
+- S3-hosted datasets are delivered with the server-supported response message; a rejected delivery is no longer recorded as completed.
 - Trust Channel: AIM Data now performs the Ed25519/X25519 handshake and AES-256-GCM framing required by ai.market, so deliveries can complete over the stream instead of queueing.
 - docker-compose.aim-data.yml now pulls the correct image (ghcr.io/aidotmarket/aim-data, not ghcr.io/aidotmarket/vectoraiz). Regression introduced 2026-04-08 in vectoraiz-monorepo and persisted for 7 weeks until the split corrected it.
 

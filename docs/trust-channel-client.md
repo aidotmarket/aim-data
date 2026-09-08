@@ -19,8 +19,8 @@ client does not recompute the machine fingerprint or use the VZ install UUID.
 
 Connection setup retains `X-API-Key`, sends HELLO with a fresh 16-byte nonce, signs
 the exact length-prefixed transcript, derives separate directional keys, and waits
-for ESTABLISHED before allowing application sends. Only data frames are decrypted;
-events and ping/pong remain JSON control traffic. Both sequence directions start
+for ESTABLISHED before allowing application sends. Data and event payloads are decrypted;
+transport ACKs and ping/pong remain JSON control traffic. Both sequence directions start
 at zero, permit gaps, and reject replay and out-of-range values. Session expiry or
 counter exhaustion requires a fresh handshake. Disconnect clears traffic keys,
 cancels session handlers and fails pending waiters. Mutable shared-secret zeroing
@@ -44,6 +44,38 @@ rate limits can extend the pause. Incoming events, control ACKs and ping/pong
 continue during the pause; reconnect clears it. The pause does not automatically
 replay the action rejected by the server; fulfillment's existing ACK timeout and
 resend logic remains responsible for recovery.
+
+## S3 delivery and fail-safe completion
+
+S3 delivery sends one `vai.fulfillment.response` with a top-level `request_id`
+(the incoming request ID, or a generated UUID when absent). Its `parameters`
+contain `order_id`, `success: true`, `access_url`, ISO `expires_at`, and
+`file_size_bytes` from the scanned S3 object. A valid stored dataset SHA-256
+(`metadata_json.sha256_hash`, `file_hash`, or `content_hash`) becomes `file_hash`.
+S3 metadata has no SHA-256 field; its ETag is not used as one. If no stored hash
+is available, the hash is omitted: the pinned server uses `payload.get("file_hash")`
+and its `orders.delivery_file_hash` column is nullable. No object download is added.
+This path sends neither `vai.fulfillment.url` nor `vai.fulfillment.complete`.
+
+At backend `58a04603`, `app/api/v1/endpoints/trust_websocket.py:111` allows
+response actions; lines 1091–1098 reserve the fast path for chunk-protocol actions.
+Lines 1166–1179 pass response parameters to ActionExecutor.
+`app/services/action_executor_service.py:555–562` reads `parameters.order_id`
+as a UUID and passes the parameters to `handle_fulfillment_response`.
+`app/services/fulfillment_service.py:185–227` checks delivery success/access URL
+and stores delivery details; line 262 returns `success: true, status: delivered`.
+ActionExecutor line 232 wraps that result in an execution-success envelope.
+WebSocket lines 1192–1205 echo `request_id` and encrypt the envelope (1334–1349).
+There is no transfer ID correlation or `vai.fulfillment.ack` on this route.
+
+The client registers `wait_for_action("", request_id, timeout=30)` before sending
+so an immediate reply cannot be lost. It preserves the response envelope and
+marks the local log completed only when outer `success` and `data.success` are
+both true and `data.status` is `delivered`, with no errors. Rejection, missing or
+negative delivery confirmation, disconnect, or a 30-second reply timeout marks
+it failed. Encrypted action-less error responses fail the correlated waiter;
+an error with no request ID fails all pending waiters. Error text stored locally
+is generic so a server response cannot leak a presigned URL into the log.
 
 ## Platform signature limitation
 
@@ -130,3 +162,13 @@ when socket close also fails.
 rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/pytest -q tests/test_trust_channel_client.py tests/test_fulfillment*.py
 rtk git diff --check
 ```
+
+## Council fold 2 validation (2026-09-08)
+
+Built on remote branch head `4447db6`, preserving the first Council fold.
+`pytest -q tests/test_trust_channel_client.py tests/test_fulfillment*.py` passes
+75 tests with 11 deprecation warnings in the existing AIM Data Python 3.12
+environment. `git diff --check` passes. Coverage includes one-response S3 delivery,
+stored SHA-256 and absent-hash paths, positive confirmation, nested delivery
+failure, malformed confirmation, timeout, disconnect/rejection, encrypted error
+frames, request-ID isolation, and an immediate encrypted reply during send.

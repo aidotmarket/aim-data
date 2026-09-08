@@ -628,9 +628,18 @@ class TestS3PresignedUrlFulfillment:
     """S3-backed datasets are delivered by presigned URL, not chunk streaming."""
 
     @pytest.mark.asyncio
-    async def test_s3_branch_sends_url_then_complete_and_does_not_stream(
+    async def test_s3_branch_sends_response_and_requires_delivery_ack(
         self, service, mock_client
     ):
+        async def respond(action, correlation, timeout, *, message):
+            assert action == "" and correlation == message["request_id"]
+            assert timeout == 30.0
+            await mock_client.send_action(message)
+            with get_session_context() as session:
+                assert session.exec(select(FulfillmentLog).where(FulfillmentLog.order_id == message["parameters"]["order_id"])).first().status == "uploading"
+            return {"request_id": correlation, "success": True,
+                    "data": {"success": True, "status": "delivered"}}
+        mock_client.wait_for_action.side_effect = respond
         listing_id = "listing-s3-url"
         _create_s3_backed_dataset(listing_id, dataset_id="s3-url")
         message = _make_deliver_message(listing_id)
@@ -647,25 +656,19 @@ class TestS3PresignedUrlFulfillment:
 
         calls = mock_client.send_action.call_args_list
         actions = [c[0][0]["action"] for c in calls]
-        assert actions == ["vai.fulfillment.url", "vai.fulfillment.complete"]
+        assert actions == ["vai.fulfillment.response"]
         mock_stream.assert_not_called()
-
-        url_msg = calls[0][0][0]
-        transfer_id = url_msg["transfer_id"]
-        assert url_msg["parameters"] == {
-            "url": "https://seller-bucket.s3.amazonaws.com/exports/object.csv?sig=redacted",
-            "expires_in": 300,
-            "object_key": "exports/object.csv",
-            "content_type": "text/csv",
-            "size_bytes": 12345,
-            "transfer_id": transfer_id,
+        response = calls[0][0][0]
+        assert response["request_id"] == message["parameters"]["request_id"]
+        params = response["parameters"]
+        expiry = datetime.fromisoformat(params.pop("expires_at"))
+        assert 290 < (expiry - datetime.now(timezone.utc)).total_seconds() <= 300
+        assert params == {
+            "success": True,
+            "access_url": "https://seller-bucket.s3.amazonaws.com/exports/object.csv?sig=redacted",
+            "file_size_bytes": 12345,
             "order_id": message["parameters"]["order_id"],
-            "listing_id": listing_id,
-            "etag": '"abc123"',
         }
-        complete_msg = calls[1][0][0]
-        assert complete_msg["parameters"]["status"] == "fulfilled"
-        assert complete_msg["parameters"]["delivery_mode"] == "presigned_url"
         mock_broker.presign_object.assert_called_once_with(
             role_arn="arn:aws:iam::210987654321:role/aim-data",
             region="us-east-1",
@@ -680,6 +683,43 @@ class TestS3PresignedUrlFulfillment:
             assert log is not None
             assert log.status == "completed"
             assert log.file_size_bytes == 12345
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reply", [
+        {"success": False, "error": "rejected"},
+        {"success": True, "data": {"success": False, "error": "delivery failed"}},
+        {"success": True},
+        {"success": True, "data": {"success": True, "status": "queued"}},
+        TimeoutError("no reply"), ConnectionError("rejected"),
+    ])
+    async def test_s3_rejection_never_completes(self, service, mock_client, reply):
+        _create_s3_backed_dataset("s3-reject", dataset_id="s3-reject")
+        async def respond(*args, message, **kwargs):
+            await mock_client.send_action(message)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+        mock_client.wait_for_action.side_effect = respond
+        with patch("app.services.fulfillment_service.S3BrokerClient") as broker:
+            broker.return_value.presign_object.return_value = {"url": "https://example.org/data"}
+            await service._handle_deliver(_make_deliver_message("s3-reject"))
+        assert [c.args[0]["action"] for c in mock_client.send_action.call_args_list] == ["vai.fulfillment.response"]
+        with get_session_context() as session:
+            assert session.exec(select(FulfillmentLog).where(FulfillmentLog.listing_id == "s3-reject").order_by(FulfillmentLog.started_at.desc())).first().status == "failed"
+
+    @pytest.mark.asyncio
+    async def test_s3_uses_stored_dataset_hash(self, service, mock_client):
+        _create_s3_backed_dataset("s3-hash", dataset_id="s3-hash")
+        with get_session_context() as session:
+            dataset = session.get(DatasetRecord, "s3-hash")
+            dataset.metadata_json = json.dumps({"sha256_hash": "ab" * 32})
+            session.add(dataset)
+            session.commit()
+        mock_client.wait_for_action.return_value = {"success": True, "data": {"success": True, "status": "delivered"}}
+        with patch("app.services.fulfillment_service.S3BrokerClient") as broker:
+            broker.return_value.presign_object.return_value = {"url": "https://example.org/data"}
+            await service._handle_deliver(_make_deliver_message("s3-hash"))
+        assert mock_client.wait_for_action.call_args.kwargs["message"]["parameters"]["file_hash"] == "ab" * 32
 
     @pytest.mark.asyncio
     async def test_local_file_path_still_used_when_dataset_not_s3_backed(

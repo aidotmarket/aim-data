@@ -503,3 +503,28 @@ async def test_send_preserves_error_when_close_fails(error):
         await client.send_action({})
     assert client._session is None
     ws.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reply", [
+    {"request_id": "s3-request", "success": True, "data": {"success": True, "status": "delivered"}},
+    {"request_id": "s3-request", "success": False, "error": "not permitted"},
+    {"request_id": "s3-request", "type": "error", "error": "rejected"},
+    {"type": "error", "error": "uncorrelated failure"},
+])
+async def test_encrypted_response_waiter_preserves_envelope_and_surfaces_errors(reply):
+    client = module.TrustChannelClient()
+    client._session = TrafficSession(*derive_keys(X, public(SERVER), CN, SN), SN)
+    async def immediate_reply(message):
+        # Reply arrives during send, before send_action returns.
+        unrelated = dict(reply, request_id="unrelated")
+        client._dispatch(client._session.receive(server_frame(unrelated, 0, server_keys(CN)["s2c"])))
+        assert not client._waiters[":s3-request"].done()
+        client._dispatch(client._session.receive(server_frame(reply, 1, server_keys(CN)["s2c"])))
+    client.send_action = immediate_reply
+    if reply.get("error"):
+        with pytest.raises(ConnectionError, match="rejected"):
+            await client.wait_for_action("", "s3-request", timeout=0.1, message={})
+    else:
+        assert await client.wait_for_action("", "s3-request", timeout=0.1, message={}) == reply
+    assert not client._waiters

@@ -128,11 +128,13 @@ class TrustChannelClient:
                 raise
 
     async def wait_for_action(
-        self, action: str, transfer_id: str, timeout: float = 30.0
+        self, action: str, transfer_id: str, timeout: float = 30.0,
+        *, message: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Wait for a specific action+transfer_id message from the server.
-        Used for ACK waiting during chunk streaming.
+        For action-less responses, use an empty action and request_id as the key.
+        Optional message is sent after registering the waiter to avoid fast-reply races.
 
         Returns the parsed message dict, or raises TimeoutError.
         """
@@ -140,6 +142,8 @@ class TrustChannelClient:
         future: asyncio.Future[Dict[str, Any]] = asyncio.get_event_loop().create_future()
         self._waiters[waiter_key] = future
         try:
+            if message is not None:
+                await self.send_action(message)
             return await asyncio.wait_for(future, timeout=timeout)
         except asyncio.TimeoutError:
             raise TimeoutError(f"Timed out waiting for {action} (transfer_id={transfer_id})")
@@ -230,9 +234,6 @@ class TrustChannelClient:
                     if frame_type not in ("data", "event"):
                         continue
                     message = session.receive(frame)
-                    # Backend encrypted ACK responses wrap the action in data.
-                    if "action" not in message and isinstance(message.get("data"), dict):
-                        message = message["data"]
                     self._dispatch(message)
                     if frame_type == "event" and "event_id" in frame:
                         await ws.send(json.dumps({"type": "ack", "event_id": frame["event_id"]}))
@@ -331,6 +332,22 @@ class TrustChannelClient:
         return await asyncio.wait_for(exchange(), timeout=30.0)
 
     def _dispatch(self, message):
+        # Preserve the envelope: response delivery is correlated by request_id,
+        # and outer execution success alone does not mean delivery succeeded.
+        if not message.get("action"):
+            request_id = message.get("request_id")
+            failed = message.get("error") or message.get("type") == "error" or message.get("success") is False
+            if failed:
+                for key, future in self._waiters.items():
+                    if not future.done() and (not request_id or key == f":{request_id}"):
+                        future.set_exception(ConnectionError("Trust Channel rejected delivery"))
+                return
+            future = self._waiters.get(f":{request_id}") if request_id else None
+            if future is not None and not future.done():
+                future.set_result(message)
+                return
+            if isinstance(message.get("data"), dict):
+                message = message["data"]
         action = message.get("action", "")
         transfer_id = message.get("transfer_id", "")
         waiter_key = f"{action}:{transfer_id}"
