@@ -22,6 +22,7 @@ import asyncio
 import base64
 import hashlib
 import os
+from contextlib import suppress
 from datetime import datetime, timezone
 from uuid import uuid4
 import json
@@ -71,6 +72,7 @@ class TrustChannelClient:
         self._handler_tasks: set[asyncio.Task] = set()
         self._running = False
         self._send_lock = asyncio.Lock()
+        self._send_resume_at = 0.0
         self._waiters: Dict[str, asyncio.Future] = {}
         # Build WS URL from ai_market_url (http → ws, https → wss)
         base = settings.ai_market_url.rstrip("/")
@@ -94,6 +96,11 @@ class TrustChannelClient:
             ws, session = self._ws, self._session
             if ws is None or session is None:
                 raise ConnectionError("Trust Channel not established")
+            loop = asyncio.get_running_loop()
+            while self._send_resume_at > loop.time():
+                await asyncio.sleep(self._send_resume_at - loop.time())
+            if self._ws is not ws or self._session is not session:
+                raise ConnectionError("Trust Channel disconnected while rate limited")
             if session.outbound >= LIMIT:
                 await ws.close(code=1000, reason="Sequence exhausted; fresh handshake required")
                 raise ConnectionError("Trust Channel sequence exhausted")
@@ -108,10 +115,16 @@ class TrustChannelClient:
                     parameters.update(message.get("parameters") or {})
                     payload["parameters"] = parameters
                 await ws.send(json.dumps(session.encrypt(payload)))
-            except BaseException:
+            except asyncio.CancelledError:
+                self._session = None
+                with suppress(Exception):
+                    await ws.close()
+                raise
+            except Exception:
                 # Do not allow a possibly partial send to continue on this session.
                 self._session = None
-                await ws.close()
+                with suppress(Exception):
+                    await ws.close()
                 raise
 
     async def wait_for_action(
@@ -206,6 +219,14 @@ class TrustChannelClient:
                     if frame_type == "ping":
                         await ws.send(json.dumps({"type": "pong"}))
                         continue
+                    if frame_type == "rate_limit":
+                        retry_after_ms = frame["retry_after_ms"]
+                        self._send_resume_at = max(
+                            self._send_resume_at,
+                            asyncio.get_running_loop().time() + retry_after_ms / 1000,
+                        )
+                        logger.info("Trust Channel rate limited; retry_after_ms=%s", retry_after_ms)
+                        continue
                     if frame_type not in ("data", "event"):
                         continue
                     message = session.receive(frame)
@@ -213,7 +234,10 @@ class TrustChannelClient:
                     if "action" not in message and isinstance(message.get("data"), dict):
                         message = message["data"]
                     self._dispatch(message)
+                    if frame_type == "event" and "event_id" in frame:
+                        await ws.send(json.dumps({"type": "ack", "event_id": frame["event_id"]}))
         finally:
+            self._send_resume_at = 0.0
             self._session = None
             self._ws = None
             tasks = list(self._handler_tasks)

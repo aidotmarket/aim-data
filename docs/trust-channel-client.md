@@ -30,6 +30,21 @@ Application actions receive a `request_id`; existing flat fulfillment fields are
 copied into `parameters`, with explicit parameters taking precedence. Encrypted
 backend ACK response `data` is unwrapped before dispatch to existing handlers.
 
+## Event acknowledgements and rate limits
+
+After successfully decoding and dispatching an `event` frame with `event_id`, the
+client immediately sends plaintext `{"type":"ack","event_id":<id>}` without
+waiting for the application handler to finish. This is a transport acknowledgement,
+separate from encrypted fulfillment ACKs. The server allows three unacknowledged
+events; each control ACK releases capacity and triggers another pending-event drain.
+
+A `{"type":"rate_limit","retry_after_ms":N}` control frame pauses subsequent
+`send_action` calls for N milliseconds and logs the delay at info level. Further
+rate limits can extend the pause. Incoming events, control ACKs and ping/pong
+continue during the pause; reconnect clears it. The pause does not automatically
+replay the action rejected by the server; fulfillment's existing ACK timeout and
+resend logic remains responsible for recovery.
+
 ## Platform signature limitation
 
 The current registration service stores platform Ed25519 and X25519 public keys,
@@ -97,3 +112,21 @@ The existing inventory file also has a pre-existing Ruff E731 at line 270, outsi
 the changed test. The initial default Python 3.13 pytest environment stopped at 37
 collection errors, primarily missing `duckdb`; final validation used the project
 environment above without installing dependencies or changing shared environments.
+
+## Council fold validation (2026-09-08)
+
+The DeepSeek review `deepseek/response-20260908-182644-386301.md` findings F1–F4
+are addressed. The requested client/fulfillment suite passes 64 tests (11
+deprecation warnings); scoped client/test Ruff and `git diff --check` pass.
+The six-event loopback models the server's three-event capacity and release on
+ACK, checks one ACK per event on one connection with zero remaining unacknowledged
+events, and keeps handlers pending until transport ACKs finish. Its rate-limit
+variant verifies the outbound delay and continued control ACK traffic. Fulfillment
+log tests cover top-level request IDs, precedence and the parameters fallback;
+send-failure tests cover cancellation and preservation of the original exception
+when socket close also fails.
+
+```sh
+rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/pytest -q tests/test_trust_channel_client.py tests/test_fulfillment*.py
+rtk git diff --check
+```

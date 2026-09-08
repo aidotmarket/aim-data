@@ -110,7 +110,7 @@ class FulfillmentService:
         params = message.get("parameters", {})
         order_id = params.get("order_id", "")
         listing_id = params.get("listing_id", "")
-        request_id = params.get("request_id", "")
+        request_id = message.get("request_id", params.get("request_id", ""))
         transfer_id = str(uuid.uuid4())
 
         # Create fulfillment log entry

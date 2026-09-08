@@ -519,13 +519,19 @@ class TestQueuedFulfillments:
 class TestFulfillmentLog:
     """§7.7: Fulfillment log records all fields correctly."""
 
+    @pytest.mark.parametrize("request_location", ["params", "top", "both"])
     @pytest.mark.asyncio
     async def test_successful_fulfillment_logged(
-        self, service, mock_client, sample_dataset, sample_file, tmp_data_dir
+        self, service, mock_client, sample_dataset, sample_file, tmp_data_dir, request_location
     ):
         """Successful fulfillment creates a log entry with all fields."""
         message = _make_deliver_message("listing-abc-123")
         params = message["parameters"]
+        expected_request_id = params["request_id"]
+        if request_location != "params":
+            expected_request_id = message["request_id"] = "top-level-request"
+        if request_location == "top":
+            del params["request_id"]
 
         with patch("app.services.fulfillment_service.settings") as mock_settings:
             mock_settings.upload_directory = str(tmp_data_dir / "uploads")
@@ -547,7 +553,7 @@ class TestFulfillmentLog:
             assert len(log.transfer_id) == 36  # UUID format
             assert log.order_id == params["order_id"]
             assert log.listing_id == params["listing_id"]
-            assert log.request_id == params["request_id"]
+            assert log.request_id == expected_request_id
             assert log.status == "completed"
             assert log.started_at is not None
             assert log.completed_at is not None

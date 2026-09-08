@@ -379,3 +379,127 @@ def test_missing_keystore_does_not_create_identity(tmp_path, monkeypatch):
     with pytest.raises(ConnectionError, match="registration is missing"):
         module.TrustChannelClient()._load_identity()
     assert not path.exists()
+
+
+@pytest.mark.parametrize("rate_limited", [False, True])
+@pytest.mark.asyncio
+async def test_event_capacity_released_before_handlers_finish(monkeypatch, caplog, rate_limited):
+    logger = logging.Logger("trust-channel-flow-test")
+    logger.addHandler(caplog.handler)
+    monkeypatch.setattr(module, "logger", logger)
+    monkeypatch.setattr(module.settings, "internal_api_key", "test-key")
+    client = module.TrustChannelClient()
+    monkeypatch.setattr(client, "_load_identity", lambda: (DEVICE, ED, public(ED), X, public(X)))
+    finished = asyncio.get_running_loop().create_future()
+    all_acked = asyncio.Event()
+    delivered = []
+    completed = []
+    connections = []
+    ack_ids = []
+    unacked = set()
+    refused = []
+    send_started = asyncio.Event()
+
+    async def handler(message):
+        delivered.append(message["n"])
+        # A transport ACK must not wait for fulfillment to complete.
+        await all_acked.wait()
+        completed.append(message["n"])
+
+    client.register_handler("vai.fulfillment.deliver", handler)
+
+    async def send_action():
+        send_started.set()
+        await client.send_action({"action": "probe"})
+
+    async def server(ws):
+        connections.append(ws)
+        sender = None
+        try:
+            hello = json.loads(await ws.recv())
+            await ws.send(json.dumps(challenge()))
+            await ws.recv()  # RESPONSE; handshake cryptography is covered above.
+            keys = server_keys(bytes.fromhex(hello["client_nonce"]))
+            await ws.send(json.dumps(established()))
+            if rate_limited:
+                rate_limit_sent_at = asyncio.get_running_loop().time()
+                await ws.send(json.dumps({"type": "rate_limit", "retry_after_ms": 300}))
+                # Pong proves the receive loop has processed the rate limit.
+                await ws.send(json.dumps({"type": "ping"}))
+                assert json.loads(await ws.recv()) == {"type": "pong"}
+                sender = asyncio.create_task(send_action())
+                await send_started.wait()
+                with pytest.raises(asyncio.TimeoutError):
+                    await asyncio.wait_for(ws.recv(), 0.05)
+                assert not sender.done()
+
+            async def send_event(n):
+                if len(unacked) >= 3:
+                    refused.append(n)
+                    return False
+                event_id = f"event-{n}"
+                unacked.add(event_id)
+                await ws.send(json.dumps({"type": "event", "event_id": event_id,
+                    "sequence": n, "payload": {"action": "vai.fulfillment.deliver", "n": n}}))
+                return True
+
+            next_event = 0
+            while next_event < 6 and await send_event(next_event):
+                next_event += 1
+            assert next_event == 3 and refused == [3]
+            while unacked:
+                ack = json.loads(await asyncio.wait_for(ws.recv(), 2))
+                assert set(ack) == {"type", "event_id"} and ack["type"] == "ack"
+                assert ack["event_id"] in unacked
+                unacked.remove(ack["event_id"])
+                ack_ids.append(ack["event_id"])
+                while next_event < 6 and await send_event(next_event):
+                    next_event += 1
+            assert not completed
+            all_acked.set()
+            if sender:
+                incoming = json.loads(await asyncio.wait_for(ws.recv(), 2))
+                assert asyncio.get_running_loop().time() - rate_limit_sent_at >= 0.3
+                assert incoming["type"] == "data" and incoming["sequence"] == 0
+                plain = AESGCM(keys["c2s"]).decrypt(server_iv(SN, 0, False),
+                    base64.b64decode(incoming["ciphertext"]) + base64.b64decode(incoming["auth_tag"]), None)
+                assert json.loads(plain)["action"] == "probe"
+                await sender
+            await asyncio.gather(*list(client._handler_tasks))
+            finished.set_result(True)
+        except BaseException as exc:
+            if not finished.done():
+                finished.set_exception(exc)
+            raise
+        finally:
+            if sender and not sender.done():
+                sender.cancel()
+                await asyncio.gather(sender, return_exceptions=True)
+
+    async with websockets.serve(server, "127.0.0.1", 0) as listener:
+        client._ws_url = f"ws://127.0.0.1:{listener.sockets[0].getsockname()[1]}"
+        with pytest.raises(websockets.exceptions.ConnectionClosedOK):
+            await asyncio.wait_for(client._connect_and_listen(), 5)
+        assert await finished
+    assert len(connections) == 1
+    assert ack_ids == [f"event-{n}" for n in range(6)]
+    assert sorted(delivered) == sorted(completed) == list(range(6))
+    assert len(unacked) == 0
+    assert client._send_resume_at == 0
+    if rate_limited:
+        assert any(r.levelno == logging.INFO and "retry_after_ms=300" in r.message
+                   for r in caplog.records)
+
+
+@pytest.mark.parametrize("error", [asyncio.CancelledError, OSError])
+@pytest.mark.asyncio
+async def test_send_preserves_error_when_close_fails(error):
+    client = module.TrustChannelClient()
+    ws = client._ws = AsyncMock()
+    client._session = TrafficSession(*derive_keys(X, public(SERVER), CN, SN), SN)
+    ws.send.side_effect = error("original send error")
+    ws.close.side_effect = RuntimeError("close failed")
+    with pytest.raises(error, match="original send error"):
+        await client.send_action({})
+    assert client._session is None
+    ws.close.assert_awaited_once()
