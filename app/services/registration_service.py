@@ -218,7 +218,7 @@ async def ensure_trust_device_registered(
     )
     if stored_token and auth_status in (401, 403) and settings.internal_api_key:
         return await register_with_marketplace(
-            crypto, api_key=settings.internal_api_key, max_retries=1,
+            crypto, max_retries=1,
         )
     return registered
 
