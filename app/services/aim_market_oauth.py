@@ -18,6 +18,16 @@ lock = asyncio.Lock()
 records = {}
 
 
+def provider_hint(data):
+    """Only the two supported website providers may be used as a login hint."""
+    if "provider" not in data:
+        return None
+    provider = data["provider"]
+    if not isinstance(provider, str) or provider not in ("google", "github"):
+        raise failure(400, "invalid_provider")
+    return provider
+
+
 def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 

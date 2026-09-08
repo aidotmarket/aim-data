@@ -358,3 +358,37 @@ def test_real_password_refresh_keeps_string_detail(real_app_client, monkeypatch,
         payload["auth_mode"] = mode
     response = real_app_client.post("/api/auth/aim-market-refresh", json=payload)
     assert response.status_code == 401 and response.json() == {"detail": "Invalid refresh token"}
+
+@pytest.mark.parametrize("provider", ["google", "github"])
+def test_start_forwards_provider(client, provider):
+    nonce = client.get(flow.PATH + "/bootstrap").json()["csrf_nonce"]
+    payload = {"csrf_nonce": nonce, "provider": provider}
+    response = client.post(flow.PATH + "/start", json=payload, headers={"Origin": flow.origin()})
+    assert response.status_code == 200
+    query = parse_qs(urlparse(response.json()["authorization_url"]).query)
+    assert query["provider"] == [provider]
+    assert query["code_challenge_method"] == ["S256"]
+    assert query["redirect_uri"] == [flow.origin() + flow.PATH + "/callback"]
+    assert client.post(flow.PATH + "/start", json=payload, headers={"Origin": flow.origin()}).status_code == 403
+
+
+def test_start_omits_absent_provider(client):
+    assert "provider" not in start(client)
+
+
+@pytest.mark.parametrize("provider", ["", "Google", "facebook", "google&scope=admin", None, True, 1, [], {}])
+def test_start_rejects_invalid_provider(client, provider):
+    nonce = client.get(flow.PATH + "/bootstrap").json()["csrf_nonce"]
+    response = client.post(flow.PATH + "/start", json={"csrf_nonce": nonce, "provider": provider}, headers={"Origin": flow.origin()})
+    assert response.status_code == 400
+    assert response.json() == {"error_code": "invalid_provider"}
+    assert "set-cookie" not in response.headers
+    flow.readiness.assert_awaited_once()  # Bootstrap only; invalid hints never start a flow.
+
+
+@pytest.mark.parametrize("provider", ["google", "github"])
+def test_provider_does_not_bypass_csrf(client, provider):
+    client.get(flow.PATH + "/bootstrap")
+    response = client.post(flow.PATH + "/start", json={"csrf_nonce": "wrong", "provider": provider}, headers={"Origin": flow.origin()})
+    assert response.status_code == 403
+    assert response.json() == {"error_code": "csrf_failed"}

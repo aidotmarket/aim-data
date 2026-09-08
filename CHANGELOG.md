@@ -13,6 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 - No payment, tunnel or remote-host path is certified by this release.
 
 ### Changed
+- Login page now matches the ai.market website: Continue with Google, Continue with GitHub, then email and password. Provider buttons open ai.market with that provider preselected once the website honours the hint.
 - .dockerignore now excludes `**/__pycache__/` and `**/*.py[cod]` from the customer image.
 - Data verification is now on by default. Sellers see the paid verification flow in dataset detail without setting `DATA_VERIFICATION_ENABLED`; set `AIM_DATA_DATA_VERIFICATION_ENABLED=false` in `.env` to hide it.
 

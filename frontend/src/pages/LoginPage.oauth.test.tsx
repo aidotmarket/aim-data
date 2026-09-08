@@ -14,7 +14,9 @@ it.each(["local_disabled", "client_disabled", "backend_unsupported", "backend_un
     vi.stubGlobal("fetch", fetcher);
     render(<MemoryRouter><LoginPage /></MemoryRouter>);
     await screen.findByRole("status");
-    expect(screen.getByRole("button", { name: "Sign in with ai.market" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeDisabled();
+    expect(screen.getAllByRole("status")).toHaveLength(1);
     expect(screen.getByRole("status")).toHaveTextContent("Provider-only accounts");
     if (reason === "backend_unavailable") expect(screen.getByRole("status")).not.toHaveTextContent("is disabled");
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "buyer@example.test" } });
@@ -30,10 +32,34 @@ it("start disabled race keeps fallback and never navigates", async () => {
     csrf_nonce: "nonce", loopback_origin: location.origin })))
     .mockResolvedValueOnce(new Response(JSON.stringify({ error_code: "client_disabled" }), { status: 409 })));
   render(<MemoryRouter><LoginPage /></MemoryRouter>);
-  const button = screen.getByRole("button", { name: "Sign in with ai.market" });
+  const button = screen.getByRole("button", { name: "Continue with Google" });
   await waitFor(() => expect(button).toBeEnabled());
   fireEvent.click(button);
   expect(await screen.findByRole("status")).toHaveTextContent("ai.market sign-in is disabled");
   expect(screen.getByLabelText("Password")).toBeEnabled();
   expect(location.pathname).toBe("/");
 });
+
+
+it.each([["Google", "google"], ["GitHub", "github"]])(
+  "clicking %s posts its provider hint and disables both buttons", async (label, provider) => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { origin: location.origin, assign });
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ enabled: true, csrf_nonce: "nonce", loopback_origin: location.origin })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ authorization_url: "https://api.ai.market/api/v1/oauth/authorize" })));
+    vi.stubGlobal("fetch", fetcher);
+    render(<MemoryRouter><LoginPage /></MemoryRouter>);
+    const button = screen.getByRole("button", { name: `Continue with ${label}` });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://api.ai.market/api/v1/oauth/authorize"));
+    expect(fetcher).toHaveBeenLastCalledWith("/api/auth/aim-market/start", expect.objectContaining({
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ csrf_nonce: "nonce", provider }),
+    }));
+    for (const name of ["Continue with Google", "Continue with GitHub"]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
+  },
+);

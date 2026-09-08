@@ -20,7 +20,7 @@ def cookie(response, kind, value, request, age=600):
     response.set_cookie(cookie_name(kind), value, max_age=age, path=flow.PATH, httponly=True, samesite="lax", secure=request.url.scheme == "https" or request.url.hostname != "127.0.0.1")
 
 
-async def csrf(request, origin_error="origin_mismatch"):
+async def csrf(request, origin_error="origin_mismatch", *, allow_provider=False):
     if request.headers.get("origin") != flow.origin():
         raise failure(403, origin_error)
     if request.headers.get("content-type", "").split(";")[0] != "application/json":
@@ -38,10 +38,11 @@ async def csrf(request, origin_error="origin_mismatch"):
             return dict(pairs)
         data = json.loads(raw, object_pairs_hook=unique)
         record = flow.records.get(flow.digest(request.cookies.get(cookie_name("bootstrap"), "")))
-        if not record or not isinstance(data, dict) or set(data) != {"csrf_nonce"} or not isinstance(data["csrf_nonce"], str) or not hmac.compare_digest(record["nonce"], flow.digest(data["csrf_nonce"])):
+        if not record or not isinstance(data, dict) or set(data) - ({"provider"} if allow_provider else set()) != {"csrf_nonce"} or not isinstance(data["csrf_nonce"], str) or not hmac.compare_digest(record["nonce"], flow.digest(data["csrf_nonce"])):
             raise ValueError
     except (ValueError, TypeError, KeyError):
         raise failure(403, "csrf_failed") from None
+    return data
 
 
 @router.get("/bootstrap")
@@ -74,13 +75,14 @@ async def start(request: Request):
         raise failure(400, "loopback_origin_required")
     async with flow.lock:
         flow.cleanup()
-        await csrf(request)
+        data = await csrf(request, allow_provider=True)
+    provider = flow.provider_hint(data)
     reason = await flow.readiness()
     if reason:
         raise failure(409 if reason in ("client_disabled", "local_disabled") else 503, "client_disabled" if reason == "local_disabled" else reason)
     async with flow.lock:
         flow.cleanup()
-        await csrf(request)
+        await csrf(request, allow_provider=True)
         flow.records[flow.digest(request.cookies[cookie_name("bootstrap")])].pop("nonce", None)
         old = flow.digest(request.cookies.get(cookie_name("binding"), ""))
         flow.records.pop(old, None)
@@ -95,6 +97,7 @@ async def start(request: Request):
     response = JSONResponse({"authorization_url": issuer + "/api/v1/oauth/authorize?" + urlencode({
         "response_type": "code", "client_id": flow.CLIENT, "redirect_uri": uri, "scope": flow.SCOPE,
         "state": state, "code_challenge": flow.challenge(verifier), "code_challenge_method": "S256",
+        **({"provider": provider} if provider is not None else {}),
     })}, headers=flow.HEADERS)
     cookie(response, "binding", binding, request)
     return response
