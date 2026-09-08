@@ -63,7 +63,8 @@ VECTORAIZ_SECRET_KEY=$(generate_secret)
 VECTORAIZ_CHANNEL=aim-data
 AIM_DATA_PORT=${AIM_DATA_PORT:-8080}
 AIM_DATA_OAUTH_LOOPBACK_PORT=${AIM_DATA_PORT:-8080}
-AIM_DATA_OAUTH_ENABLED=false
+# Sign in with ai.market is on by default; set AIM_DATA_OAUTH_ENABLED=false to switch off (rollback).
+AIM_DATA_OAUTH_ENABLED=true
 VECTORAIZ_MODE=connected
 # Per-install marketplace signing identity. Derives the keystore that signs
 # your publish requests to ai.market. Generated once on install — back up this

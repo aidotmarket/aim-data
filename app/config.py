@@ -124,7 +124,7 @@ class Settings(BaseSettings):
         default=_DEFAULT_AI_MARKET_URL,
         validation_alias=_env_alias("ai_market_url"),
     )
-    oauth_enabled: bool = Field(default=False, validation_alias="AIM_DATA_OAUTH_ENABLED")
+    oauth_enabled: bool = Field(default=True, validation_alias="AIM_DATA_OAUTH_ENABLED")
     oauth_loopback_port: int = Field(default=8080, validation_alias="AIM_DATA_OAUTH_LOOPBACK_PORT")
     oauth_frontend_origin: str = Field(default="https://ai.market", validation_alias="AIM_DATA_OAUTH_FRONTEND_ORIGIN")
     oauth_test_mode: bool = Field(default=False, validation_alias="AIM_DATA_OAUTH_TEST_MODE")
