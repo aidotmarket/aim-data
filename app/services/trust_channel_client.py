@@ -118,7 +118,7 @@ class TrustChannelClient:
                     "vai.fulfillment.complete", "vai.fulfillment.error",
                     "vai.fulfillment.response",
                 }:
-                    # Backend 58a04603 trust_websocket.py:1241,1249-1253
+                    # The merged ai-market-backend 1c96b257c contract (PR #350)
                     # spreads request.parameters into the fulfillment model.
                     # Preserve the caller's nested parameters, not a flat merge.
                     payload["parameters"] = {k: v for k, v in message.items() if k not in (

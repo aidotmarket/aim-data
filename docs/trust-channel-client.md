@@ -67,8 +67,10 @@ A valid stored dataset SHA-256 (`sha256_hash`, `file_hash`, or `content_hash`)
 becomes optional `file_hash`; an S3 ETag is never treated as SHA-256. No object
 download is added. This path sends neither `vai.fulfillment.url` nor `complete`.
 
-The delivery contract is pinned to server PR #350 candidate
-`e97d0de49e6aa86def3a45538aa2b94cb8c8fa99`. Its response fast path validates
+The delivery contract source `e97d0de49e6aa86def3a45538aa2b94cb8c8fa99`
+was merged in ai-market-backend `1c96b257c` (PR #350). Delivery requires
+that merged commit or later; the vendored schema is byte-identical to its schema.
+Its response fast path validates
 `FulfillmentResponseMessage`, including UUID order/listing identifiers, optional
 listing ID, conflicting-identifier rejection, and HTTPS URLs. The contract suite
 vendors `app/schemas/fulfillment.py` byte for byte from that commit and decrypts
@@ -78,8 +80,8 @@ actual client sends before validating them. Read backend sources with
 The client registers a request-ID waiter before sending either S3 response or
 local complete. Both require outer `success` and `data.success` to be true with
 no errors. S3 requires `data.status == "delivered"`; local complete requires a
-nonempty string `data.token_id`. The candidate's complete result also includes
-`download_token`. The candidate's `TrustActionResponse` envelope echoes the
+nonempty string `data.token_id`. The merged contract's complete result also includes
+`download_token`. The merged contract's `TrustActionResponse` envelope echoes the
 request ID and includes `error: null`, `needs_confirmation: false`,
 `confirmation_prompt: null`, and `audit_log_id: null`.
 
