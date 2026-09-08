@@ -6,7 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added
+- "Sign in with ai.market": the login page now has a primary button that opens the real ai.market login in your browser (Google, GitHub, password and two-factor all work because the website handles them), asks you to confirm the account, and hands the signed-in session back to the local install. On by default. Set `AIM_DATA_OAUTH_ENABLED=false` in `.env` to switch it off; the email/password form remains as the fallback (corrected password adapter retained).
+- Local-host only: the button works when the app is opened on the same machine at `http://127.0.0.1:<port>` (published ports 8080/8099/18081); remote-host or tunnelled browsers are not supported and show guidance instead of failing silently.
+- Rollback limitation: switching the flag off stops new sign-ins and refreshes; already-issued 30-minute access tokens expire on their own. Older ai.market backends without the feature fall back to the password form automatically.
+- No payment, tunnel or remote-host path is certified by this release.
+
 ### Changed
+- .dockerignore now excludes `**/__pycache__/` and `**/*.py[cod]` from the customer image.
 - Data verification is now on by default. Sellers see the paid verification flow in dataset detail without setting `DATA_VERIFICATION_ENABLED`; set `AIM_DATA_DATA_VERIFICATION_ENABLED=false` in `.env` to hide it.
 
 ### Added
