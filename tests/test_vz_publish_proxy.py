@@ -50,6 +50,10 @@ class _MockAsyncClient:
 class _Store:
     def __init__(self):
         self.state = SimpleNamespace(
+            state=serial_store.UNPROVISIONED,
+            serial="",
+            install_token=None,
+            vz_install_serial_bound=False,
             vz_install_id=None,
             vz_install_token=None,
             ai_market_access_token="seller-token",
@@ -58,9 +62,10 @@ class _Store:
             last_status_cache={},
         )
 
-    def persist_vz_install(self, install_id: str, install_token: str | None = None):
+    def persist_vz_install(self, install_id: str, install_token: str | None = None, serial_bound: bool = False):
         self.state.vz_install_id = install_id
         self.state.vz_install_token = install_token
+        self.state.vz_install_serial_bound = serial_bound
 
     def save(self):
         pass

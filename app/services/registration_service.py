@@ -183,7 +183,7 @@ async def _register_with_marketplace(
             await asyncio.sleep(backoff)
             backoff *= 2
 
-    logger.error(f"Device registration failed after {max_retries} attempts — will retry on next startup")
+    logger.error(f"Device registration failed after {max_retries} attempts — registration remains incomplete")
     return False, None
 
 
@@ -235,10 +235,21 @@ async def ensure_vz_install_registered(
     the Ed25519 public key to the authenticated seller and returns the UUID that
     must be used as JWT iss for /api/v1/vz/publish.
     """
-    from app.services.serial_store import get_serial_store
+    from app.services.serial_store import ACTIVE, get_serial_store
 
     store = get_serial_store()
+    serial_bound = bool(
+        store.state.state == ACTIVE
+        and store.state.serial
+        and store.state.install_token
+    )
     if store.state.vz_install_id:
+        if serial_bound and not store.state.vz_install_serial_bound:
+            logger.warning(
+                "Cached VZ install is unbound despite activated serial credentials; "
+                "registration after activation is required"
+            )
+            return None
         return store.state.vz_install_id
 
     token = access_token or store.state.ai_market_access_token
@@ -249,6 +260,9 @@ async def ensure_vz_install_registered(
     ed25519_pub_b64, _x25519_pub_b64 = crypto.get_public_keys_b64()
     url = f"{settings.ai_market_url}/api/v1/vz/register"
     payload = {"public_key_b64": ed25519_pub_b64}
+    if serial_bound:
+        payload["serial"] = store.state.serial
+        payload["serial_install_token"] = store.state.install_token
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -272,7 +286,7 @@ async def ensure_vz_install_registered(
         install_id = str(data.get("install_id") or "")
         install_token = data.get("install_token")
         if install_id:
-            store.persist_vz_install(install_id, install_token)
+            store.persist_vz_install(install_id, install_token, serial_bound=serial_bound)
             if seller_id:
                 store.state.ai_market_seller_id = seller_id
                 store.save()
@@ -286,7 +300,7 @@ async def ensure_vz_install_registered(
         install_id = str(data.get("install_id") or "")
         install_token = data.get("install_token")
         if install_id:
-            store.persist_vz_install(install_id, install_token)
+            store.persist_vz_install(install_id, install_token, serial_bound=serial_bound)
             logger.info("VZ install already registered: install_id=%s", install_id)
             return install_id
         logger.info("VZ install already registered, but ai.market did not return install_id")
