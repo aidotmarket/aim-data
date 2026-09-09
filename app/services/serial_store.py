@@ -41,6 +41,7 @@ class SerialState:
     bootstrap_token: Optional[str] = None
     vz_install_id: Optional[str] = None
     vz_install_token: Optional[str] = None
+    vz_install_serial_bound: bool = False
     ai_market_access_token: Optional[str] = None
     ai_market_seller_id: Optional[str] = None
     state: str = UNPROVISIONED
@@ -88,6 +89,7 @@ class SerialStore:
                 bootstrap_token=raw.get("bootstrap_token"),
                 vz_install_id=raw.get("vz_install_id"),
                 vz_install_token=raw.get("vz_install_token"),
+                vz_install_serial_bound=raw.get("vz_install_serial_bound", False),
                 ai_market_access_token=raw.get("ai_market_access_token"),
                 ai_market_seller_id=raw.get("ai_market_seller_id"),
                 state=raw.get("state", UNPROVISIONED),
@@ -193,9 +195,10 @@ class SerialStore:
             self._state.serial_id = serial_id
             self.save()
 
-    def persist_vz_install(self, install_id: str, install_token: Optional[str] = None) -> None:
+    def persist_vz_install(self, install_id: str, install_token: Optional[str] = None, serial_bound: bool = False) -> None:
         """Persist ai.market VZ install credentials."""
         self._state.vz_install_id = install_id
+        self._state.vz_install_serial_bound = serial_bound
         if install_token:
             self._state.vz_install_token = install_token
         self.save()
