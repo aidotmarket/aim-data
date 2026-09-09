@@ -46,7 +46,7 @@ async def test_runtime_account_and_install_credential_inventory(monkeypatch, tmp
     store = get_serial_store()
     monkeypatch.setattr(store.state, "vz_install_id", None)
     monkeypatch.setattr(store, "persist_ai_market_session", lambda token, seller: None)
-    monkeypatch.setattr(store, "persist_vz_install", lambda install_id, token: None)
+    monkeypatch.setattr(store, "persist_vz_install", lambda install_id, install_token=None, serial_bound=False: None)
     monkeypatch.setattr(store, "save", lambda: None)
     def forbidden(*args, **kwargs):
         pytest.fail("Connected completion attempted to issue a local operator credential")
