@@ -18,6 +18,13 @@ from app.utils.sanitization import sanitize_filename, sql_quote_literal
 
 _log = logging.getLogger(__name__)
 
+S3_PROVENANCE_KEYS = (
+    "source_type",
+    "source_connection_id",
+    "source_object_key",
+    "content_type",
+)
+
 
 def log_mem_state(phase: str):
     try:
@@ -512,6 +519,12 @@ class ProcessingService:
         if not record:
             raise ValueError(f"Dataset {dataset_id} not found")
 
+        s3_provenance = {
+            key: record.metadata[key]
+            for key in S3_PROVENANCE_KEYS
+            if key in record.metadata
+        }
+
         if not record.upload_path or not record.upload_path.exists():
             record.status = DatasetStatus.ERROR
             record.error = "Upload file not found"
@@ -589,6 +602,12 @@ class ProcessingService:
             record.error = err_msg if err_msg else type(e).__name__
             _log.error("Processing failed for %s: %s", dataset_id, e, exc_info=True)
             record.updated_at = datetime.now(timezone.utc)
+        finally:
+            # Extractors replace metadata; restore registration provenance before
+            # any success, error, or cancellation result is persisted.
+            record.metadata.update(s3_provenance)
+
+        if record.status == DatasetStatus.ERROR:
             storage_fn = record.upload_path.name if record.upload_path else f"{dataset_id}"
             self._save_record(record, storage_fn)
             return record
