@@ -1259,6 +1259,19 @@ async def test_start_uses_response_key_once_and_preserves_terminal_payment_path(
     assert client.start_requests == 1
     assert "SENTINEL" not in caplog.text
     assert "BEGIN PUBLIC KEY" not in caplog.text
+    if mode == "invalid_override":
+        # DeepSeek Gate 3 B F3: a local key-scope refusal raised after the paid
+        # start was claimed leaves the run with no terminal report; a corrected
+        # retry must resume the SAME issued spec (idempotency key replay, no
+        # re-issue) and complete with exactly one ingest.
+        kwargs["override_reader"] = lambda: None
+        view = await start(dataset_id, **kwargs)
+        assert view.state == "CAPTURED"
+        assert client.start_requests == 2
+        assert client.start_calls == 1
+        assert client.ingest_calls == 1
+        assert selected_keys == [signing_key.public_key().public_numbers()]
+        assert "SENTINEL" not in caplog.text
 
 
 @pytest.mark.asyncio
