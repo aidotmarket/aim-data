@@ -185,12 +185,14 @@ async def test_activated_cached_unbound_install_rejects_foreign_install_id(setup
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("outcome", [401, 403, 500, "timeout"])
+@pytest.mark.parametrize("outcome", [401, 403, 500, "timeout", "409-missing-id"])
 async def test_activated_cached_unbound_install_keeps_cache_when_re_register_fails(setup, outcome):
     activate(setup.store)
     setup.store.persist_vz_install("cached-id", VZ_TOKEN, serial_bound=False)
     if outcome == "timeout":
         setup.client.post.side_effect = httpx.ReadTimeout("synthetic failure")
+    elif outcome == "409-missing-id":
+        setup.client.post.return_value = httpx.Response(409, json={})
     else:
         setup.client.post.return_value = httpx.Response(outcome, json={})
     assert await registration.ensure_vz_install_registered(

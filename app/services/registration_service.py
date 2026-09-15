@@ -322,6 +322,12 @@ async def ensure_vz_install_registered(
             store.persist_vz_install(install_id, install_token, serial_bound=serial_bound)
             logger.info("VZ install already registered: install_id=%s", install_id)
             return install_id
+        if cached_install_id and serial_bound and not store.state.vz_install_serial_bound:
+            # S1717 re-register path: a 409 without an install id proves nothing
+            # about the binding; fail this call instead of looping on a cached,
+            # still-unbound id.
+            logger.warning("VZ install re-register conflict without install_id; binding not confirmed")
+            return None
         logger.info("VZ install already registered, but ai.market did not return install_id")
         return store.state.vz_install_id
 
