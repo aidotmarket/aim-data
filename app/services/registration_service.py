@@ -286,10 +286,19 @@ async def ensure_vz_install_registered(
         logger.warning("VZ install registration request failed: %s", exc)
         return None
 
+    cached_install_id = store.state.vz_install_id
+
     if resp.status_code in (200, 201):
         data = resp.json()
         install_id = str(data.get("install_id") or "")
         install_token = data.get("install_token")
+        if install_id and cached_install_id and install_id != cached_install_id:
+            # S1717: a re-register must keep THIS install's identity; a different
+            # id would detach published listings. Leave the cache untouched.
+            logger.warning(
+                "VZ install re-register returned a different install_id; keeping the cached install unbound"
+            )
+            return None
         if install_id:
             store.persist_vz_install(install_id, install_token, serial_bound=serial_bound)
             if seller_id:
@@ -304,6 +313,11 @@ async def ensure_vz_install_registered(
         data = resp.json()
         install_id = str(data.get("install_id") or "")
         install_token = data.get("install_token")
+        if install_id and cached_install_id and install_id != cached_install_id:
+            logger.warning(
+                "VZ install re-register returned a different install_id; keeping the cached install unbound"
+            )
+            return None
         if install_id:
             store.persist_vz_install(install_id, install_token, serial_bound=serial_bound)
             logger.info("VZ install already registered: install_id=%s", install_id)

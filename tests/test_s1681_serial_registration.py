@@ -160,6 +160,31 @@ async def test_activated_cached_unbound_install_re_registers_with_serial(setup, 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", [200, 409])
+async def test_activated_cached_unbound_install_rejects_foreign_install_id(setup, monkeypatch, status):
+    """S1717 (DeepSeek F1): a re-register that returns a different install id must not
+    replace this install's identity; cache stays unbound, nothing secret logged."""
+    activate(setup.store)
+    setup.store.persist_vz_install("cached-id", VZ_TOKEN, serial_bound=False)
+    warning = MagicMock()
+    monkeypatch.setattr(registration.logger, "warning", warning)
+    setup.client.post.return_value = httpx.Response(status, json={
+        "install_id": "other-id", "install_token": "vzi_other",
+    })
+    assert await registration.ensure_vz_install_registered(
+        setup.crypto, access_token="seller-token",
+    ) is None
+    warning.assert_called_once()
+    assert "different install_id" in str(warning.call_args)
+    for secret in ("other-id", "vzi_other", SERIAL_TOKEN, VZ_TOKEN, "seller-token"):
+        assert secret not in str(warning.call_args)
+    reloaded = SerialStore(str(setup.path))
+    assert reloaded.state.vz_install_id == "cached-id"
+    assert reloaded.state.vz_install_token == VZ_TOKEN
+    assert reloaded.state.vz_install_serial_bound is False
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("outcome", [401, 403, 500, "timeout"])
 async def test_activated_cached_unbound_install_keeps_cache_when_re_register_fails(setup, outcome):
     activate(setup.store)
