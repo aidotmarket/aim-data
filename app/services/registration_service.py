@@ -245,12 +245,17 @@ async def ensure_vz_install_registered(
     )
     if store.state.vz_install_id:
         if serial_bound and not store.state.vz_install_serial_bound:
-            logger.warning(
+            # S1717: an install registered before serial binding existed keeps
+            # its cached install_id but must re-register once with the activated
+            # serial so ai.market binds the serial to THIS install. Fall through
+            # to the registration request below instead of giving up.
+            logger.info(
                 "Cached VZ install is unbound despite activated serial credentials; "
-                "registration after activation is required"
+                "re-registering to bind the serial (install_id=%s)",
+                store.state.vz_install_id,
             )
-            return None
-        return store.state.vz_install_id
+        else:
+            return store.state.vz_install_id
 
     token = access_token or store.state.ai_market_access_token
     if not token:
@@ -281,10 +286,19 @@ async def ensure_vz_install_registered(
         logger.warning("VZ install registration request failed: %s", exc)
         return None
 
+    cached_install_id = store.state.vz_install_id
+
     if resp.status_code in (200, 201):
         data = resp.json()
         install_id = str(data.get("install_id") or "")
         install_token = data.get("install_token")
+        if install_id and cached_install_id and install_id != cached_install_id:
+            # S1717: a re-register must keep THIS install's identity; a different
+            # id would detach published listings. Leave the cache untouched.
+            logger.warning(
+                "VZ install re-register returned a different install_id; keeping the cached install unbound"
+            )
+            return None
         if install_id:
             store.persist_vz_install(install_id, install_token, serial_bound=serial_bound)
             if seller_id:
@@ -299,10 +313,21 @@ async def ensure_vz_install_registered(
         data = resp.json()
         install_id = str(data.get("install_id") or "")
         install_token = data.get("install_token")
+        if install_id and cached_install_id and install_id != cached_install_id:
+            logger.warning(
+                "VZ install re-register returned a different install_id; keeping the cached install unbound"
+            )
+            return None
         if install_id:
             store.persist_vz_install(install_id, install_token, serial_bound=serial_bound)
             logger.info("VZ install already registered: install_id=%s", install_id)
             return install_id
+        if cached_install_id and serial_bound and not store.state.vz_install_serial_bound:
+            # S1717 re-register path: a 409 without an install id proves nothing
+            # about the binding; fail this call instead of looping on a cached,
+            # still-unbound id.
+            logger.warning("VZ install re-register conflict without install_id; binding not confirmed")
+            return None
         logger.info("VZ install already registered, but ai.market did not return install_id")
         return store.state.vz_install_id
 
