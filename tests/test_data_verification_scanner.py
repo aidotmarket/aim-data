@@ -640,3 +640,149 @@ def test_folded_fixture_digests_and_canonicalization_match_backend_contract(
     assert hashlib.sha256(mutated_integrity).hexdigest() != manifest[
         "backend_fixture_receipt_integrity_sha256"
     ]
+
+
+def _envelope(document, key=PLATFORM_PRIVATE_KEY):
+    from app.services.data_verification.contract import ScanSpecIssueResponse
+    return ScanSpecIssueResponse.model_validate({
+        "wire_version": "data-verification-scan-spec-response-v2",
+        "scan_spec": document,
+        "platform_key": {
+            "key_id": document["payload"]["platform_key_id"], "key_version": "1",
+            "algorithm": "RSASSA_PKCS1_V1_5_SHA256",
+            "pem": key.public_key().public_bytes(
+                serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo,
+            ).decode(),
+        },
+    })
+
+
+@pytest.mark.parametrize("encoding", ["literal", "escaped", "base64", "crlf", "no_final_newline"])
+def test_override_supported_encodings_select_identical_rsa_numbers(monkeypatch, encoding):
+    from app.routers.data_verification import _platform_public_key
+    from app.services.data_verification.contract import select_platform_verification_key
+    response = _envelope(_signed_spec(listing_id="listing", source_handle_id="source"))
+    pem = response.platform_key.pem
+    value = {
+        "literal": pem, "escaped": pem.replace("\n", "\\n"),
+        "base64": base64.b64encode(pem.encode()).decode(),
+        "crlf": pem.replace("\n", "\r\n"), "no_final_newline": pem.rstrip(),
+    }[encoding]
+    monkeypatch.setenv("DATA_VERIFICATION_PLATFORM_PUBLIC_KEY_PEM", value)
+    key = select_platform_verification_key(response, _platform_public_key())
+    assert key.public_numbers() == PLATFORM_PRIVATE_KEY.public_key().public_numbers()
+
+
+@pytest.mark.parametrize("kind", ["private", "certificate", "multiple", "ec", "pkcs1", "garbage", "unicode"])
+def test_delivered_and_override_forbidden_key_forms(monkeypatch, kind):
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from pydantic import ValidationError
+    from app.routers.data_verification import _platform_public_key
+    from app.services.data_verification_local_service import DataVerificationLocalError
+    from app.services.data_verification.contract import PlatformKey
+    pem = PLATFORM_PRIVATE_KEY.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "SECRET_SENTINEL")])
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name)
+            .public_key(PLATFORM_PRIVATE_KEY.public_key()).serial_number(1)
+            .not_valid_before(FIXED_NOW).not_valid_after(FIXED_NOW + timedelta(days=1))
+            .sign(PLATFORM_PRIVATE_KEY, hashes.SHA256()).public_bytes(serialization.Encoding.PEM))
+    value = {
+        "private": PLATFORM_PRIVATE_KEY.private_bytes(serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode(),
+        "certificate": cert.decode(), "multiple": (pem + pem).decode(),
+        "ec": ec.generate_private_key(ec.SECP256R1()).public_key().public_bytes(
+            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode(),
+        "pkcs1": PLATFORM_PRIVATE_KEY.public_key().public_bytes(
+            serialization.Encoding.PEM, serialization.PublicFormat.PKCS1).decode(),
+        "garbage": "SECRET_SENTINEL", "unicode": "-----BEGIN PUBLIC KEY-----\n秘密\n-----END PUBLIC KEY-----",
+    }[kind]
+    with pytest.raises(ValidationError):
+        PlatformKey(key_id="key", key_version="1", algorithm="RSASSA_PKCS1_V1_5_SHA256", pem=value)
+    monkeypatch.setenv("DATA_VERIFICATION_PLATFORM_PUBLIC_KEY_PEM", value)
+    with pytest.raises(DataVerificationLocalError, match="^platform verification key is invalid$"):
+        _platform_public_key()
+
+
+@pytest.mark.parametrize("mismatch", ["id", "algorithm", "pem"])
+def test_selection_rechecks_delivered_binding(mismatch):
+    from app.services.data_verification.contract import select_platform_verification_key
+    response = _envelope(_signed_spec(listing_id="listing", source_handle_id="source"))
+    updates = {
+        "id": {"key_id": "other"}, "algorithm": {"algorithm": "unsupported"},
+        "pem": {"pem": "SECRET_SENTINEL"},
+    }[mismatch]
+    # model_copy bypasses structural validation to exercise the selector's own checks.
+    response = response.model_copy(update={"platform_key": response.platform_key.model_copy(update=updates)})
+    with pytest.raises(ContractError, match="^platform verification key is invalid$"):
+        select_platform_verification_key(response, None)
+
+
+def test_override_wins_without_delivered_tuple_bookkeeping_and_logs_are_redacted(tmp_path, monkeypatch, caplog):
+    import logging
+    from app.core.structured_logging import correlation_id_var
+    from app.services.data_verification.contract import select_platform_verification_key
+    listing, source = _local_dataset(tmp_path, monkeypatch, b"id,name\n1,alpha\n")
+    document = _signed_spec(listing_id=listing, source_handle_id=source)
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    response = _envelope(document, other)
+    response = response.model_copy(update={"platform_key": response.platform_key.model_copy(
+        update={"key_id": "HOSTILE_SECRET_SENTINEL\nBearer token"})})
+    pem = PLATFORM_PRIVATE_KEY.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    caplog.set_level(logging.INFO)
+    token = correlation_id_var.set("s1717-test-correlation")
+    try:
+        selected = select_platform_verification_key(response, pem)
+        scanner = DataVerificationScanner(commitment_key=COMMITMENT_KEY,
+            install_private_key=INSTALL_PRIVATE_KEY, install_key_id="fixture", platform_public_key=selected)
+        result = scanner.scan(signed_spec=document, d6_candidate=VALID_D6, now=FIXED_NOW)
+        assert result.report["source_handle_id"] == source
+        with pytest.raises(ContractError):
+            select_platform_verification_key(response, b"OVERRIDE_SECRET_SENTINEL")
+        with pytest.raises(ContractError):
+            select_platform_verification_key(response, None)
+        bad = dict(document, spec_signature="SIGNATURE_SECRET_SENTINEL")
+        with pytest.raises(ContractError):
+            scanner.scan(signed_spec=bad, d6_candidate=VALID_D6, now=FIXED_NOW)
+    finally:
+        correlation_id_var.reset(token)
+    records = [r for r in caplog.records if hasattr(r, "reason")]
+    assert [r.reason for r in records] == [
+        "key_received", "scan_spec_verified", "key_invalid", "key_invalid", "scan_spec_verification_failed",
+    ]
+    assert all(r.correlation_id == "s1717-test-correlation" for r in records)
+    assert not hasattr(records[0], "key_id") and not hasattr(records[0], "key_version")
+    assert records[0].source == "operator_override"
+    assert "SENTINEL" not in caplog.text
+    assert "BEGIN PUBLIC KEY" not in caplog.text
+    assert document["spec_signature"] not in caplog.text
+
+
+@pytest.mark.parametrize("failure", ["hash", "signature", "expired", "cancelled", "nonce", "scope"])
+def test_v2_preserves_scan_before_verification_prohibition(tmp_path, monkeypatch, failure):
+    from app.services.data_verification.contract import select_platform_verification_key
+    listing, source = _local_dataset(tmp_path, monkeypatch, b"id,name\n1,alpha\n")
+    changes = {"cancellation_signal": {"kind": "signed_spec_flag", "cancelled": True}} if failure == "cancelled" else {}
+    document = _signed_spec(listing_id=listing, source_handle_id=source, **changes)
+    if failure == "hash":
+        document["spec_hash"] = "0" * 64
+    if failure == "signature":
+        document["spec_signature"] = "invalid_signature"
+    if failure == "scope":
+        document = _signed_spec(listing_id=listing, source_handle_id="different-source")
+    response = _envelope(document)
+    scanner = DataVerificationScanner(commitment_key=COMMITMENT_KEY,
+        install_private_key=INSTALL_PRIVATE_KEY, install_key_id="fixture",
+        platform_public_key=select_platform_verification_key(response, None),
+        seen_nonces={document["payload"]["nonce"]} if failure == "nonce" else set())
+    def forbidden(*args, **kwargs):
+        pytest.fail("source read before verification")
+    monkeypatch.setattr(scanner, "_read_artifact", forbidden)
+    with pytest.raises((ContractError, ScanRefusedError)):
+        scanner.scan(signed_spec=response.scan_spec.model_dump(mode="json"), d6_candidate=VALID_D6,
+                     now=FIXED_NOW + timedelta(days=1) if failure == "expired" else FIXED_NOW)

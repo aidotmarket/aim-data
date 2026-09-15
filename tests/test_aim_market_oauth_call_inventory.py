@@ -275,7 +275,8 @@ async def test_readiness_status_quote_start_lifecycle_signed_report_inventory(wi
     # Capture the real dynamically minted JWT without replacing the signing operation.
     original_expect = wire.expect
     def signed_expect(path, action, body, response):
-        credentials = lambda headers: set(headers) == {"authorization"} and headers["authorization"].startswith("Bearer ey")
+        def credentials(headers):
+            return set(headers) == {"authorization"} and headers["authorization"].startswith("Bearer ey")
         original_expect("POST", path, credentials, response, check=signed_request(action, body))
     probe = QuoteProbeRequest(listing_id=listing, source_handle_id=report["source_handle_id"],
         connector_type="eolymp", connector_version="eolymp-v1", owner_consent=True, source_reachable=True,
@@ -289,8 +290,12 @@ async def test_readiness_status_quote_start_lifecycle_signed_report_inventory(wi
     signed_expect("/api/v1/data-verification/quote", "data_verification_quote", probe.model_dump(mode="json"), quote)
     assert (await client.quote(probe)).quote_id == quote["quote_id"]
     start = ScanSpecIssueRequest(**{k: report[k] for k in ScanSpecIssueRequest.model_fields if k in report})
-    signed_expect("/api/v1/data-verification/scan-spec", "data_verification_start", start.model_dump(mode="json"), spec)
-    assert (await client.start(start)).spec_hash == spec["spec_hash"]
+    from tests.test_data_verification_scanner import _envelope
+    envelope = _envelope(spec).model_dump(mode="json")
+    signed_expect("/api/v1/data-verification/scan-spec", "data_verification_start", start.model_dump(mode="json"), envelope)
+    response = await client.start(start)
+    assert response.scan_spec.spec_hash == spec["spec_hash"]
+    assert response.model_dump(mode="json") == envelope
     for action in ("cancel", "publish", "decline", "withdraw"):
         command = LifecycleCommand(verification_id=verification, listing_id=listing,
             source_handle_id=report["source_handle_id"], requested_action=action)

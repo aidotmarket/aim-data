@@ -57,7 +57,7 @@ async def test_lifecycle_client_contract_paths_claims_and_canonical_payloads():
                 "partial_traversal_allowed": False,
             })
         if route_name == "scan-spec" and request.method == "POST":
-            return httpx.Response(200, json=json.loads((FIXTURES / "scan_spec.json").read_text()))
+            return httpx.Response(200, json=_issue_envelope())
         if route_name == "scan-spec" and request.method == "PUT":
             return httpx.Response(200, json={
                 "verification_id": VERIFICATION_ID,
@@ -312,3 +312,168 @@ async def test_disabled_flag_projects_only_identity_support_and_reason_on_every_
                 response = await client.request(method, path, json=body)
                 assert response.status_code == 200
                 assert response.json() == expected
+
+
+def _issue_envelope():
+    from tests.test_data_verification_scanner import PLATFORM_PRIVATE_KEY
+    from cryptography.hazmat.primitives import serialization
+    document = json.loads((FIXTURES / "scan_spec.json").read_text())
+    return {
+        "wire_version": "data-verification-scan-spec-response-v2",
+        "scan_spec": document,
+        "platform_key": {
+            "key_id": document["payload"]["platform_key_id"], "key_version": "1",
+            "algorithm": "RSASSA_PKCS1_V1_5_SHA256",
+            "pem": PLATFORM_PRIVATE_KEY.public_key().public_bytes(
+                serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo,
+            ).decode(),
+        },
+    }
+
+
+def _test_client(http_client=None, base_url="https://backend.example"):
+    return DataVerificationClient(
+        base_url=base_url, seller_id="seller_fixture", install_id="install_fixture",
+        install_private_key=Ed25519PrivateKey.generate(),
+        seller_access_token="TOKEN_SECRET_SENTINEL", http_client=http_client,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", [
+    "bare", "version", "extra", "missing", "key_extra", "key_missing",
+    "numeric_version", "zero_version", "numeric_id", "malformed", "pem",
+    "algorithm", "inner_extra",
+])
+async def test_invalid_issue_envelopes_are_display_safe(mutation, caplog):
+    import logging
+    from types import SimpleNamespace
+    body = _issue_envelope()
+    if mutation == "bare":
+        body = body["scan_spec"]
+    elif mutation == "version":
+        body["wire_version"] = "HOSTILE_BODY_SENTINEL"
+    elif mutation == "extra":
+        body["HOSTILE_BODY_SENTINEL"] = True
+    elif mutation == "missing":
+        del body["scan_spec"]
+    elif mutation == "key_extra":
+        body["platform_key"]["HOSTILE_BODY_SENTINEL"] = True
+    elif mutation == "key_missing":
+        del body["platform_key"]["key_id"]
+    elif mutation == "numeric_version":
+        body["platform_key"]["key_version"] = 1
+    elif mutation == "zero_version":
+        body["platform_key"]["key_version"] = "0"
+    elif mutation == "numeric_id":
+        body["platform_key"]["key_id"] = 1
+    elif mutation == "pem":
+        body["platform_key"]["pem"] = "PEM_SECRET_SENTINEL"
+    elif mutation == "algorithm":
+        body["platform_key"]["algorithm"] = "HOSTILE_BODY_SENTINEL"
+    elif mutation == "inner_extra":
+        body["scan_spec"]["HOSTILE_BODY_SENTINEL"] = True
+    async def handler(request):
+        return (httpx.Response(201, content=b'{"HOSTILE_BODY_SENTINEL":')
+                if mutation == "malformed" else httpx.Response(201, json=body))
+    caplog.set_level(logging.INFO)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(DataVerificationClientError) as error:
+            await _test_client(http).start(SimpleNamespace(model_dump=lambda **_: {}))
+    assert str(error.value) == "ai.market returned an invalid scan-spec response"
+    assert error.value.__suppress_context__
+    assert "SENTINEL" not in caplog.text
+    assert "BEGIN PUBLIC KEY" not in caplog.text
+
+
+@pytest.mark.parametrize("url", [
+    "http://backend.example", "https://user@backend.example", "https://u:p@backend.example",
+    "http://u@localhost:18000", "ftp://backend.example", "https:///missing",
+    "https://backend.example:bad", "https://backend.example/path",
+    "https://backend.example?query", "https://backend.example#fragment",
+])
+def test_client_rejects_unsafe_origins(url):
+    with pytest.raises(DataVerificationClientError, match="origin is invalid"):
+        _test_client(base_url=url)
+
+
+@pytest.mark.parametrize("url", [
+    "https://backend.example", "https://backend.example:443", "https://backend.example:8443",
+    "http://localhost:13000", "http://localhost:18000", "http://host.docker.internal:18000",
+    "http://127.0.0.1:18000", "http://[::1]:18000",
+])
+def test_client_preserves_configured_https_and_local_test_origins(url, monkeypatch):
+    from app.config import Settings
+    monkeypatch.setenv("AIM_DATA_AI_MARKET_URL", url)
+    assert Settings().ai_market_url == url
+    _test_client(base_url=url)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", [
+    "https://backend.example/redirected", "https://evil.example/stolen",
+    "http://backend.example/stolen", "https://backend.example:8443/stolen",
+])
+async def test_injected_redirect_enabled_client_never_follows(target):
+    seen = []
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(307, headers={"Location": target})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=True) as http:
+        with pytest.raises(DataVerificationClientError, match="307"):
+            await _test_client(http).status(VERIFICATION_ID)
+    assert len(seen) == 1
+
+
+@pytest.mark.asyncio
+async def test_injected_client_cannot_disable_tls_verification():
+    async with httpx.AsyncClient(verify=False) as http:
+        with pytest.raises(DataVerificationClientError, match="TLS verification is required"):
+            _test_client(http)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("override", ["", "INVALID_OVERRIDE_SECRET_SENTINEL"])
+async def test_quote_probe_and_status_do_not_read_keys_or_construct_scanner(
+    tmp_path, monkeypatch, override, caplog,
+):
+    import logging
+    from types import SimpleNamespace
+    from starlette.requests import Request
+    from app.routers import data_verification as routes
+    from tests.test_data_verification_local_service import FakeClient, make_dataset, prepare_body
+    from app.services import data_verification_local_service as local
+    monkeypatch.setenv("DATA_VERIFICATION_ENABLED", "true")
+    monkeypatch.setenv("DATA_VERIFICATION_PLATFORM_PUBLIC_KEY_PEM", override)
+    monkeypatch.setattr(routes.settings, "keystore_passphrase", "fixture")
+    key = Ed25519PrivateKey.generate()
+    monkeypatch.setattr(routes, "DeviceCrypto", lambda **_: SimpleNamespace(
+        get_or_create_keypairs=lambda: (key, key.public_key(), None, None),
+    ))
+    monkeypatch.setattr(routes, "get_serial_store", lambda: SimpleNamespace(state=SimpleNamespace(
+        ai_market_access_token="fixture", ai_market_seller_id="seller",
+    )))
+    async def registered(*args, **kwargs):
+        return "install_fixture"
+    monkeypatch.setattr(routes, "ensure_vz_install_registered", registered)
+    def forbidden(*args, **kwargs):
+        pytest.fail("quote/status touched a verification key or scanner")
+    for name in ("_platform_public_key", "_commitment_key", "DataVerificationScanner", "_scanner_factory"):
+        monkeypatch.setattr(routes, name, forbidden)
+    client = FakeClient()
+    monkeypatch.setattr(routes, "DataVerificationClient", lambda **_: client)
+    dataset_id = make_dataset(tmp_path, monkeypatch)
+    request = Request({"type": "http", "headers": []})
+    user = AuthenticatedUser(user_id="seller", key_id="test", scopes=["read", "write"], valid=True)
+    caplog.set_level(logging.INFO)
+    quote = await routes.quote_verification(dataset_id, prepare_body(), request, user)
+    assert quote.quote is not None
+    assert client.last_probe.source_reachable
+    run = local._latest_run(dataset_id)
+    from uuid import uuid4
+    client.verification_id = str(uuid4())
+    local._save_run(run.id, verification_id=client.verification_id)
+    view = await routes.verification_view(dataset_id, request, user)
+    assert view.state == "AUTHORIZED"
+    assert client.status_calls == 1
+    assert not [r for r in caplog.records if hasattr(r, "reason")]

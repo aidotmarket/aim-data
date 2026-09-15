@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
+import ssl
 
 import httpx
 
@@ -17,7 +19,7 @@ from app.schemas.data_verification import (
     ReportIngestResponse,
     ScanSpecIssueRequest,
 )
-from app.services.data_verification.contract import SignedScanSpec
+from app.services.data_verification.contract import ScanSpecIssueResponse, log_platform_key_event
 from app.services.marketplace_action_signer import (
     build_action_jwt,
     canonical_json_bytes,
@@ -49,24 +51,66 @@ class DataVerificationClient:
         seller_access_token: str,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
+        self._origin = self._validated_origin(base_url)
+        parsed = urlsplit(base_url)
+        if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+            raise DataVerificationClientError("ai.market origin is invalid")
         self._base_url = base_url.rstrip("/")
+        if http_client is not None:
+            # Injected production clients must retain certificate/hostname checks.
+            transports = [http_client._transport, *http_client._mounts.values()]
+            for transport in transports:
+                context = getattr(getattr(transport, "_pool", None), "_ssl_context", None)
+                if context is not None and (
+                    context.verify_mode != ssl.CERT_REQUIRED or not context.check_hostname
+                ):
+                    raise DataVerificationClientError("ai.market TLS verification is required")
         self._seller_id = seller_id
         self._install_id = install_id
         self._install_private_key = install_private_key
         self._seller_access_token = seller_access_token
         self._http_client = http_client
 
+    @staticmethod
+    def _validated_origin(url: str) -> tuple[str, str, int]:
+        try:
+            parsed = urlsplit(url)
+            if (
+                any(char.isspace() for char in url)
+                or "\\" in url
+                or parsed.username is not None or parsed.password is not None
+                or not parsed.hostname
+            ):
+                raise ValueError
+            # ai_market_url already permits these local test hosts, including
+            # the S1656 Docker override. The payment handoff validator is separate.
+            local_http = parsed.scheme == "http" and parsed.hostname in {
+                "localhost", "127.0.0.1", "::1", "host.docker.internal",
+            }
+            if parsed.scheme != "https" and not local_http:
+                raise ValueError
+            port = parsed.port if parsed.port is not None else (443 if parsed.scheme == "https" else 80)
+            return (parsed.scheme, parsed.hostname, port)
+        except (TypeError, ValueError):
+            raise DataVerificationClientError("ai.market origin is invalid") from None
+
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        url = f"{self._base_url}{path}"
+        if not path.startswith("/") or self._validated_origin(url) != self._origin:
+            raise DataVerificationClientError("ai.market origin is invalid")
+        kwargs["follow_redirects"] = False
         try:
             if self._http_client is not None:
-                response = await self._http_client.request(method, f"{self._base_url}{path}", **kwargs)
+                response = await self._http_client.request(method, url, **kwargs)
             else:
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.request(method, f"{self._base_url}{path}", **kwargs)
+                    response = await client.request(method, url, **kwargs)
         except httpx.TimeoutException as exc:
             raise DataVerificationClientError("ai.market data verification timed out") from exc
         except httpx.RequestError as exc:
             raise DataVerificationClientError("ai.market data verification is unavailable") from exc
+        if self._validated_origin(str(response.url)) != self._origin or response.history:
+            raise DataVerificationClientError("ai.market origin is invalid")
         if not response.is_success:
             raise DataVerificationClientError(
                 f"ai.market data verification refused the request ({response.status_code})"
@@ -149,14 +193,20 @@ class DataVerificationClient:
         )
         return QuoteResponse.model_validate(response.json())
 
-    async def start(self, request: ScanSpecIssueRequest) -> SignedScanSpec:
+    async def start(self, request: ScanSpecIssueRequest) -> ScanSpecIssueResponse:
         response = await self._signed_json(
             "POST",
             "/api/v1/data-verification/scan-spec",
             expected_action="data_verification_start",
             body=request.model_dump(mode="json"),
         )
-        return SignedScanSpec.model_validate(response.json())
+        try:
+            return ScanSpecIssueResponse.model_validate(response.json())
+        except (ValueError, TypeError):
+            log_platform_key_event("scan_spec_response_invalid")
+            raise DataVerificationClientError(
+                "ai.market returned an invalid scan-spec response"
+            ) from None
 
     async def ingest_report(self, report: dict[str, Any]) -> ReportIngestResponse:
         response = await self._request(

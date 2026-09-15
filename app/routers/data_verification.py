@@ -20,6 +20,7 @@ from app.schemas.data_verification import (
     PrepareVerificationRequest,
     StartVerificationRequest,
 )
+from app.services.data_verification.contract import ContractError, load_platform_public_key
 from app.services.data_verification.scanner import DataVerificationScanner
 from app.services.data_verification_client import DataVerificationClient, DataVerificationClientError
 from app.services.data_verification_local_service import (
@@ -42,24 +43,35 @@ router = APIRouter(prefix="/data-verification")
 @dataclass(frozen=True)
 class VerificationRuntime:
     client: DataVerificationClient
-    scanner: DataVerificationScanner
     install_id: str
     install_private_key: object
 
 
-def _platform_public_key() -> bytes:
+def _platform_public_key() -> bytes | None:
     configured = os.environ.get("DATA_VERIFICATION_PLATFORM_PUBLIC_KEY_PEM", "").strip()
     if not configured:
-        raise DataVerificationLocalError("platform verification key is not configured")
-    if configured.startswith("-----BEGIN PUBLIC KEY-----"):
-        return configured.replace("\\n", "\n").encode("ascii")
+        return None
     try:
-        decoded = base64.b64decode(configured, validate=True)
-    except ValueError as exc:
-        raise DataVerificationLocalError("platform verification key is invalid") from exc
-    if not decoded.startswith(b"-----BEGIN PUBLIC KEY-----"):
-        raise DataVerificationLocalError("platform verification key is invalid")
-    return decoded
+        decoded = (
+            configured.replace("\\n", "\n").encode("ascii")
+            if configured.startswith("-----BEGIN PUBLIC KEY-----")
+            else base64.b64decode(configured, validate=True)
+        )
+        load_platform_public_key(decoded)
+        return decoded
+    except (ValueError, UnicodeError, ContractError):
+        raise DataVerificationLocalError("platform verification key is invalid") from None
+
+
+def _scanner_factory(install_id: str, install_private_key: object):
+    def create(platform_public_key):
+        return DataVerificationScanner(
+            commitment_key=_commitment_key(),
+            install_private_key=install_private_key,
+            install_key_id=install_id,
+            platform_public_key=platform_public_key,
+        )
+    return create
 
 
 def _commitment_key() -> bytes:
@@ -111,13 +123,7 @@ async def build_runtime(request: Request, user: AuthenticatedUser) -> Verificati
         install_private_key=install_private_key,
         seller_access_token=seller_access_token,
     )
-    scanner = DataVerificationScanner(
-        commitment_key=_commitment_key(),
-        install_private_key=install_private_key,
-        install_key_id=install_id,
-        platform_public_key=_platform_public_key(),
-    )
-    return VerificationRuntime(client, scanner, install_id, install_private_key)
+    return VerificationRuntime(client, install_id, install_private_key)
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -188,7 +194,8 @@ async def start_verification(
             dataset_id,
             request=body,
             client=runtime.client,
-            scanner=runtime.scanner,
+            scanner_factory=_scanner_factory(runtime.install_id, runtime.install_private_key),
+            override_reader=_platform_public_key,
             install_id=runtime.install_id,
             install_private_key=runtime.install_private_key,
         )
