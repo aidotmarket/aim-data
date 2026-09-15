@@ -9,7 +9,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from math import ceil
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from cryptography.hazmat.primitives.asymmetric import rsa
 from uuid import UUID, uuid4
 
 from sqlalchemy import or_, update
@@ -31,6 +33,9 @@ from app.schemas.data_verification import (
     ReportIngestResponse,
     ScanSpecIssueRequest,
     StartVerificationRequest,
+)
+from app.services.data_verification.contract import (
+    ContractError, log_platform_key_event, select_platform_verification_key,
 )
 from app.services.data_verification.scanner import (
     DataVerificationScanner,
@@ -566,7 +571,8 @@ async def start(
     *,
     request: StartVerificationRequest,
     client: DataVerificationClient,
-    scanner: DataVerificationScanner,
+    scanner_factory: Callable[[rsa.RSAPublicKey], DataVerificationScanner],
+    override_reader: Callable[[], bytes | None] = lambda: None,
     install_id: str,
     install_private_key: Any,
 ) -> DataVerificationView:
@@ -606,7 +612,8 @@ async def start(
             dataset,
             run,
             client=client,
-            scanner=scanner,
+            scanner_factory=scanner_factory,
+            override_reader=override_reader,
             install_id=install_id,
             install_private_key=install_private_key,
             lease_owner_id=lease_owner_id,
@@ -619,7 +626,8 @@ async def _start_with_lease(
     run: DataVerificationRun,
     *,
     client: DataVerificationClient,
-    scanner: DataVerificationScanner,
+    scanner_factory: Callable[[rsa.RSAPublicKey], DataVerificationScanner],
+    override_reader: Callable[[], bytes | None] = lambda: None,
     install_id: str,
     install_private_key: Any,
     lease_owner_id: str,
@@ -661,12 +669,23 @@ async def _start_with_lease(
     recover_scan_claim = run.scan_claimed
     if not run.start_claimed and not _claim(run.id, "start_claimed"):
         raise DataVerificationLocalError("the server start claim could not be acquired")
-    spec = await client.start(issue)
+    response = await client.start(issue)
+    spec = response.scan_spec
     _assert_heartbeat_lease(run.id, lease_owner_id, lease_lost)
     if run.verification_id and run.verification_id != spec.payload.verification_id:
         raise DataVerificationLocalError(
             "the idempotent server start returned a different verification identity"
         )
+    try:
+        override_pem = override_reader()
+    except (ValueError, RuntimeError):
+        log_platform_key_event("key_invalid", source="operator_override")
+        raise DataVerificationLocalError("platform verification key is invalid") from None
+    try:
+        selected_key = select_platform_verification_key(response, override_pem)
+    except ContractError:
+        raise DataVerificationLocalError("platform verification key is invalid") from None
+    scanner = scanner_factory(selected_key)
     spec_dict = spec.model_dump(mode="json")
     run = _save_run(run.id, verification_id=spec.payload.verification_id)
     run = await _sync_status(

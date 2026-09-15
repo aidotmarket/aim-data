@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
+import json
+import re
 from datetime import datetime, timezone
 from typing import Any, Literal, MutableSet, Optional
 
@@ -12,6 +15,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from app.core.structured_logging import correlation_id_var
 from app.services.marketplace_action_signer import canonical_json_bytes
 
 
@@ -149,6 +153,89 @@ class SignedScanSpec(StrictModel):
     spec_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     signature_algorithm: Literal["RSASSA_PKCS1_V1_5_SHA256"]
     spec_signature: str = Field(min_length=1, max_length=4096)
+
+
+def load_platform_public_key(value: bytes | str) -> rsa.RSAPublicKey:
+    """Accept exactly one ASCII SubjectPublicKeyInfo RSA public key."""
+    try:
+        encoded = value.encode("ascii") if isinstance(value, str) else value
+        if re.fullmatch(
+            rb"-----BEGIN PUBLIC KEY-----\r?\n[A-Za-z0-9+/=\r\n]+"
+            rb"-----END PUBLIC KEY-----(?:\r?\n)?",
+            encoded,
+        ) is None:
+            raise ValueError
+        key = serialization.load_pem_public_key(encoded)
+        if not isinstance(key, rsa.RSAPublicKey):
+            raise ValueError
+        return key
+    except (ValueError, TypeError, UnicodeError):
+        raise ContractError("platform verification key is invalid") from None
+
+
+class PlatformKey(StrictModel):
+    key_id: str = Field(strict=True, min_length=1, max_length=128)
+    key_version: str = Field(strict=True, pattern=r"^[1-9][0-9]*$")
+    algorithm: Literal["RSASSA_PKCS1_V1_5_SHA256"]
+    pem: str = Field(strict=True)
+
+    @field_validator("pem")
+    @classmethod
+    def _rsa_public_key(cls, value: str) -> str:
+        load_platform_public_key(value)
+        return value
+
+
+class ScanSpecIssueResponse(StrictModel):
+    wire_version: Literal["data-verification-scan-spec-response-v2"]
+    scan_spec: SignedScanSpec
+    platform_key: PlatformKey
+
+
+def log_platform_key_event(reason: str, *, source: str | None = None,
+                           platform_key: PlatformKey | None = None) -> None:
+    # Metadata is untrusted too. Hash the ID rather than reflect arbitrary text.
+    metadata = {
+        "reason": reason,
+        "result": "success" if reason in {"key_received", "scan_spec_verified"} else "refused",
+    }
+    correlation_id = correlation_id_var.get()
+    metadata["correlation_id"] = (
+        correlation_id if correlation_id and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", correlation_id)
+        else None
+    )
+    if source is not None:
+        metadata["source"] = source
+    if platform_key is not None:
+        metadata["key_id"] = "sha256:" + hashlib.sha256(platform_key.key_id.encode()).hexdigest()
+        metadata["key_version"] = platform_key.key_version
+    logging.getLogger(__name__).info(
+        "data verification platform key %s", json.dumps(metadata, sort_keys=True), extra=metadata,
+    )
+
+
+def select_platform_verification_key(
+    response: ScanSpecIssueResponse, override_pem: bytes | str | None,
+) -> rsa.RSAPublicKey:
+    source = "operator_override" if override_pem else "scan_spec_response"
+    try:
+        if override_pem:
+            key = load_platform_public_key(override_pem)
+        else:
+            if (
+                response.scan_spec.payload.platform_key_id != response.platform_key.key_id
+                or response.scan_spec.signature_algorithm != response.platform_key.algorithm
+            ):
+                raise ContractError("platform verification key is invalid")
+            key = load_platform_public_key(response.platform_key.pem)
+    except ContractError:
+        log_platform_key_event("key_invalid", source=source)
+        raise
+    log_platform_key_event(
+        "key_received", source=source,
+        platform_key=response.platform_key if not override_pem else None,
+    )
+    return key
 
 
 def parse_and_verify_scan_spec(

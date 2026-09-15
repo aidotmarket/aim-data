@@ -7,6 +7,7 @@ __pycache__/
 venv/
 ENV/
 .venv/
+.venv
 
 # Data
 data/

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from app.services.data_verification.connectors.eolymp_v1 import (
     BudgetIncompatibleError,
@@ -24,6 +25,8 @@ from app.services.data_verification.connectors.eolymp_v1 import (
     UnsupportedConnectorShape,
 )
 from app.services.data_verification.contract import (
+    ContractError,
+    log_platform_key_event,
     assert_report_field_contract,
     parse_and_verify_scan_spec,
 )
@@ -98,7 +101,7 @@ class DataVerificationScanner:
         commitment_key: bytes,
         install_private_key,
         install_key_id: str,
-        platform_public_key: bytes,
+        platform_public_key: rsa.RSAPublicKey,
         broker_client: Optional[S3BrokerClient] = None,
         clock: Optional[Callable[[], datetime]] = None,
         seen_nonces: Optional[set[str]] = None,
@@ -156,12 +159,17 @@ class DataVerificationScanner:
     ) -> ScanExecution:
         # D6 must fail before resolution, signing, broker, or any HTTP client.
         d6 = sanitize_d6(d6_candidate)
-        spec = parse_and_verify_scan_spec(
-            signed_spec,
-            platform_public_key=self._platform_public_key,
-            now=now,
-            seen_nonces=self._seen_nonces,
-        )
+        try:
+            spec = parse_and_verify_scan_spec(
+                signed_spec,
+                platform_public_key=self._platform_public_key,
+                now=now,
+                seen_nonces=self._seen_nonces,
+            )
+        except ContractError:
+            log_platform_key_event("scan_spec_verification_failed")
+            raise
+        log_platform_key_event("scan_spec_verified")
         artifact = resolve_source_artifact(spec.listing_id)
         if artifact is None or artifact.source_handle_id != spec.source_handle_id:
             raise ScanRefusedError("registered source handle does not match the signed spec")

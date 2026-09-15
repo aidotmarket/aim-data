@@ -10,6 +10,7 @@ from uuid import NAMESPACE_URL, uuid5
 import pytest
 import pyarrow as pa
 import pyarrow.parquet as pq
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
 from sqlmodel import SQLModel, select
 
@@ -27,7 +28,7 @@ from app.schemas.data_verification import (
 )
 from app.services import data_verification_local_service as local_service
 from app.services import source_artifact_resolver as resolver
-from app.services.data_verification.contract import SignedScanSpec
+from app.services.data_verification.contract import ScanSpecIssueResponse
 from app.services.data_verification.scanner import (
     ScanExecution,
     terminal_receipt_signature_binding,
@@ -152,7 +153,19 @@ class FakeClient:
             expires_at_utc=(issued_at + timedelta(minutes=10)).isoformat(),
             verification_id=self.verification_id,
         )
-        issued = SignedScanSpec.model_validate(document)
+        from tests.test_data_verification_scanner import PLATFORM_PRIVATE_KEY
+        from cryptography.hazmat.primitives import serialization
+        issued = ScanSpecIssueResponse.model_validate({
+            "wire_version": "data-verification-scan-spec-response-v2",
+            "scan_spec": document,
+            "platform_key": {
+                "key_id": document["payload"]["platform_key_id"], "key_version": "1",
+                "algorithm": "RSASSA_PKCS1_V1_5_SHA256",
+                "pem": PLATFORM_PRIVATE_KEY.public_key().public_bytes(
+                    serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo,
+                ).decode(),
+            },
+        })
         self._issued_specs[request.idempotency_key] = issued
         return issued
 
@@ -389,7 +402,7 @@ async def test_quote_start_capture_resume_and_publish_are_idempotent(tmp_path, m
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=scanner,
+        scanner_factory=lambda _key: scanner,
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -402,7 +415,7 @@ async def test_quote_start_capture_resume_and_publish_are_idempotent(tmp_path, m
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=scanner,
+        scanner_factory=lambda _key: scanner,
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -429,7 +442,7 @@ async def test_card_is_requested_only_at_paid_start_and_retry_resumes_cleanly(tm
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=scanner,
+        scanner_factory=lambda _key: scanner,
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -449,7 +462,7 @@ async def test_card_is_requested_only_at_paid_start_and_retry_resumes_cleanly(tm
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=scanner,
+        scanner_factory=lambda _key: scanner,
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -467,7 +480,7 @@ async def test_reconciliation_hides_local_findings_and_blocks_publication(tmp_pa
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=FakeScanner(dataset_id),
+        scanner_factory=lambda _key: FakeScanner(dataset_id),
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -482,7 +495,7 @@ async def test_rerun_creates_fresh_acknowledgements_and_preserves_active_publica
     dataset_id = make_dataset(tmp_path, monkeypatch)
     client = FakeClient()
     await prepare_quote(dataset_id, prepare_body(), client=client)
-    await start(dataset_id, request=start_body(), client=client, scanner=FakeScanner(dataset_id), install_id="install_fixture", install_private_key=object())
+    await start(dataset_id, request=start_body(), client=client, scanner_factory=lambda _key: FakeScanner(dataset_id), install_id="install_fixture", install_private_key=object())
     await lifecycle_command(dataset_id, "publish", client=client)
 
     rerun = await prepare_quote(dataset_id, prepare_body(), client=client)
@@ -591,7 +604,7 @@ async def test_local_failure_sends_only_bounded_terminal_report_and_hides_result
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=RefusingScanner(),
+        scanner_factory=lambda _key: RefusingScanner(),
         install_id="install_fixture",
         install_private_key=install_private_key,
     )
@@ -636,7 +649,7 @@ async def test_concurrent_starts_share_one_epoch_and_one_scanner_execution(tmp_p
             dataset_id,
             request=start_body(),
             client=client,
-            scanner=scanner,
+            scanner_factory=lambda _key: scanner,
             install_id="install_fixture",
             install_private_key=object(),
         )
@@ -676,7 +689,7 @@ async def test_live_start_lease_heartbeats_past_initial_expiry_without_duplicate
                 dataset_id,
                 request=start_body(),
                 client=client,
-                scanner=scanner,
+                scanner_factory=lambda _key: scanner,
                 install_id="install_fixture",
                 install_private_key=object(),
             )
@@ -734,7 +747,7 @@ async def test_retry_after_report_persistence_gap_ingests_without_rescanning(tmp
             dataset_id,
             request=start_body(),
             client=client,
-            scanner=scanner,
+            scanner_factory=lambda _key: scanner,
             install_id="install_fixture",
             install_private_key=object(),
         )
@@ -742,7 +755,7 @@ async def test_retry_after_report_persistence_gap_ingests_without_rescanning(tmp
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=scanner,
+        scanner_factory=lambda _key: scanner,
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -784,7 +797,7 @@ async def test_published_to_withdrawn_persists_server_authoritative_marker_date(
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=FakeScanner(dataset_id),
+        scanner_factory=lambda _key: FakeScanner(dataset_id),
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -820,7 +833,7 @@ async def test_grounded_result_without_display_text_cannot_publish_but_can_decli
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=FakeScanner(dataset_id),
+        scanner_factory=lambda _key: FakeScanner(dataset_id),
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -860,7 +873,7 @@ async def test_withdraw_without_response_date_uses_precommand_request_time(
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=FakeScanner(dataset_id),
+        scanner_factory=lambda _key: FakeScanner(dataset_id),
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -922,7 +935,7 @@ async def test_lost_withdraw_response_refresh_recovers_original_request_time(
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=FakeScanner(dataset_id),
+        scanner_factory=lambda _key: FakeScanner(dataset_id),
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -973,7 +986,7 @@ async def test_withdraw_status_body_timestamp_is_preferred_over_transport_date(
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=FakeScanner(dataset_id),
+        scanner_factory=lambda _key: FakeScanner(dataset_id),
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -1036,7 +1049,7 @@ async def test_restart_reexecutes_deterministic_scan_for_persisted_claims(
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=scanner,
+        scanner_factory=lambda _key: scanner,
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -1080,7 +1093,7 @@ async def test_restart_recovers_start_claim_without_verification_identity(
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=scanner,
+        scanner_factory=lambda _key: scanner,
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -1123,7 +1136,7 @@ async def test_restart_after_each_claim_compare_and_set_completes_once(
             dataset_id,
             request=start_body(),
             client=client,
-            scanner=scanner,
+            scanner_factory=lambda _key: scanner,
             install_id="install_fixture",
             install_private_key=object(),
         )
@@ -1145,7 +1158,7 @@ async def test_restart_after_each_claim_compare_and_set_completes_once(
         dataset_id,
         request=start_body(),
         client=client,
-        scanner=scanner,
+        scanner_factory=lambda _key: scanner,
         install_id="install_fixture",
         install_private_key=object(),
     )
@@ -1163,3 +1176,113 @@ async def test_restart_after_each_claim_compare_and_set_completes_once(
     assert client.start_requests == expected_start_requests
     assert scanner.calls == 1
     assert client.ingest_calls == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["delivered", "override", "invalid_override", "id_mismatch", "signature_failure"])
+async def test_start_uses_response_key_once_and_preserves_terminal_payment_path(
+    tmp_path, monkeypatch, mode, caplog,
+):
+    import hashlib
+    import logging
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding, rsa
+    from app.services.data_verification.scanner import DataVerificationScanner
+    from tests.test_data_verification_scanner import _envelope
+    dataset_id = make_dataset(tmp_path, monkeypatch)
+    from uuid import uuid4
+    listing_id = str(uuid4())
+    with get_session_context() as session:
+        dataset = session.get(DatasetRecord, dataset_id)
+        dataset.listing_id = listing_id
+        session.add(dataset)
+        session.commit()
+    signing_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    install_key = Ed25519PrivateKey.generate()
+    class SignedClient(FakeClient):
+        async def start(self, request):
+            response = await super().start(request)
+            document = response.scan_spec.model_dump(mode="json")
+            now = datetime.now(timezone.utc)
+            # Sign the same UTC wire representation emitted by model_dump below.
+            document["payload"].update(
+                listing_id=listing_id,
+                issued_at_utc=now.isoformat().replace("+00:00", "Z"),
+                expires_at_utc=(now + timedelta(minutes=10)).isoformat().replace("+00:00", "Z"),
+            )
+            payload = canonical_json_bytes(document["payload"])
+            document["spec_hash"] = hashlib.sha256(payload).hexdigest()
+            document["spec_signature"] = base64.b64encode(signing_key.sign(
+                payload, padding.PKCS1v15(), hashes.SHA256())).decode()
+            issued = _envelope(document, other_key if mode in {"override", "signature_failure"} else signing_key)
+            if mode in {"override", "id_mismatch"}:
+                issued = issued.model_copy(update={"platform_key": issued.platform_key.model_copy(
+                    update={"key_id": "HOSTILE_SECRET_SENTINEL\nBearer token"})})
+            return issued
+    client = SignedClient(final_state="FAILED_VOIDED" if mode == "signature_failure" else "CAPTURED")
+    await prepare_quote(dataset_id, prepare_body(), client=client)
+    selected_keys = []
+    def factory(key):
+        selected_keys.append(key.public_numbers())
+        return DataVerificationScanner(commitment_key=b"c" * 32,
+            install_private_key=install_key, install_key_id="install_fixture", platform_public_key=key)
+    pem = signing_key.public_key().public_bytes(serialization.Encoding.PEM,
+                                               serialization.PublicFormat.SubjectPublicKeyInfo)
+    override = pem if mode == "override" else b"OVERRIDE_SECRET_SENTINEL" if mode == "invalid_override" else None
+    caplog.set_level(logging.INFO)
+    kwargs = dict(request=start_body(), client=client, scanner_factory=factory,
+                  override_reader=lambda: override, install_id="install_fixture", install_private_key=install_key)
+    if mode in {"invalid_override", "id_mismatch"}:
+        with pytest.raises(DataVerificationLocalError, match="^platform verification key is invalid$"):
+            await start(dataset_id, **kwargs)
+        assert selected_keys == []
+        assert client.ingest_calls == 0
+    else:
+        view = await start(dataset_id, **kwargs)
+        assert len(selected_keys) == 1
+        assert client.ingest_calls == 1
+        if mode == "signature_failure":
+            assert view.state == "FAILED_VOIDED"
+            assert view.findings is None
+            assert client.last_report["terminal_error_code"] == "scanner_failure"
+            assert "scan_spec_verified" not in caplog.text
+            assert "scan_spec_verification_failed" in caplog.text
+            # Recovery consumes the persisted terminal report, with no key refresh/reissue.
+            await start(dataset_id, **kwargs)
+            assert len(selected_keys) == 1
+        else:
+            assert view.state == "CAPTURED"
+            assert "scan_spec_verified" in caplog.text
+            assert "terminal_error_code" not in client.last_report
+            assert selected_keys == [signing_key.public_key().public_numbers()]
+    assert client.start_requests == 1
+    assert "SENTINEL" not in caplog.text
+    assert "BEGIN PUBLIC KEY" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_two_independent_starts_use_each_responses_key(tmp_path, monkeypatch):
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from tests.test_data_verification_scanner import _envelope
+    selected = []
+    expected = []
+    for index in range(2):
+        directory = tmp_path / str(index)
+        directory.mkdir()
+        dataset_id = make_dataset(directory, monkeypatch)
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        expected.append(key.public_key().public_numbers())
+        class RotatingClient(FakeClient):
+            async def start(self, request):
+                response = await super().start(request)
+                return _envelope(response.scan_spec.model_dump(mode="json"), key)
+        client = RotatingClient()
+        await prepare_quote(dataset_id, prepare_body(), client=client)
+        def factory(selected_key):
+            selected.append(selected_key.public_numbers())
+            return FakeScanner(dataset_id)
+        await start(dataset_id, request=start_body(), client=client, scanner_factory=factory,
+                    install_id="install_fixture", install_private_key=object())
+    assert selected == expected
+    assert selected[0] != selected[1]
