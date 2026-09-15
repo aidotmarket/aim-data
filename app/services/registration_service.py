@@ -245,12 +245,17 @@ async def ensure_vz_install_registered(
     )
     if store.state.vz_install_id:
         if serial_bound and not store.state.vz_install_serial_bound:
-            logger.warning(
+            # S1717: an install registered before serial binding existed keeps
+            # its cached install_id but must re-register once with the activated
+            # serial so ai.market binds the serial to THIS install. Fall through
+            # to the registration request below instead of giving up.
+            logger.info(
                 "Cached VZ install is unbound despite activated serial credentials; "
-                "registration after activation is required"
+                "re-registering to bind the serial (install_id=%s)",
+                store.state.vz_install_id,
             )
-            return None
-        return store.state.vz_install_id
+        else:
+            return store.state.vz_install_id
 
     token = access_token or store.state.ai_market_access_token
     if not token:

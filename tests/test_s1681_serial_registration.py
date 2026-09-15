@@ -115,29 +115,66 @@ async def test_partial_or_stale_credentials_never_use_other_tokens(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("bound", [False, True])
-async def test_activated_cached_install_requires_binding(setup, monkeypatch, bound):
+async def test_activated_cached_bound_install_is_returned_without_network(setup, monkeypatch):
     activate(setup.store)
-    setup.store.persist_vz_install("cached-id", VZ_TOKEN, serial_bound=bound)
+    setup.store.persist_vz_install("cached-id", VZ_TOKEN, serial_bound=True)
     warning = MagicMock()
     monkeypatch.setattr(registration.logger, "warning", warning)
-    result = await registration.ensure_vz_install_registered(
+    assert await registration.ensure_vz_install_registered(
         setup.crypto, access_token="seller-token",
-    )
-    assert result == ("cached-id" if bound else None)
+    ) == "cached-id"
     setup.factory.assert_not_called()
     setup.client.post.assert_not_awaited()
-    if bound:
-        warning.assert_not_called()
+    warning.assert_not_called()
+    assert SerialStore(str(setup.path)).state.vz_install_serial_bound is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [200, 409])
+async def test_activated_cached_unbound_install_re_registers_with_serial(setup, monkeypatch, status):
+    """S1717: a pre-S1681 install (cached id, serial activated later) must re-register
+    once with the serial proof and keep its install id; it must not give up."""
+    activate(setup.store)
+    setup.store.persist_vz_install("cached-id", VZ_TOKEN, serial_bound=False)
+    info = MagicMock()
+    monkeypatch.setattr(registration.logger, "info", info)
+    setup.client.post.return_value = httpx.Response(status, json={
+        "install_id": "cached-id", "install_token": VZ_TOKEN,
+    })
+    assert await registration.ensure_vz_install_registered(
+        setup.crypto, access_token="seller-token", seller_id="synthetic-seller",
+    ) == "cached-id"
+    setup.client.post.assert_awaited_once_with(
+        "https://market.example.test/api/v1/vz/register",
+        json={"public_key_b64": "synthetic-public-key", "serial": SERIAL,
+              "serial_install_token": SERIAL_TOKEN},
+        headers={"Authorization": "Bearer seller-token", "Content-Type": "application/json"},
+    )
+    log_text = " ".join(str(c) for c in info.call_args_list)
+    assert "re-registering to bind the serial" in log_text
+    for secret in (SERIAL_TOKEN, VZ_TOKEN, "seller-token"):
+        assert secret not in log_text
+    reloaded = SerialStore(str(setup.path))
+    assert reloaded.state.vz_install_id == "cached-id"
+    assert reloaded.state.vz_install_serial_bound is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", [401, 403, 500, "timeout"])
+async def test_activated_cached_unbound_install_keeps_cache_when_re_register_fails(setup, outcome):
+    activate(setup.store)
+    setup.store.persist_vz_install("cached-id", VZ_TOKEN, serial_bound=False)
+    if outcome == "timeout":
+        setup.client.post.side_effect = httpx.ReadTimeout("synthetic failure")
     else:
-        warning.assert_called_once()
-        warning_text = str(warning.call_args)
-        assert "unbound" in warning_text
-        assert "activated serial credentials" in warning_text
-        for secret in (SERIAL, SERIAL_TOKEN, VZ_TOKEN, "seller-token"):
-            assert secret not in warning_text
-    assert setup.store.state.vz_install_id == "cached-id"
-    assert SerialStore(str(setup.path)).state.vz_install_serial_bound is bound
+        setup.client.post.return_value = httpx.Response(outcome, json={})
+    assert await registration.ensure_vz_install_registered(
+        setup.crypto, access_token="seller-token",
+    ) is None
+    setup.client.post.assert_awaited_once()
+    reloaded = SerialStore(str(setup.path))
+    assert reloaded.state.vz_install_id == "cached-id"
+    assert reloaded.state.vz_install_serial_bound is False
 
 
 @pytest.mark.asyncio
