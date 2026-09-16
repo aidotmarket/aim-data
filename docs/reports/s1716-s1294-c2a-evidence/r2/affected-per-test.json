@@ -1,0 +1,1191 @@
+{
+  "summary": {
+    "baseline": {
+      "passed": 15
+    },
+    "candidate": {
+      "passed": 234
+    },
+    "added": {
+      "passed": 219
+    },
+    "changed_existing": [],
+    "branch_only_failures": [],
+    "collection_errors": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  "tests": [
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_csv_no_header_declared_order_and_multiline",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_csv_record_limit_before_accumulation",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_exact[-0.00-0]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_exact[12.30-12.3]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_exact[value2-9999999999.99]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_reject[0.001]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_reject[1.2]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_reject[10000000000.00]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_reject[1e2]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_reject[NaN]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_declared_decimal_contract_precision",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_depth_boundary[15]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_depth_boundary[16]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_depth_boundary[17]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[24]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[25]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[26]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[499]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[500]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[501]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BIGINT-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BINARY-binary]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BLOB-binary]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BOOL-boolean]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BOOLEAN-boolean]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BPCHAR-string]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BYTEA-binary]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[CHAR-string]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[DATE-date]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[DECIMAL(12,2)-decimal]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[HUGEINT-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INT-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INT1-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INT2-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INT4-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INT8-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INTEGER-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[LOGICAL-boolean]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[LONG-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[NUMERIC(38,9)-decimal]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[SHORT-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[SIGNED-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[SMALLINT-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[STRING-string]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[TEXT-string]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[TINYINT-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[UBIGINT-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[UINTEGER-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[USMALLINT-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[UTINYINT-signed_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[VARBINARY-binary]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[VARCHAR-string]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[ANY]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[ARRAY]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[BIGNUM]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[BITSTRING]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[BIT]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[CUSTOM]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[DOUBLE PRECISION]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[DOUBLE]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[ENUM]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[FLOAT4]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[FLOAT8]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[FLOAT[]]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[FLOAT]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[GEOMETRY]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[INTEGER[3]]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[INTERVAL]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[JSON]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[MAP]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[NULL]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[REAL]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[SQLNULL]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[TIME WITH TIME ZONE]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[TIMETZ]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[TIME]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[UHUGEINT]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[UNION]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[UNKNOWN]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[UNLISTED]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[UUID]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[VARIANT]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[VARINT]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_duckdb_pinned_runtime_dispatch",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_duplicate_keys[json-array-[{\"id\":1,\"id\":2}]]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_duplicate_keys[ndjson-{\"id\":1,\"id\":2}\\n]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_extended_ruling",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_field_name_contract[0]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_field_name_contract[1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_field_name_contract[255]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_field_name_contract[256]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_golden_rows_presence_unicode_numeric",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_independent_ecmascript_serializer",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_identical_bytes[120]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_identical_bytes[121]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_identical_bytes[value2]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[100-decimal_out_of_range0]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[100-decimal_out_of_range1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[12.0-invalid_decimal]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[12.001-decimal_out_of_range]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[True-invalid_decimal]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[bad-invalid_decimal]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[value3-invalid_decimal]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[value6-decimal_out_of_range]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_large_integer_row_string",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_list_struct_dispatch",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_malformed_array[[{\"x\":1} {\"x\":2}]]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_malformed_array[[{\"x\":1},]]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_malformed_array[[{\"x\":1}]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_malformed_array[[{\"x\":1}] trailing]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_malformed_array[[{\"x\":NaN}]]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_depth[15]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_depth[16]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_depth[17]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_fields[499]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_fields[500]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_fields[501]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_values",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_node_boundary[10000]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_node_boundary[10001]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_node_boundary[9999]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nonreflecting_value_errors[binary-abcd-invalid_binary]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nonreflecting_value_errors[boolean-1-invalid_boolean]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nonreflecting_value_errors[date-infinity-invalid_date]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nonreflecting_value_errors[signed_integer-True-invalid_integer]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nonreflecting_value_errors[string-bad-invalid_unicode]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_exact_nanos_decimal_binary_nested",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_nullable_arrow_strict_declaration_streamed[False-False]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_nullable_arrow_strict_declaration_streamed[False-True]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_nullable_arrow_strict_declaration_streamed[True-False]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_nullable_arrow_strict_declaration_streamed[True-True]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_rejected_types[fixed_list]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_rejected_types[float]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_rejected_types[map]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_real_formats",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_runtime_struct_declared_nullability",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_shared_real_file_corpus[aim_dataset_integral_decimal_v1.json]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_shared_real_file_corpus[aim_dataset_parser_v1.json]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_source_mutation",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[DATETIME-6]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMP WITH TIME ZONE-6]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMP-6]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMPTZ-6]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMP_MS-3]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMP_NS-9]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMP_S-0]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_exact",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_unicode_order_collisions",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_value_nodes_boundary[10000]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_value_nodes_boundary[10001]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_value_nodes_boundary[9999]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_all_golden_root_variants",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_cancel_mid_merge",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_cleanup_failure_startup_cancel",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_closed_model",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_closed_progress_and_proof_positions",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[10]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[11]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[12]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[13]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[14]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[15]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[16]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[17]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[18]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[19]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[2]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[3]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[4]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[5]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[6]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[7]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[8]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[9]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_disk_budget",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_golden_byte_exact",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_large_record_and_wide_schema",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_lock_excludes_second_job",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_log_checkpoint_vectors",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[boolean_index]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[digest]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[direction]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[index]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[long]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[root]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[short]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[size]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_maximum_valid_proof_depth[62]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_maximum_valid_proof_depth[63]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_maximum_valid_proof_depth[64]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_ceiling_on_assignment_and_instance_revalidation",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-canonical_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-duplicate_ordinal]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-leaf_count]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-leaf_index]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-records]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-tree_size]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-canonical_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-duplicate_ordinal]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-leaf_count]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-leaf_index]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-records]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-tree_size]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-canonical_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-duplicate_ordinal]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-leaf_count]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-leaf_index]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-records]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-tree_size]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_model_unsafe_integer_no_echo",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_no_symlink_source_and_private_root",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_proof_cap[62]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_proof_cap[63]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_proof_cap[64]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_symlink_parent_refused",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_worker",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_worker_changed_source_after_read",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_worker_rss_failure_and_cleanup",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_column_profile_default_works",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_column_profile_respects_max_rows",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_connection_settings",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_detect_file_type",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_excel_get_file_metadata",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_excel_get_sample_rows",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_excel_read_via_get_read_function",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_filename_with_quotes_csv",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_filename_with_quotes_sample_rows",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_get_file_metadata",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_get_sample_rows",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_get_sample_rows_returns_correct_count",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_metadata_caching",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_write_parquet_produces_valid_file",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_duckdb.py::test_write_parquet_with_quoted_path",
+      "baseline": "passed",
+      "candidate": "passed"
+    }
+  ]
+}

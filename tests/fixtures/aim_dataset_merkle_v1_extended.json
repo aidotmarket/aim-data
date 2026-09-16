@@ -1,0 +1,82 @@
+{
+  "profile": "aim-dataset-merkle-v1",
+  "ruling": "Event Ledger fba339b2, subject to Max veto",
+  "metadata_integer_range": [
+    -9007199254740991,
+    9007199254740991
+  ],
+  "must_reject": [
+    {
+      "name": "positive_first_unsafe",
+      "metadata": {
+        "leaf_count": 9007199254740992
+      },
+      "reason": "unsafe_integer"
+    },
+    {
+      "name": "original_reproducer",
+      "metadata": {
+        "leaf_count": 9007199254740993
+      },
+      "reason": "unsafe_integer"
+    },
+    {
+      "name": "negative_first_unsafe",
+      "metadata": {
+        "sequence": -9007199254740992
+      },
+      "reason": "unsafe_integer"
+    },
+    {
+      "name": "complete_original_commitment_signature_object",
+      "metadata": {
+        "commitment_id": "00000000-0000-0000-0000-000000000001",
+        "listing_id": "10000000-0000-0000-0000-000000000001",
+        "seller_dataset_version": "synthetic-conformance",
+        "previous_commitment_id": null,
+        "canonicalization_profile": "aim-dataset-merkle-v1",
+        "hash_algorithm": "sha-256",
+        "schema_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "dataset_merkle_root": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "leaf_count": 9007199254740993,
+        "seller_attestation_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "aim_data_signer_reference": "00000000-0000-0000-0000-000000000001:0000000000000000000000000000000000000000000000000000000000000000",
+        "signature_algorithm": "ed25519",
+        "signed_at": "2026-09-16T00:00:00.000000Z",
+        "proofs": []
+      },
+      "reason": "unsafe_integer"
+    },
+    {
+      "name": "generic_supplementary_key_order_conflict",
+      "metadata": {
+        "": "bmp",
+        "𐀀": "supplementary"
+      },
+      "reason": "noncanonical_key_order"
+    }
+  ],
+  "must_accept": [
+    {
+      "metadata": {
+        "leaf_count": 9007199254740991
+      },
+      "canonical": "{\"leaf_count\":9007199254740991}"
+    },
+    {
+      "metadata": {
+        "sequence": -9007199254740991
+      },
+      "canonical": "{\"sequence\":-9007199254740991}"
+    }
+  ],
+  "exact_row_control": {
+    "canonical_row": [
+      [
+        "id",
+        "signed_integer",
+        "9007199254740993"
+      ]
+    ]
+  }
+}

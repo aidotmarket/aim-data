@@ -1,0 +1,11 @@
+........................................................................ [ 39%]
+........................................................................ [ 78%]
+........................................                                 [100%]
+=============================== warnings summary ===============================
+app/config.py:100
+  /private/var/tmp/koskadeux/minimal-bridge-worktrees/ab45d16c9f0c-712a06/app/config.py:100: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Settings(BaseSettings):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+-------------- generated xml file: /var/tmp/s1716-c2a-focused.xml --------------
+184 passed, 1 warning in 2.39s

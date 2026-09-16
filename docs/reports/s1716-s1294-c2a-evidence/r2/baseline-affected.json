@@ -1,0 +1,21 @@
+{
+  "exit_status": 0,
+  "collection_errors": [],
+  "outcomes": {
+    "tests/test_duckdb.py::test_column_profile_default_works": "passed",
+    "tests/test_duckdb.py::test_column_profile_respects_max_rows": "passed",
+    "tests/test_duckdb.py::test_connection_settings": "passed",
+    "tests/test_duckdb.py::test_detect_file_type": "passed",
+    "tests/test_duckdb.py::test_excel_get_file_metadata": "passed",
+    "tests/test_duckdb.py::test_excel_get_sample_rows": "passed",
+    "tests/test_duckdb.py::test_excel_read_via_get_read_function": "passed",
+    "tests/test_duckdb.py::test_filename_with_quotes_csv": "passed",
+    "tests/test_duckdb.py::test_filename_with_quotes_sample_rows": "passed",
+    "tests/test_duckdb.py::test_get_file_metadata": "passed",
+    "tests/test_duckdb.py::test_get_sample_rows": "passed",
+    "tests/test_duckdb.py::test_get_sample_rows_returns_correct_count": "passed",
+    "tests/test_duckdb.py::test_metadata_caching": "passed",
+    "tests/test_duckdb.py::test_write_parquet_produces_valid_file": "passed",
+    "tests/test_duckdb.py::test_write_parquet_with_quoted_path": "passed"
+  }
+}

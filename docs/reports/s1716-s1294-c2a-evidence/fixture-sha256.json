@@ -1,0 +1,5 @@
+{
+  "tests/fixtures/aim_dataset_merkle_v1.json": "f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af",
+  "tests/fixtures/aim_dataset_merkle_v1_extended.json": "6f33e31252c267ae6b3b4a920fab723a53ccbecae9742043599efd80e3b2a7fd",
+  "tests/fixtures/aim_dataset_parser_v1.json": "8ee8ac6b6bdaccd943987afb0a17cbb548a88a7dc7598563a143e7d8ab415754"
+}

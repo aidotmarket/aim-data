@@ -1,0 +1,71 @@
+src/components/copilot/ToolResultRenderer.tsx(28,53): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+src/components/FileUploadModal.tsx(34,11): error TS2430: Interface 'FileWithRelativePath' incorrectly extends interface 'File'.
+  Property 'webkitRelativePath' is optional in type 'FileWithRelativePath' but required in type 'File'.
+src/contexts/CoPilotContext.tsx(368,22): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'SetStateAction<string>'.
+src/contexts/CoPilotContext.tsx(369,27): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'SetStateAction<boolean>'.
+src/contexts/CoPilotContext.tsx(418,21): error TS2345: Argument of type '(prev: ChatMessage[]) => (ChatMessage | { content: unknown; isStreaming: false; usage: unknown; id: string; role: "system" | "user" | "assistant"; createdAt: string; kind?: "system" | "chat" | "nudge"; ... 4 more ...; confirmResult?: { ...; }; })[]' is not assignable to parameter of type 'SetStateAction<ChatMessage[]>'.
+  Type '(prev: ChatMessage[]) => (ChatMessage | { content: unknown; isStreaming: false; usage: unknown; id: string; role: "system" | "user" | "assistant"; createdAt: string; kind?: "system" | "chat" | "nudge"; ... 4 more ...; confirmResult?: { ...; }; })[]' is not assignable to type '(prevState: ChatMessage[]) => ChatMessage[]'.
+    Type '(ChatMessage | { content: unknown; isStreaming: false; usage: unknown; id: string; role: "system" | "user" | "assistant"; createdAt: string; kind?: "system" | "chat" | "nudge"; nudge?: NudgeData; toolResults?: { ...; }[]; toolStatus?: string; confirmRequest?: ConfirmRequest; confirmResult?: { ...; }; })[]' is not assignable to type 'ChatMessage[]'.
+      Type 'ChatMessage | { content: unknown; isStreaming: false; usage: unknown; id: string; role: "system" | "user" | "assistant"; createdAt: string; kind?: "system" | "chat" | "nudge"; nudge?: NudgeData; toolResults?: { ...; }[]; toolStatus?: string; confirmRequest?: ConfirmRequest; confirmResult?: { ...; }; }' is not assignable to type 'ChatMessage'.
+        Type '{ content: unknown; isStreaming: false; usage: unknown; id: string; role: "user" | "assistant" | "system"; createdAt: string; kind?: "chat" | "nudge" | "system"; nudge?: NudgeData; toolResults?: Array<{ toolName: string; data: ToolResultData; }>; toolStatus?: string; confirmRequest?: ConfirmRequest; confirmResult?: ...' is not assignable to type 'ChatMessage'.
+          Types of property 'content' are incompatible.
+            Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(467,21): error TS2345: Argument of type '(prev: ChatMessage[]) => (ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; })[]' is not assignable to parameter of type 'SetStateAction<ChatMessage[]>'.
+  Type '(prev: ChatMessage[]) => (ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; })[]' is not assignable to type '(prevState: ChatMessage[]) => ChatMessage[]'.
+    Type '(ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; })[]' is not assignable to type 'ChatMessage[]'.
+      Type 'ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; }' is not assignable to type 'ChatMessage'.
+        Type '{ id: string; role: "system"; content: unknown; createdAt: string; }' is not assignable to type 'ChatMessage'.
+          Types of property 'content' are incompatible.
+            Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(503,11): error TS2322: Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(504,11): error TS2322: Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(505,11): error TS2322: Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(506,11): error TS2322: Type 'unknown' is not assignable to type 'boolean'.
+src/contexts/CoPilotContext.tsx(507,11): error TS2322: Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(512,23): error TS2345: Argument of type '(prev: ChatMessage[]) => (ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; kind: "nudge"; nudge: NudgeData; })[]' is not assignable to parameter of type 'SetStateAction<ChatMessage[]>'.
+  Type '(prev: ChatMessage[]) => (ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; kind: "nudge"; nudge: NudgeData; })[]' is not assignable to type '(prevState: ChatMessage[]) => ChatMessage[]'.
+    Type '(ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; kind: "nudge"; nudge: NudgeData; })[]' is not assignable to type 'ChatMessage[]'.
+      Type 'ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; kind: "nudge"; nudge: NudgeData; }' is not assignable to type 'ChatMessage'.
+        Type '{ id: string; role: "system"; content: unknown; createdAt: string; kind: "nudge"; nudge: NudgeData; }' is not assignable to type 'ChatMessage'.
+          Types of property 'content' are incompatible.
+            Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(525,17): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'titleT'.
+src/contexts/CoPilotContext.tsx(536,23): error TS2345: Argument of type '(prev: ChatMessage[]) => (ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; kind: "nudge"; nudge: NudgeData; })[]' is not assignable to parameter of type 'SetStateAction<ChatMessage[]>'.
+  Type '(prev: ChatMessage[]) => (ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; kind: "nudge"; nudge: NudgeData; })[]' is not assignable to type '(prevState: ChatMessage[]) => ChatMessage[]'.
+    Type '(ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; kind: "nudge"; nudge: NudgeData; })[]' is not assignable to type 'ChatMessage[]'.
+      Type 'ChatMessage | { id: string; role: "system"; content: unknown; createdAt: string; kind: "nudge"; nudge: NudgeData; }' is not assignable to type 'ChatMessage'.
+        Type '{ id: string; role: "system"; content: unknown; createdAt: string; kind: "nudge"; nudge: NudgeData; }' is not assignable to type 'ChatMessage'.
+          Types of property 'content' are incompatible.
+            Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(555,33): error TS2339: Property 'replace' does not exist on type 'unknown'.
+src/contexts/CoPilotContext.tsx(576,21): error TS2345: Argument of type '(prev: ChatMessage[]) => (ChatMessage | { toolResults: { toolName: unknown; data: unknown; }[]; toolStatus: any; id: string; role: "system" | "user" | "assistant"; content: string; ... 6 more ...; confirmResult?: { ...; }; })[]' is not assignable to parameter of type 'SetStateAction<ChatMessage[]>'.
+  Type '(prev: ChatMessage[]) => (ChatMessage | { toolResults: { toolName: unknown; data: unknown; }[]; toolStatus: any; id: string; role: "system" | "user" | "assistant"; content: string; ... 6 more ...; confirmResult?: { ...; }; })[]' is not assignable to type '(prevState: ChatMessage[]) => ChatMessage[]'.
+    Type '(ChatMessage | { toolResults: { toolName: unknown; data: unknown; }[]; toolStatus: any; id: string; role: "system" | "user" | "assistant"; content: string; createdAt: string; isStreaming?: boolean; ... 4 more ...; confirmResult?: { ...; }; })[]' is not assignable to type 'ChatMessage[]'.
+      Type 'ChatMessage | { toolResults: { toolName: unknown; data: unknown; }[]; toolStatus: any; id: string; role: "system" | "user" | "assistant"; content: string; createdAt: string; isStreaming?: boolean; ... 4 more ...; confirmResult?: { ...; }; }' is not assignable to type 'ChatMessage'.
+        Type '{ toolResults: { toolName: unknown; data: unknown; }[]; toolStatus: any; id: string; role: "user" | "assistant" | "system"; content: string; createdAt: string; isStreaming?: boolean; kind?: "chat" | "nudge" | "system"; usage?: { input_tokens?: number; output_tokens?: number; cost_cents?: number; provider?: string; m...' is not assignable to type 'ChatMessage'.
+          Types of property 'toolResults' are incompatible.
+            Type '{ toolName: unknown; data: unknown; }[]' is not assignable to type '{ toolName: string; data: ToolResultData; }[]'.
+              Type '{ toolName: unknown; data: unknown; }' is not assignable to type '{ toolName: string; data: ToolResultData; }'.
+                Types of property 'toolName' are incompatible.
+                  Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(608,11): error TS2322: Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(609,11): error TS2322: Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(610,11): error TS2322: Type 'unknown' is not assignable to type 'string'.
+src/contexts/CoPilotContext.tsx(611,11): error TS2322: Type 'unknown' is not assignable to type 'Record<string, unknown>'.
+  Index signature for type 'string' is missing in type '{}'.
+src/contexts/CoPilotContext.tsx(612,11): error TS2322: Type 'unknown' is not assignable to type 'number'.
+src/contexts/UploadContext.tsx(322,23): error TS2352: Conversion of type 'DatasetStatusResponse' to type 'Record<string, unknown>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Index signature for type 'string' is missing in type 'DatasetStatusResponse'.
+src/hooks/useApi.ts(160,19): error TS2339: Property 'progress_pct' does not exist on type 'DatasetStatusResponse'.
+src/hooks/useApi.ts(160,66): error TS2339: Property 'progress_pct' does not exist on type 'DatasetStatusResponse'.
+src/hooks/useApi.ts(161,19): error TS2339: Property 'progress_detail' does not exist on type 'DatasetStatusResponse'.
+src/hooks/useApi.ts(161,72): error TS2339: Property 'progress_detail' does not exist on type 'DatasetStatusResponse'.
+src/hooks/useApi.ts(162,19): error TS2339: Property 'phase' does not exist on type 'DatasetStatusResponse'.
+src/hooks/useApi.ts(162,53): error TS2339: Property 'phase' does not exist on type 'DatasetStatusResponse'.
+src/hooks/useApi.ts(163,32): error TS2339: Property 'queue_position' does not exist on type 'DatasetStatusResponse'.
+src/pages/DatasetDetail.tsx(170,3): error TS2353: Object literal may only specify known properties, and 'integer' does not exist in type 'Record<"string" | "number" | "boolean" | "object" | "date" | "array", string>'.
+src/pages/DatasetDetail.tsx(181,56): error TS2322: Type '"integer"' is not assignable to type '"string" | "number" | "boolean" | "object" | "date" | "array"'.
+src/pages/DatasetDetail.tsx(182,113): error TS2322: Type '"float"' is not assignable to type '"string" | "number" | "boolean" | "object" | "date" | "array"'.
+src/pages/DatasetDetail.tsx(1981,20): error TS2367: This comparison appears to be unintentional because the types '"string" | "number" | "boolean" | "object" | "date" | "array"' and '"integer"' have no overlap.
+src/pages/DatasetDetail.tsx(1981,51): error TS2367: This comparison appears to be unintentional because the types '"string" | "number" | "boolean" | "object" | "date" | "array"' and '"float"' have no overlap.
+src/pages/SetupPage.tsx(16,11): error TS2339: Property 'setup' does not exist on type 'AuthContextType'.

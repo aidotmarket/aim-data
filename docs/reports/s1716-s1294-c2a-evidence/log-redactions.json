@@ -1,0 +1,22 @@
+{
+  "baseline.xml": {
+    "original_sha256": "7ace8772d0aee52bd73f78bf8bca39e4101e2993f68738744c7bb063fa455edf",
+    "policy": "outcomes_only; all tracebacks, inputs, captured output and exception messages omitted",
+    "original_local_path": "/var/tmp/s1716-c2a-final-baseline.xml"
+  },
+  "baseline.log": {
+    "original_sha256": "a025b406b767269efce4ece5cd135de13df273ce75f6702dc961b7f9d21393e9",
+    "policy": "outcomes_only; all tracebacks, inputs, captured output and exception messages omitted",
+    "original_local_path": "/var/tmp/s1716-c2a-final-baseline.log"
+  },
+  "candidate.xml": {
+    "original_sha256": "93fca8d7d48c7833d3a21a952e473c73e36df5f349b3b6e34531e61d0a9ef126",
+    "policy": "outcomes_only; all tracebacks, inputs, captured output and exception messages omitted",
+    "original_local_path": "/var/tmp/s1716-c2a-final-verified.xml"
+  },
+  "candidate.log": {
+    "original_sha256": "45bea91d5377fcc287be81c0409fe2bae5d32e25a2319e337aca7b8ed7146fe7",
+    "policy": "outcomes_only; all tracebacks, inputs, captured output and exception messages omitted",
+    "original_local_path": "/var/tmp/s1716-c2a-final-verified.log"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "schema": [
+    [
+      "amount",
+      "decimal",
+      false,
+      {
+        "precision": 4,
+        "scale": 2
+      }
+    ]
+  ],
+  "schema_digest": "UmgvZe_duu_LRDB0GgeHBfqblJz495y-RG-yBWRKeeE",
+  "vectors": [
+    {
+      "format": "json-array",
+      "declaration": {
+        "format": "json-array",
+        "encoding": "utf-8"
+      },
+      "file_bytes_base64": "W3siYW1vdW50IjoxMn1d"
+    },
+    {
+      "format": "csv",
+      "declaration": {
+        "format": "csv",
+        "encoding": "utf-8",
+        "delimiter": ",",
+        "quote": "\"",
+        "escape": "",
+        "header": true,
+        "locale": "C",
+        "null_token": "NULL"
+      },
+      "file_bytes_base64": "YW1vdW50CjEyCg=="
+    },
+    {
+      "format": "parquet",
+      "declaration": {
+        "format": "parquet"
+      },
+      "file_bytes_base64": "UEFSMRUEFQQVCEwVAhUAEgAAAgQEsBUAFQYVCiwVAhUQFQYVBhwYAgSwGAIEsBYAKAIEsBgCBLAREQAAAAMIAQIAFQQZLDUAGAZzY2hlbWEVAgAVDhUEFQAYBmFtb3VudCUKFQQVCCxcFQQVCAAAABYCGRwZHCYAHBUOGTUABhAZGAZhbW91bnQVAhYCFnQWfCYsJggcGAIEsBgCBLAWACgCBLAYAgSwEREAGSwVBBUAFQIAFQAVEBUCAAAAFnQWAiYIFnwAGRwYDEFSUk9XOnNjaGVtYRi4AS8vLy8vNEFBQUFBUUFBQUFBQUFLQUF3QUJnQUZBQWdBQ2dBQUFBQUJCQUFNQUFBQUNBQUlBQUFBQkFBSUFBQUFCQUFBQUFFQUFBQVVBQUFBRUFBVUFBZ0FBQUFIQUF3QUFBQVFBQkFBQUFBQUFBQUhFQUFBQUNBQUFBQUVBQUFBQUFBQUFBWUFBQUJoYlc5MWJuUUFBQWdBREFBRUFBZ0FDQUFBQUFRQUFBQUNBQUFBQUFBQUFBPT0AGCBwYXJxdWV0LWNwcC1hcnJvdyB2ZXJzaW9uIDI0LjAuMBkcHAAAAHgBAABQQVIx"
+    }
+  ],
+  "canonical_rows": [
+    "[[\"amount\",\"decimal\",\"12\"]]"
+  ],
+  "root": "ztPQAnIfWPemP1TzWC2NP-V2n8byBfQ13u51LSpQbAo"
+}

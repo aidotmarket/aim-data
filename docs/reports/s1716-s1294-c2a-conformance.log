@@ -1,0 +1,36 @@
+test_admitted_integer_metadata_must_agree (__main__.main.<locals>.ConformanceGate.test_admitted_integer_metadata_must_agree) ... FAIL
+test_complete_commitment_signature_object_must_agree (__main__.main.<locals>.ConformanceGate.test_complete_commitment_signature_object_must_agree) ... FAIL
+test_exact_integer_row_string_control (__main__.main.<locals>.ConformanceGate.test_exact_integer_row_string_control) ... ok
+test_generic_supplementary_object_key_order_must_agree (__main__.main.<locals>.ConformanceGate.test_generic_supplementary_object_key_order_must_agree) ... FAIL
+test_original_fixture_sha (__main__.main.<locals>.ConformanceGate.test_original_fixture_sha) ... ok
+test_safe_integer_metadata_control (__main__.main.<locals>.ConformanceGate.test_safe_integer_metadata_control) ... ok
+test_utf8_descriptor_array_order_control (__main__.main.<locals>.ConformanceGate.test_utf8_descriptor_array_order_control) ... ok
+
+======================================================================
+FAIL: test_admitted_integer_metadata_must_agree (__main__.main.<locals>.ConformanceGate.test_admitted_integer_metadata_must_agree)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/var/tmp/koskadeux/minimal-bridge-worktrees/ab45d16c9f0c-712a06/docs/reports/s1716-s1294-c2a-conformance.py", line 145, in test_admitted_integer_metadata_must_agree
+    self.assertEqual(reference.canonical_json_bytes(value), js_bytes(value))
+AssertionError: b'{"leaf_count":9007199254740993}' != b'{"leaf_count":9007199254740992}'
+
+======================================================================
+FAIL: test_complete_commitment_signature_object_must_agree (__main__.main.<locals>.ConformanceGate.test_complete_commitment_signature_object_must_agree)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/var/tmp/koskadeux/minimal-bridge-worktrees/ab45d16c9f0c-712a06/docs/reports/s1716-s1294-c2a-conformance.py", line 148, in test_complete_commitment_signature_object_must_agree
+    self.assertEqual(reference.canonical_json_bytes(preimage), js_bytes(preimage))
+AssertionError: b'{"a[354 chars]740993,"listing_id":"10000000-0000-0000-0000-0[310 chars]0Z"}' != b'{"a[354 chars]740992,"listing_id":"10000000-0000-0000-0000-0[310 chars]0Z"}'
+
+======================================================================
+FAIL: test_generic_supplementary_object_key_order_must_agree (__main__.main.<locals>.ConformanceGate.test_generic_supplementary_object_key_order_must_agree)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/var/tmp/koskadeux/minimal-bridge-worktrees/ab45d16c9f0c-712a06/docs/reports/s1716-s1294-c2a-conformance.py", line 153, in test_generic_supplementary_object_key_order_must_agree
+    self.assertEqual(reference.canonical_json_bytes(value), js_bytes(value))
+AssertionError: b'{"\xee\x80\x80":"bmp","\xf0\x90\x80\x80":"supplementary"}' != b'{"\xf0\x90\x80\x80":"supplementary","\xee\x80\x80":"bmp"}'
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.291s
+
+FAILED (failures=3)

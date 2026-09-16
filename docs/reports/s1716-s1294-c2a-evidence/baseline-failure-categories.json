@@ -1,0 +1,370 @@
+[
+  {
+    "test": "tests.test_aim_data_deployment::test_aim_data_compose_uses_aim_data_image_and_env",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_upload_single_file",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_upload_multiple_files",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_upload_custom_batch_id",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_upload_with_paths",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_reject_unsupported_extension",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_reject_paths_length_mismatch",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_reject_mime_mismatch",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_dataset_status_endpoint",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_status_endpoint",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_preview_before_extraction",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_single_file_upload_backward_compat",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_mode_process",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_batch_upload::test_client_file_index_with_mixed_results",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_channel_landing::test_channel_landing_redirects_aim_data_to_datasets",
+    "category": "assertion mismatch"
+  },
+  {
+    "test": "tests.test_channel_onboarding::test_aim_data_steps_have_three_steps",
+    "category": "assert 'const AIM_DATA_STEPS"
+  },
+  {
+    "test": "tests.test_channel_onboarding::test_get_steps_for_channel_aim_data_returns_aim_data_steps",
+    "category": "assertion mismatch"
+  },
+  {
+    "test": "tests.test_channel_presentation_only::test_channel_only_in_allowed_files",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_config_alias_choices::test_every_settings_field_has_primary_and_legacy_aliases",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_config_alias_choices::test_every_settings_field_resolves_from_primary_and_legacy_prefixes[AIM_DATA]",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_config_alias_choices::test_every_settings_field_resolves_from_primary_and_legacy_prefixes[VECTORAIZ]",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_config_alias_choices::test_aim_data_prefix_wins_when_both_set",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_copilot_upload.TestBrainMessageAttachments::test_too_many_attachments",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_copilot_upload.TestBrainMessageAttachments::test_attachment_not_found",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_copilot_upload.TestBrainMessageAttachments::test_attachment_wrong_user",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_diagnostic.TestCollectorTimeout::test_successful_collector_has_no_error",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_diagnostic.TestIndividualCollectors::test_error_collector_returns_registry",
+    "category": "assertion mismatch"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementValid::test_valid_token",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementValid::test_valid_token_returns_all_fields",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementExpired::test_expired_token",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementReplay::test_replayed_token",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementReplay::test_different_nonces_ok",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementWrongHash::test_hash_mismatch_detected_downstream",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementTampered::test_tampered_signature",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementTampered::test_missing_required_field",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_metadata::test_searchability_score",
+    "category": "AttributeError"
+  },
+  {
+    "test": "tests.test_metadata::test_enhanced_metadata",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_skips_when_auth_disabled",
+    "category": "TypeError"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_successful_deduction",
+    "category": "TypeError"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_insufficient_credits_402",
+    "category": "TypeError"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_network_error_fails_open",
+    "category": "TypeError"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_timeout_fails_open",
+    "category": "TypeError"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_server_error_fails_open",
+    "category": "TypeError"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_zero_tokens_skips_network_call",
+    "category": "TypeError"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_bad_file_continues_processing",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_notifications_created_for_successes_and_failures",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_summary_notification_correct_counts",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_summary_all_succeed",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_summary_all_fail",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_response_includes_per_file_status",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestSingleUploadNotifications::test_success_creates_notification",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestSingleUploadNotifications::test_failure_creates_error_notification",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestSingleUploadNotifications::test_batch_id_optional",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_pii_scrub::test_scrub_endpoint_not_found",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_pii_scrub::test_scrub_endpoint_exists",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_portal_acl::test_session_invalidation_on_code_rotation",
+    "category": "AttributeError"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_successful_download",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_hash_mismatch",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_missing_file_id",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_expired_token",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_replayed_nonce",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_file_missing_from_disk",
+    "category": "RuntimeError"
+  },
+  {
+    "test": "tests.test_raw_file_detail.TestRawFileDetailEndpoint::test_detail_listing_status_listed",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_raw_files.TestRawFileRegistration::test_upload_size_limit_exceeded",
+    "category": "AttributeError"
+  },
+  {
+    "test": "tests.test_request_engine.TestAPIEndpoints::test_get_matches",
+    "category": "TypeError"
+  },
+  {
+    "test": "tests.test_request_engine.TestAPIEndpoints::test_create_draft_rejects_non_ready_dataset",
+    "category": "sqlalchemy.orm.exc.DetachedInstanceError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestAttestationLLMError::test_attestation_returns_404_on_value_error",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestAttestationLLMError::test_attestation_returns_500_on_other_error",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestListingMetadataLLMError::test_listing_metadata_returns_500_on_other_error",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestPIIScan503::test_pii_scan_returns_503_on_os_error",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestPIIScan503::test_pii_scan_returns_503_on_import_error",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestPIIScan503::test_pii_scan_returns_500_on_generic_error",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestHTMExtension::test_htm_upload_accepted",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestLargeCSVProcessing::test_extract_tabular_retries_large_files",
+    "category": "TypeError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestNginxTimeout::test_nginx_conf_has_proxy_read_timeout",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestNginxTimeout::test_nginx_conf_has_proxy_send_timeout",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestNginxTimeout::test_nginx_conf_has_sufficient_client_max_body_size",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestDeleteEndpoint::test_delete_endpoint_returns_success",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestDuplicateDetection::test_different_size_same_name_allowed",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestDuplicateDetection::test_same_size_same_name_rejected",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestDuplicateDetection::test_allow_duplicate_flag_bypasses_check",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_security_audit.TestAADEncryption::test_aad_roundtrip",
+    "category": "ModuleNotFoundError"
+  },
+  {
+    "test": "tests.test_security_audit.TestAADEncryption::test_aad_mismatch_fails",
+    "category": "ModuleNotFoundError"
+  },
+  {
+    "test": "tests.test_security_audit.TestAADEncryption::test_aad_scope_mismatch_fails",
+    "category": "ModuleNotFoundError"
+  },
+  {
+    "test": "tests.test_security_audit.TestAADEncryption::test_backward_compat_no_aad",
+    "category": "ModuleNotFoundError"
+  },
+  {
+    "test": "tests.test_security_foundation.TestToolClassification::test_auto_approve_tools",
+    "category": "AssertionError"
+  },
+  {
+    "test": "tests.test_sql::test_query_execution_blocked",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_text_processor::test_upload_txt_accepted",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_text_processor::test_upload_md_accepted",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_text_processor::test_upload_html_accepted",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_upload::test_upload_csv",
+    "category": "OSError"
+  },
+  {
+    "test": "tests.test_upload::test_upload_unsupported_type",
+    "category": "OSError"
+  }
+]

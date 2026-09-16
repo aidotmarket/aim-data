@@ -1,0 +1,89 @@
+{
+  "implementation_sha": "56278d33a39b42661e7f6b62fdbe7a95c1fb6f63",
+  "baseline_sha": "ee7faa457a21d751bc581b6733ac9a40bb80a801",
+  "reviewed_r1_sha": "1f1e99d5501639c0b0f1f8d1cb81169721cd4bb8",
+  "profile": "aim-dataset-merkle-v1",
+  "source_sha256": {
+    "app/services/dataset_canonicalization.py": "4fe17d4a91105fdc87d370b139523ab5b3f5dbe826fe442665890187b33860a1",
+    "app/services/dataset_merkle_service.py": "25df4b1ae107d5d33695b00e20896f4d8621acbf21b6ff85fa3c146845588f9a",
+    "app/services/duckdb_service.py": "67f6670eba7fd5229aa61dd1e258aa596659a7a4936a40acc9dff1f37949e674",
+    "app/models/dataset_commitment_schemas.py": "69eedd7595d0670be2fb3fdf10a08178d8173817465f0420504fd08d02e2dafb"
+  },
+  "full_suite_parity": {
+    "baseline": {
+      "skipped": 33,
+      "passed": 2219,
+      "failure": 92,
+      "error": 38
+    },
+    "candidate": {
+      "skipped": 33,
+      "passed": 2438,
+      "failure": 92,
+      "error": 38
+    },
+    "added": {
+      "passed": 219
+    },
+    "changed_existing": [],
+    "branch_only_failures": [],
+    "collection_errors": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  "affected_suite_parity": {
+    "baseline": {
+      "passed": 15
+    },
+    "candidate": {
+      "passed": 234
+    },
+    "added": {
+      "passed": 219
+    },
+    "changed_existing": [],
+    "branch_only_failures": [],
+    "collection_errors": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  "focused_passed": 219,
+  "pinned_focused_passed": 219,
+  "pinned_duckdb": "0.9.2",
+  "fixture_sha256": {
+    "tests/fixtures/aim_dataset_merkle_v1.json": "f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af",
+    "tests/fixtures/aim_dataset_integral_decimal_v1.json": "5ee3ad8022da09a652f46e72b8ce7ba4f4bc5a53b9a2db32a4220b608da44f63",
+    "tests/fixtures/aim_dataset_parser_v1.json": "8ee8ac6b6bdaccd943987afb0a17cbb548a88a7dc7598563a143e7d8ab415754",
+    "tests/fixtures/aim_dataset_merkle_v1_extended.json": "6f33e31252c267ae6b3b4a920fab723a53ccbecae9742043599efd80e3b2a7fd"
+  },
+  "evidence_sha256": {
+    "r2/README.md": "19f94d0269eceb942d902b0af825eaa2fe03788414aa39fbec53ec10f8e6114f",
+    "r2/affected-per-test.json": "a68fd086fcdd65980639e330a8e5082585998cf24851ab11fd4b44400634f6b8",
+    "r2/baseline-affected.json": "d045e7443a51b6afcc511260afbaf4ed28157f12b5ae82c3020f755b8d2e70ad",
+    "r2/baseline-affected.log": "fb521bb1ead8797a5c754c59a5adcf38ea44a6b73dce031a0450e1e664edd62c",
+    "r2/baseline-full.log": "776bf825f9d571be2fcf18d29f13ec09a3d0aa8342e7e3031892e12f90d9ebaa",
+    "r2/baseline-lint.log": "d9c868958c4a1e30e96db058571cd17401923f8b3d9304c22abb063ae814f881",
+    "r2/baseline-outcomes.json": "ba77ac5497a2c8d1d35c04aad1bf6ec6fcb1a0e812415bc500361c4eaffb6e3c",
+    "r2/baseline-ruff.log": "786275899b4ede3ab49670911f0d790a80b79e71d6fcb03de93a1e468f6fec9f",
+    "r2/baseline-types.log": "4d746b355c868a5a154bc32277df306ee1e4aa93e57989e0fd075cfe5bb18208",
+    "r2/candidate-affected.json": "28b9a022323bd737af38f53513f73f078b571b55c9d8ebdad02ddeb141c64af0",
+    "r2/candidate-affected.log": "a4971bd21f9eda958e4d0f51c76e10d2c438d2aed8956c4d4a5f8619df1350b4",
+    "r2/candidate-full.log": "fc797cd7e878bc19b00f36b81d96d8dc5fa8b493f2ed3cb23a2bcf8b34995451",
+    "r2/candidate-lint.log": "d9c868958c4a1e30e96db058571cd17401923f8b3d9304c22abb063ae814f881",
+    "r2/candidate-outcomes.json": "a5c65aca59bdc025daee155e7a178b043dd1bde085f5a8c356932e5929e8af7f",
+    "r2/candidate-ruff.log": "786275899b4ede3ab49670911f0d790a80b79e71d6fcb03de93a1e468f6fec9f",
+    "r2/candidate-types.log": "4d746b355c868a5a154bc32277df306ee1e4aa93e57989e0fd075cfe5bb18208",
+    "r2/checks.json": "1428ea5bb42ef90d7de86fedf30d3fc8a2ddccebaefc4c1ac5b28c5cd20bf169",
+    "r2/fixture-sha256.json": "1e124614ed03674326abe63d855a00fa349d54ef4723104369cce8a27bb64cd4",
+    "r2/focused.log": "ce7faeefbce537f89fddac40adbd53d454a3f4e5f5a3c3cfc2a2dd7134115c8d",
+    "r2/full-per-test.json": "cda2b3244a33b8070e509c62bd087b63b3bffedce63de4c84315eaa0dfb3fb5e",
+    "r2/pinned.log": "747ade72ce78c18227624f5dfd0502690f6fc4c94b3d9683076c25a55cb109c4",
+    "r2/raw-log-provenance.json": "51a888171e496d995b7d99a2667a4a78ba4d73cb17269e92476beb588d4b2199"
+  },
+  "benchmark_scope": "R1 receipts retained as historical; benchmarks were not rerun for R2",
+  "merge_performed": false,
+  "release_performed": false,
+  "verified_at_utc": "2026-09-16T21:51:47.287020+00:00"
+}

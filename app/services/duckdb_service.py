@@ -67,6 +67,15 @@ class DuckDBService:
         Path(f"{settings.data_directory}/temp").mkdir(parents=True, exist_ok=True)
         return conn
     
+    def iter_commitment_records(self, filepath, declaration, schema):
+        """Lossless complete-file reader; deliberately independent of previews.
+
+        Uses explicit text parsing and Arrow batches rather than DuckDB's
+        inference/fetchall coercions. No SQL LIMIT, float conversion or hex cast.
+        """
+        from app.services.dataset_canonicalization import iter_records
+        yield from iter_records(Path(filepath), declaration, schema)
+
     def detect_file_type(self, filepath: Path) -> Optional[str]:
         """Detect file type from extension."""
         ext = filepath.suffix.lower()
