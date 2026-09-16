@@ -203,3 +203,60 @@ was not run or counted; its corrected unique replacement was run separately.
   builder must run while the 2a index is alive; the normal 2a metadata-return API
   cleans that index before returning.
 - No release, deployment, merge or full S1294/Chunk 2 completion is claimed.
+
+
+## R2 fold
+
+Fold starts from `4db72743a`; no merge or release. Gate-3 R1 response IDs supplied
+by the operator: DeepSeek `response-20260917-011312-613320`
+(APPROVE_WITH_NITS; reported EXACT envelope/sample_hash/attestation/receipt parity),
+CC `response-20260917-011341-795695` (APPROVE_WITH_NITS), GLM
+`response-20260917-011330-158272` (APPROVE_WITH_MANDATES).
+
+| Finding | Disposition | Commit |
+|---|---|---|
+| G1, MEDIUM mandate | Builder creates its own exact local PIIService, checks pinned identity before scanning, and rejects the retired detector-injection API with only `detector_unavailable`. Direct policy scanning also rejects duck-typed scanners and subclasses. | `158c4c40215fbc52b38037f016826e32b18b98bc` |
+| G2, LOW | Before hashing, all records must share URL, media type/profile/ceiling, policy/version/verdict/time, sampled-leaf digest and signer reference/algorithm. Twelve mixed-record cases cover every shared field, including both signer UUID and key identity. | `eefd3a66f3121a7867d17c1fc983a6cb6825cf00` |
+| DeepSeek/CC LOW findings | **Open, not reviewed or folded:** original response bodies were not present in the preserved worktree or searched local review stores, and no Council response-read tool is exposed in this session. Requested their location from the operator. Exact one-line fixes and carried items cannot be identified from verdict labels alone. | Pending response text |
+
+Successful package/origin tests now use real PIIService and its real analyzer;
+only the pinned-identity metadata provider is monkeypatched in those unit tests.
+No production scanner factory or success bypass was added. Two independent
+subprocess cases run the builder without that patch: the shared Presidio 2.2.33
+environment returns exactly `detector_unavailable`, while the isolated
+`/var/tmp/s1716-c2b-pinned` import target (Presidio 2.2.362, spaCy 3.7.2,
+en_core_web_sm 3.7.1, English) prepares a safe synthetic row successfully.
+`PREVIEW_PINNED_IMPORT_TARGET` enables the latter integration test; it was set
+for this run, with no added skips. Mock, spec-Mock, arbitrary object and an exact
+PIIService instance with a no-op scan override are all rejected as injected
+arguments before preparation/export. Wrong identity is also tested explicitly.
+
+The real engine exposed synthetic field-name detections in the combined-byte
+boundary tests. Their labels/filler were changed to safe synthetic text; the
+249,999 / 250,000 / 250,001 canonical-byte assertions remain exact. Frozen package
+bytes, sample-hash vectors and receipt shapes are unchanged.
+
+| R2 check | Baseline | Candidate |
+|---|---:|---:|
+| Affected suites, including all three preview suites on candidate | 270 passed / 2 failed | 638 passed / 2 failed |
+| Preview suites | — | 368 passed / 0 skipped |
+| Repository Ruff | 94 existing errors | Identical diagnostics |
+| Frontend ESLint | Existing errors/warnings | Identical normalized diagnostics |
+| Frontend TypeScript | Existing errors | Identical diagnostics |
+| Changed Python Ruff / compile / whitespace | — | Passed |
+
+Every baseline nodeid retains its outcome: zero changed existing outcomes,
+branch-only failures or collection errors. The two existing PII scrub endpoint
+failures remain open. No configured Python static typecheck exists; compilation
+is not presented as one. The full repository pytest and original mutation audit
+were not rerun for this fold; the table above is the requested affected-suite
+rerun. Prior mutation coverage applies to the original implementation only.
+
+R2 evidence: [validation receipt](s1716-s1294-c2b-evidence/r2/validation.json),
+[per-nodeid parity](s1716-s1294-c2b-evidence/r2/affected-per-test.json), and adjacent
+outcome-only inputs and normalized lint/type logs. The receipt includes tested
+source hashes, exact commands, environment and separate preview-suite counts.
+Reproduce using the existing evidence README commands with
+`PREVIEW_PINNED_IMPORT_TARGET=/var/tmp/s1716-c2b-pinned` and fresh R2 output paths.
+The LOW response-text gap remains open; this report does not claim the entire
+R2 review fold is complete.
