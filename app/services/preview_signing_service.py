@@ -200,3 +200,92 @@ class PreviewSigningService:
         if b["seller_id"] != self.seller_id:
             raise SigningError("registration_owner_mismatch")
         return self._sign(disclosure_bytes(b), b["signer_reference"])
+
+
+# Candidate bytes are immutable and labelled fixture-only until I.b supplies an
+# authenticated platform allocation. No mutable UI object is retained for retry.
+from dataclasses import dataclass
+import json
+
+
+@dataclass(frozen=True)
+class LocalCandidate:
+    binding_bytes: bytes
+    kind: Literal["fixture_candidate"] = "fixture_candidate"
+
+    @classmethod
+    def validate(cls, binding):
+        from app.models.preview_disclosure_schemas import DisclosureBinding
+        return cls(serialize(DisclosureBinding, binding))
+
+    def binding(self):
+        from app.models.preview_disclosure_schemas import DisclosureBinding
+        if self.kind != "fixture_candidate":
+            raise SigningError("integration_not_yet_available")
+        data = closed(DisclosureBinding, json.loads(self.binding_bytes))
+        if serialize(DisclosureBinding, data) != self.binding_bytes:
+            raise SigningError("candidate_changed")
+        return data
+
+
+def construct_request(candidate, commitment, proofs, *, signer, approved_p1):
+    """Sign an exact immutable candidate after independent P1 and proof checks.
+
+    approved_p1 is the exact local approved P1 reference projection, never a
+    generated summary. The full request is journaled by PreviewJournal.freeze.
+    """
+    from app.models.preview_disclosure_schemas import PreviewDisclosureRequest
+    b = candidate.binding()
+    fields = ("summary_id", "summary_approval_id", "summary_hash", "render_hash",
+              "aggregate_hash", "content_revision", "source_revision", "listing_id",
+              "listing_version_id")
+    if not isinstance(approved_p1, dict) or set(approved_p1) != set(fields) or any(approved_p1[k] != b[k] for k in fields):
+        raise SigningError("p1_reference_mismatch")
+    # Validate the whole request before signing, then verify cryptographic material.
+    dummy = encode_base64url(bytes(64))
+    request = closed(PreviewDisclosureRequest, dict(profile=b["profile"], summary_id=b["summary_id"],
+                    binding=b, seller_signature=dummy, commitment=commitment, proofs=proofs))
+    if request["commitment"] is not None:
+        c = request["commitment"]
+        raw = public_bytes(signer._keys()[1])
+        if not verify_bytes(raw, c["seller_signature"], commitment_bytes(c)):
+            raise SigningError("commitment_signature_invalid")
+        for p in request["proofs"]:
+            if not verify_bytes(raw, p["signature"], proof_bytes(c, p)):
+                raise SigningError("proof_signature_invalid")
+    request["seller_signature"] = signer.sign_disclosure(b)
+    return closed(PreviewDisclosureRequest, request)
+
+
+def request_bytes(request):
+    from app.models.preview_disclosure_schemas import PreviewDisclosureRequest
+    return serialize(PreviewDisclosureRequest, request)
+
+
+def request_digest(request):
+    return hashlib.sha256(request_bytes(request)).hexdigest()
+
+
+def verify_request(request, *, evidence, raw_key, now, max_age):
+    from app.models.preview_disclosure_schemas import PreviewDisclosureRequest
+    r = closed(PreviewDisclosureRequest, request)
+    b = r["binding"]
+    check_evidence(evidence, install_id=b["signer_reference"][:36], seller_id=b["seller_id"],
+                   raw_key=raw_key, now=now, max_age=max_age)
+    if b["signer_reference"][37:] != fingerprint(raw_key):
+        raise SigningError("registration_key_mismatch")
+    if not verify_bytes(raw_key, r["seller_signature"], disclosure_bytes(b)):
+        raise SigningError("disclosure_signature_invalid")
+    if r["commitment"]:
+        c = r["commitment"]
+        if not verify_bytes(raw_key, c["seller_signature"], commitment_bytes(c)):
+            raise SigningError("commitment_signature_invalid")
+        for p in r["proofs"]:
+            if not verify_bytes(raw_key, p["signature"], proof_bytes(c, p)):
+                raise SigningError("proof_signature_invalid")
+    return r
+
+
+def submit_preview_request(request):
+    request_bytes(request)
+    raise SigningError("preview_integration_not_yet_available")

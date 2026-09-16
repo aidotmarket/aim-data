@@ -428,3 +428,9 @@ class MarketplacePushService:
 def get_marketplace_push_service() -> MarketplacePushService:
     """Factory function for dependency injection."""
     return MarketplacePushService()
+
+
+def prepare_preview_request(request):
+    """Shared closed egress boundary; no 409-to-PATCH fallback for previews."""
+    from app.services.preview_signing_service import submit_preview_request
+    return submit_preview_request(request)
