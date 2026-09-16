@@ -1,4 +1,29 @@
-# S1716 S1294 Chunk 2a — conformance blocker report
+# S1716 S1294 Chunk 2a — canonical parser and tree build
+
+## Resumed build, controller ruling fba339b2
+
+The 2026-09-16 controller ruling (subject to Max veto) supersedes the historical
+stop below: retain aim-dataset-merkle-v1 and every original golden byte.
+Canonical metadata admits JSON integers only in [-(2^53-1), 2^53-1]; reject
+all other integers with `unsafe_integer` without echoing the value. Logical
+row integers and decimals remain exact descriptor-typed base-10 strings.
+No profile version, key, router, marketplace push or UI change is authorized.
+
+Fetched backend origin/main remains 9b6f8c1d590116ffe2792696937a63821336e00c.
+Its old permissive serializer is the known defect corrected by this ruling;
+the hash domains, tree split, checkpoint bytes and original corpus are retained.
+
+Milestone 1: declared parser, descriptors, metadata models, streaming reader,
+reference primitives and initial disk worker implemented. Initial focused run:
+127 passed, zero failures (existing environment DuckDB 1.5.3; pinned validation
+and full parity still pending). No acceptance/completion claim yet.
+
+Fixture SHA-256:
+
+- `tests/fixtures/aim_dataset_merkle_v1.json`: `f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af`
+- `tests/fixtures/aim_dataset_merkle_v1_extended.json`: `f7512f42d43d9b55b80eab93505acc4a2049bbb0575d3e971f1283cb095bbe8e`
+
+## Historical blocker report (superseded, retained as evidence)
 
 **Status: INCOMPLETE. Producer acceptance is blocked by the approved plan's
 serialization gate. No parser, descriptor models, Merkle service or bounded

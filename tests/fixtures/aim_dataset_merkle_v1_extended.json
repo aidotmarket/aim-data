@@ -1,0 +1,61 @@
+{
+  "profile": "aim-dataset-merkle-v1",
+  "ruling": "Event Ledger fba339b2, subject to Max veto",
+  "metadata_integer_range": [
+    -9007199254740991,
+    9007199254740991
+  ],
+  "must_reject": [
+    {
+      "name": "positive_first_unsafe",
+      "metadata": {
+        "leaf_count": 9007199254740992
+      },
+      "reason": "unsafe_integer"
+    },
+    {
+      "name": "original_reproducer",
+      "metadata": {
+        "leaf_count": 9007199254740993
+      },
+      "reason": "unsafe_integer"
+    },
+    {
+      "name": "negative_first_unsafe",
+      "metadata": {
+        "sequence": -9007199254740992
+      },
+      "reason": "unsafe_integer"
+    }
+  ],
+  "must_accept": [
+    {
+      "metadata": {
+        "leaf_count": 9007199254740991
+      },
+      "canonical": "{\"leaf_count\":9007199254740991}"
+    },
+    {
+      "metadata": {
+        "sequence": -9007199254740991
+      },
+      "canonical": "{\"sequence\":-9007199254740991}"
+    },
+    {
+      "metadata": {
+        "": "bmp",
+        "𐀀": "supplementary"
+      },
+      "canonical": "{\"𐀀\":\"supplementary\",\"\":\"bmp\"}"
+    }
+  ],
+  "exact_row_control": {
+    "canonical_row": [
+      [
+        "id",
+        "signed_integer",
+        "9007199254740993"
+      ]
+    ]
+  }
+}
