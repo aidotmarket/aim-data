@@ -185,3 +185,156 @@ def test_disk_budget(tmp_path):
             m.build_disk_tree(
                 [b"[]"], b"\0" * 32, directory, budget=m.WorkerBudget(disk_bytes=1)
             )
+
+
+@pytest.mark.parametrize("depth", [62, 63, 64])
+def test_maximum_valid_proof_depth(depth):
+    size = (1 << depth) - 1
+    if depth == 64:
+        assert not m.verify_inclusion_proof(b"\0" * 32, 0, size, [], b"\0" * 32)
+        return
+    directions = m.expected_proof_directions(0, size)
+    assert len(directions) == depth
+    root = b"\0" * 32
+    siblings = []
+    for direction in directions:
+        sibling = b"\1" * 32
+        siblings.append({"hash": sibling, "direction": direction})
+        root = m.compute_node_hash(root, sibling)
+    assert m.verify_inclusion_proof(b"\0" * 32, 0, size, siblings, root)
+
+
+def test_worker_rss_failure_and_cleanup(tmp_path):
+    path = tmp_path / "source"
+    path.write_text('{"x":"hello"}\n' * 10000)
+    with pytest.raises(m.CommitmentValidationError, match="resource_limit"):
+        m.run_commitment_job(
+            [path],
+            ParsingDeclaration("ndjson", encoding="utf-8"),
+            [["x", "string", False, {}]],
+            tmp_path / "jobs",
+            budget=m.WorkerBudget(rss_bytes=1),
+        )
+    assert not list((tmp_path / "jobs").glob("job-*"))
+
+
+def test_cancel_mid_merge(tmp_path):
+    path = tmp_path / "source"
+    with path.open("w") as stream:
+        for i in range(10000):
+            stream.write('{"x":' + str(i) + "}\n")
+    cancel = threading.Event()
+    phases = []
+
+    def progress(p):
+        phases.append(p["phase"])
+        if phases.count("sorting") == 2:
+            cancel.set()
+
+    with pytest.raises(m.CommitmentValidationError, match="cancelled"):
+        m.run_commitment_job(
+            [path],
+            ParsingDeclaration("ndjson", encoding="utf-8"),
+            [["x", "signed_integer", False, {}]],
+            tmp_path / "jobs",
+            budget=m.WorkerBudget(run_bytes=4096),
+            cancel=cancel,
+            progress=progress,
+        )
+    assert phases.count("sorting") >= 2
+    assert not list((tmp_path / "jobs").glob("job-*"))
+
+
+def test_worker_changed_source_after_read(tmp_path):
+    path = tmp_path / "source"
+    path.write_text('{"x":1}\n' * 10000)
+
+    def progress(p):
+        if p["phase"] == "sorting":
+            path.write_text('{"x":2}\n')
+
+    with pytest.raises(m.CommitmentValidationError, match="source_changed"):
+        m.run_commitment_job(
+            [path],
+            ParsingDeclaration("ndjson", encoding="utf-8"),
+            [["x", "signed_integer", False, {}]],
+            tmp_path / "jobs",
+            budget=m.WorkerBudget(run_bytes=4096),
+            progress=progress,
+        )
+    assert not list((tmp_path / "jobs").glob("job-*"))
+
+
+def test_lock_excludes_second_job(tmp_path):
+    with m.private_job(tmp_path / "jobs"):
+        with pytest.raises(m.CommitmentValidationError, match="job_already_running"):
+            with m.private_job(tmp_path / "jobs"):
+                raise AssertionError("second worker entered")
+
+
+def test_model_unsafe_integer_no_echo():
+    with pytest.raises(ValidationError) as exc:
+        DatasetCommitment(
+            schema_digest=m.encode_base64url(b"\0" * 32),
+            dataset_merkle_root=m.encode_base64url(b"\0" * 32),
+            leaf_count=2**53,
+        )
+    assert exc.value.errors()[0]["type"] == "unsafe_integer"
+    assert str(2**53) not in str(exc.value)
+
+
+def test_large_record_and_wide_schema(tmp_path):
+    from app.services.dataset_canonicalization import CanonicalSchema
+
+    schema = CanonicalSchema([[f"f{i}", "string", False, {}] for i in range(500)])
+    row = schema.canonical_row({f"f{i}": "x" * 1000 for i in range(500)})
+    with m.private_job(tmp_path / "jobs") as directory:
+        tree = m.build_disk_tree(
+            [row] * 9,
+            schema.digest,
+            directory,
+            budget=m.WorkerBudget(run_bytes=1024 * 1024),
+        )
+        assert tree.count == 9
+        assert tree.proof(8)["duplicate_ordinal"] == 8
+    with m.private_job(tmp_path / "jobs") as directory:
+        with pytest.raises(m.CommitmentValidationError, match="record_resource_limit"):
+            m.build_disk_tree([b"x" * (8 * 1024 * 1024 + 1)], schema.digest, directory)
+
+
+def test_no_symlink_source_and_private_root(tmp_path):
+    path = tmp_path / "file"
+    path.write_text('{"x":1}\n')
+    link = tmp_path / "link"
+    link.symlink_to(path)
+    with pytest.raises(m.CommitmentValidationError, match="invalid_source"):
+        m.run_commitment_job(
+            [link],
+            ParsingDeclaration("ndjson", encoding="utf-8"),
+            [["x", "signed_integer", False, {}]],
+            tmp_path / "jobs",
+        )
+    root = tmp_path / "public"
+    root.mkdir(mode=0o755)
+    with pytest.raises(m.CommitmentValidationError, match="unsafe_temp_directory"):
+        with m.private_job(root):
+            raise AssertionError("public temporary root admitted")
+
+
+def test_closed_progress_and_proof_positions():
+    from app.models.dataset_commitment_schemas import (
+        CommitmentProgress,
+        CommitmentProof,
+    )
+
+    assert CommitmentProgress(
+        phase="reading", records=0, canonical_bytes=0, elapsed_seconds=0.1
+    )
+    with pytest.raises(ValidationError, match="invalid_inclusion_proof"):
+        CommitmentProof(
+            base_row_digest=m.encode_base64url(b"\0" * 32),
+            duplicate_ordinal=0,
+            leaf_index=1,
+            tree_size=1,
+            siblings=[],
+        )

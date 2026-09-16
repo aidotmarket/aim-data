@@ -9,7 +9,6 @@ from __future__ import annotations
 import base64
 import csv
 import hashlib
-import io
 import json
 import os
 import re
@@ -99,6 +98,23 @@ def dispatch_type(physical: str, *, element=None, members=None, source_timezone=
     if kind == "LIST" and isinstance(element, dict):
         tag, params = dispatch_type(**element)
         return "array", {"element_type": {"type": tag, "type_parameters": params}}
+    if kind.startswith("STRUCT(") and isinstance(members, list):
+        import duckdb
+
+        try:
+            children = duckdb.sqltype(physical).children
+            if len(children) != len(members):
+                raise Error("schema_mismatch")
+            declared = {nfc(member["name"]): member for member in members}
+            for name, child in children:
+                member = declared.get(nfc(name))
+                if member is None or duckdb.sqltype(member["physical"]) != child:
+                    raise Error("schema_mismatch")
+        except Error:
+            raise
+        except Exception:
+            raise Error("unsupported_logical_type") from None
+        kind = "STRUCT"
     if kind == "STRUCT" and isinstance(members, list):
         fields = []
         for member in members:
@@ -177,6 +193,7 @@ class CanonicalSchema:
     def __init__(self, descriptors):
         self.nodes = 0
         self.descriptors = self._fields(descriptors, 0)
+        self.source_names = [nfc(f[0]) for f in descriptors]
         self.bytes = canonical_json_bytes(self.descriptors)
         self.digest = compute_schema_digest(self.bytes)
 
@@ -186,7 +203,7 @@ class CanonicalSchema:
             raise Error("node_limit")
         if depth > 16:
             raise Error("depth_limit")
-        if tag not in TAGS:
+        if not isinstance(tag, str) or tag not in TAGS:
             raise Error("unsupported_logical_type")
         if not isinstance(params, dict):
             raise Error("invalid_schema")
@@ -290,6 +307,12 @@ class CanonicalSchema:
             raise Error("unknown_field")
         out = []
         for name, tag, nullable, params in fields:
+            if name not in normalized or normalized[name] is None:
+                count[0] += 1
+                if count[0] > 10000:
+                    raise Error("node_limit")
+                if depth > 16:
+                    raise Error("depth_limit")
             if name not in normalized:
                 out.append([name, "missing", None])
             elif normalized[name] is None:
@@ -328,7 +351,7 @@ class CanonicalSchema:
             if type(value) is int:
                 return str(value)
             if isinstance(value, str) and re.fullmatch(r"-?(?:0|[1-9]\d*)", value):
-                return str(int(value))
+                return "0" if value == "-0" else value
             raise Error("invalid_integer")
         if tag == "decimal":
             if not isinstance(value, (str, Decimal)) or (
@@ -526,21 +549,32 @@ def iter_records(
                 # csv.reader supports quoted multiline fields, with a fixed field bound.
                 old_limit = csv.field_size_limit(MAX_RECORD_BYTES)
                 try:
+                    consumed = [0]
+
+                    def lines():
+                        while raw := source.readline(MAX_RECORD_BYTES + 1):
+                            consumed[0] += len(raw)
+                            if consumed[0] > MAX_RECORD_BYTES:
+                                raise Error("record_resource_limit")
+                            yield raw.decode("utf-8")
+
                     reader = csv.reader(
-                        io.TextIOWrapper(source, encoding="utf-8", newline=""),
+                        lines(),
                         delimiter=declaration.delimiter,
                         quotechar=declaration.quote,
                         escapechar=declaration.escape or None,
                         strict=True,
                     )
-                    names = [f[0] for f in schema.descriptors]
+                    names = schema.source_names
                     if declaration.header:
                         names = [nfc(k) for k in next(reader)]
                         if len(names) != len(set(names)):
                             raise Error("duplicate_field")
                         if set(names) != {f[0] for f in schema.descriptors}:
                             raise Error("invalid_header")
+                    consumed[0] = 0
                     for row in reader:
+                        consumed[0] = 0
                         if len(row) != len(names):
                             raise Error("invalid_record")
                         if sum(len(x.encode("utf-8")) for x in row) > MAX_RECORD_BYTES:
@@ -551,7 +585,7 @@ def iter_records(
                         }
                 finally:
                     csv.field_size_limit(old_limit)
-            # TextIOWrapper may own/close the fd after iteration; use retained stat identity.
+            # Compare the original descriptor identity with the final path identity.
             after = os.stat(path, follow_symlinks=False)
             if (
                 before.st_dev,
@@ -628,10 +662,34 @@ def _parquet(source, schema, declaration):
     for batch in parquet.iter_batches(batch_size=1, use_threads=False):
         if batch.nbytes > 16 * 1024 * 1024:
             raise Error("record_resource_limit")
-        record = batch.to_pylist()[0]
-        # pandas Timestamp preserves nanoseconds in isoformat; do not call
-        # to_pydatetime(), which truncates them.
-        yield record
+
+        def exact_value(scalar):
+            if not scalar.is_valid:
+                return None
+            typ = scalar.type
+            if pa.types.is_timestamp(typ):
+                precision = {"s": 0, "ms": 3, "us": 6, "ns": 9}[typ.unit]
+                seconds, fraction = divmod(scalar.value, 10**precision)
+                try:
+                    instant = datetime(1970, 1, 1) + timedelta(seconds=seconds)
+                except (OverflowError, ValueError):
+                    raise Error("invalid_timestamp") from None
+                suffix = f".{fraction:0{precision}d}" if precision else ""
+                return (
+                    instant.isoformat(timespec="seconds")
+                    + suffix
+                    + ("Z" if typ.tz else "")
+                )
+            if pa.types.is_list(typ) or pa.types.is_large_list(typ):
+                return [exact_value(child) for child in scalar.values]
+            if pa.types.is_struct(typ):
+                return {field.name: exact_value(scalar[field.name]) for field in typ}
+            return scalar.as_py()
+
+        yield {
+            name: exact_value(batch.column(i)[0])
+            for i, name in enumerate(batch.schema.names)
+        }
 
 
 def parsing_options_digest(declaration):

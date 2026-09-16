@@ -465,16 +465,20 @@ class _DiskBudget:
     def __init__(self, directory, budget, cancel):
         self.directory, self.budget, self.cancel = directory, budget, cancel
         self.used = 0
+        self.free_remaining = shutil.disk_usage(directory).free - budget.reserve_bytes
+        self.next_probe = 0
 
     def check(self, amount=0):
         if self.cancel is not None and self.cancel.is_set():
             raise CommitmentValidationError("cancelled")
-        if (
-            self.used + amount > self.budget.disk_bytes
-            or shutil.disk_usage(self.directory).free - amount
-            < self.budget.reserve_bytes
-        ):
+        if self.used >= self.next_probe:
+            self.free_remaining = (
+                shutil.disk_usage(self.directory).free - self.budget.reserve_bytes
+            )
+            self.next_probe = self.used + 1024 * 1024
+        if self.used + amount > self.budget.disk_bytes or amount > self.free_remaining:
             raise CommitmentValidationError("disk_resource_limit")
+        self.free_remaining -= amount
         self.used += amount
 
     def remove(self, path):
@@ -720,9 +724,10 @@ def _worker(
     try:
         schema = CanonicalSchema(descriptors)
 
+        started = time.monotonic()
+        snapshots = [(path, os.stat(path, follow_symlinks=False)) for path in paths]
+
         def rows():
-            # Snapshot the whole manifest before consuming any member.
-            snapshots = [(path, os.stat(path, follow_symlinks=False)) for path in paths]
             for path, _ in snapshots:
                 for record in iter_records(Path(path), declaration, schema):
                     yield schema.canonical_row(
@@ -730,22 +735,6 @@ def _worker(
                         text=declaration.format in {"csv", "tsv"},
                         source_timezone=declaration.source_timezone,
                     )
-            for path, before in snapshots:
-                after = os.stat(path, follow_symlinks=False)
-                if (
-                    before.st_dev,
-                    before.st_ino,
-                    before.st_size,
-                    before.st_mtime_ns,
-                    before.st_ctime_ns,
-                ) != (
-                    after.st_dev,
-                    after.st_ino,
-                    after.st_size,
-                    after.st_mtime_ns,
-                    after.st_ctime_ns,
-                ):
-                    raise CommitmentValidationError("source_changed")
 
         tree = build_disk_tree(
             rows(),
@@ -762,11 +751,30 @@ def _worker(
                     "phase": "selecting",
                     "records": tree.count,
                     "canonical_bytes": tree.canonical_bytes,
-                    "elapsed_seconds": 0.0,
+                    "elapsed_seconds": time.monotonic() - started,
                 },
             )
         )
         proofs = [tree.proof(index) for index in indices]
+        for path, before in snapshots:
+            after = os.stat(path, follow_symlinks=False)
+            if (
+                before.st_dev,
+                before.st_ino,
+                before.st_size,
+                before.st_mtime_ns,
+                before.st_ctime_ns,
+            ) != (
+                after.st_dev,
+                after.st_ino,
+                after.st_size,
+                after.st_mtime_ns,
+                after.st_ctime_ns,
+            ):
+                raise CommitmentValidationError("source_changed")
+
+        if cancel.is_set():
+            raise CommitmentValidationError("cancelled")
         connection.send(("result", {"commitment": tree.commitment(), "proofs": proofs}))
     except BaseException as exc:
         connection.send(

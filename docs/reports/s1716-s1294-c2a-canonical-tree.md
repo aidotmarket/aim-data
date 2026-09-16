@@ -23,6 +23,43 @@ Fixture SHA-256:
 - `tests/fixtures/aim_dataset_merkle_v1.json`: `f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af`
 - `tests/fixtures/aim_dataset_merkle_v1_extended.json`: `f7512f42d43d9b55b80eab93505acc4a2049bbb0575d3e971f1283cb095bbe8e`
 
+## Milestone 2: parser and worker hardening
+
+The complete reproducer signing object is now also a must-reject extended vector.
+Real-file corpus `tests/fixtures/aim_dataset_parser_v1.json` includes actual file
+bytes for CSV, TSV, JSON-array, NDJSON and Parquet, explicit declarations,
+expected canonical rows/schema/root, and a distinct missing-property control.
+JSON object ordering is independently compared with Node UTF-16 serialization;
+descriptor arrays retain NFC UTF-8 order. Numeric strings preserve >53-bit values.
+Parquet timestamps are decoded from Arrow integer ticks, including nanoseconds,
+without a Python datetime or float intermediary that loses fractional precision.
+
+Worker tests cover external merge passes, duplicates, private permissions,
+startup recovery, concurrent-job refusal, mid-merge cancellation, low RSS/disk,
+source mutation after reading, symlinks, wide rows and record-size rejection.
+The adapter does not allocate a DuckDB connection: it uses bounded explicit
+text parsing and Arrow batches, so the 128 MiB DuckDB allocation budget is unused.
+Pinned DuckDB 0.9.2 resolved-type dispatch is separately executed in Python 3.11.
+
+First complete comparison: baseline 2219 passed / 92 failed / 33 skipped / 38
+live-backend setup errors; candidate 2360 passed / the identical 92 failed /
+33 skipped / 38 setup errors. Every existing node ID has exactly the same outcome.
+The 38 errors are `test_beta_readiness.py`, which requires a running localhost:80
+backend; they are outside the requested backend-independent subset and are
+retained transparently in the superset run. Later added boundary tests are
+passing in focused runs; final full-suite rerun and per-test artifact pending.
+
+The first 1M-record worker run completed in 45.99 seconds, peak incremental RSS
+112885760 bytes (107.66 MiB), with successful cleanup and cancellation cleanup.
+The leaf-domain-byte and ordinal-endianness mutations each made the golden
+assertion fail (exit 1). Full logs and final measurements follow below.
+
+Current fixture SHA-256 (supersedes the early extended-fixture hash above):
+
+- `tests/fixtures/aim_dataset_merkle_v1.json`: `f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af`
+- `tests/fixtures/aim_dataset_merkle_v1_extended.json`: `96893787c9757aaf9a18d4bb21da3d9b8e1acc1133c382ed33cdf98cfdee9a7e`
+- `tests/fixtures/aim_dataset_parser_v1.json`: `8ee8ac6b6bdaccd943987afb0a17cbb548a88a7dc7598563a143e7d8ab415754`
+
 ## Historical blocker report (superseded, retained as evidence)
 
 **Status: INCOMPLETE. Producer acceptance is blocked by the approved plan's
