@@ -273,6 +273,24 @@ class PIIService:
         
         return results
     
+    def scan_complete_selection(self, rows, *, language="en"):
+        """Strict local authorization scan: every key/value, no overrides or sampling.
+
+        Return no matches or diagnostic text. Detector failure is never a pass.
+        """
+        from app.services.preview_content_policy import PolicyError, walk_selection
+
+        try:
+            if language != "en" or "en" not in self.analyzer.supported_languages:
+                raise PolicyError("detector_unavailable")
+            for text, _ in walk_selection(rows):
+                if self.scan_text(text, entities=list(DEFAULT_ENTITIES), score_threshold=0.5):
+                    raise PolicyError("personal_data")
+        except PolicyError:
+            raise
+        except Exception:
+            raise PolicyError("detector_unavailable") from None
+
     def _calculate_privacy_score(
         self, 
         pii_findings: List[Dict[str, Any]], 
