@@ -35,6 +35,10 @@ class PolicyError(ValueError):
     """Fixed codes only; never attach detector exceptions or input values."""
 
 
+class NumericText(str):
+    """Descriptor-proven numeric logical value, retaining exact decimal digits."""
+
+
 def walk_selection(rows):
     """Yield all keys and scalars with numeric identity retained for formula rules."""
 
@@ -51,7 +55,7 @@ def walk_selection(rows):
             for child in value:
                 yield from walk(child, depth + 1)
         elif isinstance(value, str):
-            yield value, False
+            yield str(value), isinstance(value, NumericText)
         elif type(value) in (int, float):
             if not math.isfinite(value):
                 raise PolicyError("invalid_row")
@@ -107,13 +111,12 @@ def scan_attestation_digest(signed_proof_records):
 
     allowed = {
         "proof_id",
-        "commitment_id",
         "base_row_digest",
         "duplicate_ordinal",
         "leaf_index",
         "tree_size",
         "siblings",
-        "package_url",
+        "preview_package_url",
         "package_media_type",
         "package_profile",
         "package_byte_ceiling",
@@ -125,7 +128,6 @@ def scan_attestation_digest(signed_proof_records):
         "signer_reference",
         "signature_algorithm",
         "signature",
-        "signed_at",
     }
     if not signed_proof_records:
         raise PolicyError("unsigned_proofs")
