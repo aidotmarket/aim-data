@@ -26,7 +26,9 @@ from app.services.dataset_merkle_service import (
     encode_base64url,
     verify_inclusion_proof,
 )
-from app.services.preview_content_policy import NumericText, scan_selection
+from app.services import preview_content_policy
+from app.services.pii_service import PIIService
+from app.services.preview_content_policy import NumericText, PolicyError, scan_selection
 
 PROFILE = "aim-preview-package-v2"
 MEDIA_TYPE = "application/vnd.aim.preview+json"
@@ -485,14 +487,17 @@ class CommitmentPreviewBuilder:
         proof_ids,
         commitment_id,
         disclosure_version,
-        detector,
         scanned_at,
         rights_confirmed,
         manifest_bytes,
         package_url,
         public_preview_permission=False,
         restricted_content_confirmed=False,
+        **unsupported_options,
     ):
+        # Reject the retired injection API with the same closed diagnostic.
+        if unsupported_options:
+            raise PolicyError("detector_unavailable")
         if (
             not indices
             or any(type(i) is not int for i in indices)
@@ -532,6 +537,13 @@ class CommitmentPreviewBuilder:
             )
             for e in entries
         ]
+        try:
+            preview_content_policy.detector_identity()
+            detector = PIIService()
+            if not isinstance(detector, PIIService) or type(detector) is not PIIService:
+                raise PolicyError("detector_unavailable")
+        except Exception:
+            raise PolicyError("detector_unavailable") from None
         scan = scan_selection(
             rows,
             entries,

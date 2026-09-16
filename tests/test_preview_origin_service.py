@@ -263,7 +263,6 @@ def test_real_local_origin_retirement_and_isolation(tmp_path, capsys):
         proof_ids=[p["proof_id"] for p in envelope["entries"]],
         commitment_id=envelope["commitment_id"],
         disclosure_version=envelope["disclosure_version"],
-        detector=Mock(),
         scanned_at=TIME,
         rights_confirmed=True,
         public_preview_permission=True,
@@ -331,3 +330,10 @@ def test_source_connection_never_authorizes_preview():
 
     source = S3PublishSourceResolution("bucket", "region", "arn", "prefix", "serial")
     assert source.preview_host_eligible is False
+
+
+@pytest.fixture(autouse=True)
+def pinned_identity(monkeypatch):
+    from app.services import preview_content_policy as policy
+
+    monkeypatch.setattr(policy, "detector_identity", lambda: policy.DETECTOR_IDENTITY)

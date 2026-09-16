@@ -6,6 +6,10 @@ from unittest.mock import Mock
 
 import pytest
 
+from app.services.preview_content_policy import (
+    detector_identity as real_detector_identity,
+)
+from app.services.pii_service import PIIService
 from app.services.dataset_canonicalization import CanonicalSchema
 from app.services.dataset_merkle_service import build_disk_tree, canonical_json_bytes
 from app.services.preview_package_service import (
@@ -21,6 +25,14 @@ from app.services.preview_package_service import (
 )
 
 FIXTURES = Path("tests/fixtures")
+
+
+@pytest.fixture(autouse=True)
+def pinned_identity(monkeypatch):
+    # Only identity metadata is patched; all successful scans use the real engine.
+    from app.services import preview_content_policy as policy
+
+    monkeypatch.setattr(policy, "detector_identity", lambda: policy.DETECTOR_IDENTITY)
 
 
 @pytest.fixture
@@ -46,19 +58,19 @@ def builder(tmp_path, golden):
     return CommitmentPreviewBuilder(tree, schema.descriptors)
 
 
-def prepare(builder, envelope):
+def prepare(builder, envelope, **options):
     return builder.prepare(
         list(range(5)),
         proof_ids=[e["proof_id"] for e in envelope["entries"]],
         commitment_id=envelope["commitment_id"],
         disclosure_version=envelope["disclosure_version"],
-        detector=Mock(),
         scanned_at="2026-09-17T12:00:00Z",
         rights_confirmed=True,
         public_preview_permission=True,
         restricted_content_confirmed=True,
         package_url="https://seller.example/p",
         manifest_bytes=20000,
+        **options,
     )
 
 
@@ -133,7 +145,6 @@ def test_real_row_boundaries(tmp_path, count):
         proof_ids=[str(uuid.UUID(int=i + 100)) for i in range(count)],
         commitment_id=str(uuid.UUID(int=1)),
         disclosure_version=str(uuid.UUID(int=2)),
-        detector=Mock(),
         scanned_at="2026-09-17T00:00:00Z",
         rights_confirmed=True,
         public_preview_permission=True,
@@ -160,7 +171,6 @@ def test_complete_schema_field_boundaries(tmp_path, count):
         proof_ids=[str(uuid.UUID(int=3))],
         commitment_id=str(uuid.UUID(int=1)),
         disclosure_version=str(uuid.UUID(int=2)),
-        detector=Mock(),
         scanned_at="2026-09-17T00:00:00Z",
         rights_confirmed=True,
         public_preview_permission=True,
@@ -257,7 +267,6 @@ def test_invalid_selection(builder, envelope):
             proof_ids=[p["proof_id"] for p in envelope["entries"][:2]],
             commitment_id=envelope["commitment_id"],
             disclosure_version=envelope["disclosure_version"],
-            detector=Mock(),
             scanned_at="2026-09-17T00:00:00Z",
             rights_confirmed=True,
             public_preview_permission=True,
@@ -296,13 +305,13 @@ def test_public_root_isolation(tmp_path):
 @pytest.mark.parametrize("size", [249999, 250000, 250001])
 def test_combined_canonical_byte_boundary(tmp_path, size):
     # 20 complete rows x 25 fields: each string remains below the policy's 500.
-    fields = [f"f{i:02}" for i in range(25)]
+    fields = [f"field_{letter}" for letter in "abcdefghiklmnopqrstuvwxyz"]
     schema = CanonicalSchema([[name, "string", False, {}] for name in fields])
     rows = [{name: "" for name in fields} for _ in range(20)]
     overhead = sum(len(schema.canonical_row(row)) for row in rows)
     per_cell, remainder = divmod(size - overhead, 500)
     for index, (row, name) in enumerate((r, n) for r in rows for n in fields):
-        row[name] = "x" * (per_cell + (index < remainder))
+        row[name] = ("buckwheat " * 50)[: per_cell + (index < remainder)]
     assert max(len(v) for row in rows for v in row.values()) <= 500
     assert sum(len(schema.canonical_row(row)) for row in rows) == size
     tree = build_disk_tree(
@@ -313,7 +322,6 @@ def test_combined_canonical_byte_boundary(tmp_path, size):
         proof_ids=[str(uuid.UUID(int=i + 100)) for i in range(20)],
         commitment_id=str(uuid.UUID(int=1)),
         disclosure_version=str(uuid.UUID(int=2)),
-        detector=Mock(),
         scanned_at="2026-09-17T00:00:00Z",
         rights_confirmed=True,
         public_preview_permission=True,
@@ -342,7 +350,6 @@ def test_unique_cell_marker_absent_from_journal_and_errors(tmp_path, caplog):
         proof_ids=[str(uuid.UUID(int=3))],
         commitment_id=str(uuid.UUID(int=1)),
         disclosure_version=str(uuid.UUID(int=2)),
-        detector=Mock(),
         scanned_at="2026-09-17T00:00:00Z",
         rights_confirmed=True,
         public_preview_permission=True,
@@ -408,3 +415,98 @@ def test_unscanned_payload_cannot_be_marked_prepared():
 
     with pytest.raises(PackageError, match="approval_required"):
         PreparedPackage(b"unscanned synthetic cell marker", {})
+
+
+@pytest.mark.parametrize("substitute", [Mock(), Mock(spec=PIIService), object()])
+def test_detector_injection_rejected(builder, envelope, substitute, tmp_path):
+    from app.services.preview_content_policy import PolicyError
+
+    with pytest.raises(PolicyError, match="^detector_unavailable$"):
+        prepare(builder, envelope, detector=substitute)
+    assert not (tmp_path / "public").exists()
+
+
+def test_builder_wrong_identity_fails_closed(builder, envelope, monkeypatch):
+    from app.services import preview_content_policy as policy
+
+    # Restore the actual provider, overriding the metadata-only test seam.
+    monkeypatch.setattr("importlib.metadata.version", lambda _: "wrong-version")
+    monkeypatch.setattr(policy, "detector_identity", real_detector_identity)
+    with pytest.raises(policy.PolicyError, match="^detector_unavailable$"):
+        prepare(builder, envelope)
+
+
+@pytest.mark.parametrize(
+    "pinned", [False, True], ids=["shared-environment", "isolated-pinned"]
+)
+def test_builder_real_detector_environment(pinned, tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    target = os.environ.get("PREVIEW_PINNED_IMPORT_TARGET")
+    if pinned and not target:
+        pytest.skip("Set PREVIEW_PINNED_IMPORT_TARGET to the isolated pinned install")
+    script = r"""
+import json
+import tempfile
+from pathlib import Path
+from app.config import settings
+from app.services.dataset_canonicalization import CanonicalSchema
+from app.services.dataset_merkle_service import build_disk_tree
+from app.services.preview_content_policy import PolicyError, detector_identity
+from app.services.preview_package_service import CommitmentPreviewBuilder
+with tempfile.TemporaryDirectory() as directory:
+    settings.data_directory = directory
+    schema = CanonicalSchema([["crop", "string", False, {}]])
+    tree = build_disk_tree([schema.canonical_row({"crop": "oats"})], schema.digest, Path(directory))
+    try:
+        package = CommitmentPreviewBuilder(tree, schema.descriptors).prepare(
+            [0], proof_ids=["00000000-0000-0000-0000-000000000003"],
+            commitment_id="00000000-0000-0000-0000-000000000001",
+            disclosure_version="00000000-0000-0000-0000-000000000002",
+            scanned_at="2026-09-17T00:00:00Z", rights_confirmed=True,
+            public_preview_permission=True, restricted_content_confirmed=True,
+            manifest_bytes=1000, package_url="https://seller.example/p")
+        print(json.dumps({"result": package.scan["scan_verdict"], "identity": detector_identity()}))
+    except PolicyError as error:
+        print(json.dumps({"result": str(error)}))
+"""
+    env = dict(
+        os.environ,
+        PYTHONPATH=os.pathsep.join(
+            filter(None, [target if pinned else None, str(Path.cwd())])
+        ),
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert result.returncode == 0, result.stderr
+    outcome = json.loads(result.stdout)
+    if pinned:
+        from app.services.preview_content_policy import DETECTOR_IDENTITY
+
+        assert outcome == {"result": "passed", "identity": DETECTOR_IDENTITY}
+    else:
+        from importlib.metadata import version
+        from app.services.preview_content_policy import DETECTOR_IDENTITY
+
+        actual = {name: version(name) for name in DETECTOR_IDENTITY}
+        assert outcome == (
+            {"result": "passed", "identity": actual}
+            if actual == DETECTOR_IDENTITY
+            else {"result": "detector_unavailable"}
+        )
+
+
+def test_noop_service_injection_rejected(builder, envelope, monkeypatch):
+    from app.services.preview_content_policy import PolicyError
+
+    service = PIIService()
+    monkeypatch.setattr(service, "scan_complete_selection", lambda *a, **kw: None)
+    with pytest.raises(PolicyError, match="^detector_unavailable$"):
+        prepare(builder, envelope, detector=service)

@@ -16,7 +16,7 @@ write authority. Signing and the customer UI remain Chunks 2c/2d.
 2. Obtain explicit rights confirmation, public-preview permission and confirmation
    of no prohibited/third-party restricted content for the exact selection.
    Call `prepare` with ascending distinct indices, corresponding fixed proof UUIDs,
-   commitment/disclosure UUIDs, a `PIIService`, scan time, all three consent booleans,
+   commitment/disclosure UUIDs, scan time, all three consent booleans,
    intended credential-free seller package URL and `manifest_bytes` (the entire
    actual/expected metadata manifest, not a proofs-only size). The service also
    independently budgets a conservative complete manifest with duplicated proofs,
@@ -26,7 +26,9 @@ write authority. Signing and the customer UI remain Chunks 2c/2d.
 3. Policy 1.0.0 pins Presidio analyzer 2.2.362, spaCy 3.7.2 and model
    en_core_web_sm 3.7.1 (the repository dependency versions). Missing or different
    versions block publication. The supported detector language is English;
-   unsupported declared languages fail. Passing local checks is not clearance.
+   unsupported declared languages fail. The builder creates its own exact local
+   `PIIService`; detector injection is rejected with `detector_unavailable`.
+   Passing local checks is not clearance.
 4. Create `PublicationStore(public_root, journal_root)` using canonical local
    paths with no symlink components. The journal directory must be owner-only
    mode 0700 and outside the public root. `export(prepared)` atomically writes

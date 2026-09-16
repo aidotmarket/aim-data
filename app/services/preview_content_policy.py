@@ -223,6 +223,10 @@ def scan_selection(
     ):
         raise PolicyError("approval_required")
     try:
+        from app.services.pii_service import PIIService
+
+        if not isinstance(detector, PIIService) or type(detector) is not PIIService:
+            raise PolicyError("detector_unavailable")
         # Complete detector pass precedes deterministic predicates, even for long text.
         detector.scan_complete_selection(rows, language=language)
     except PolicyError:
