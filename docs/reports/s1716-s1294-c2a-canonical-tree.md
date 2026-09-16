@@ -68,9 +68,9 @@ The adapter does not allocate a DuckDB connection: it uses bounded explicit
 text parsing and Arrow batches, so the 128 MiB DuckDB allocation budget is unused.
 Pinned DuckDB 0.9.2 resolved-type dispatch is separately executed in Python 3.11.
 
-First complete comparison: baseline 2219 passed / 92 failed / 33 skipped / 38
-live-backend setup errors; candidate 2360 passed / the identical 92 failed /
-33 skipped / 38 setup errors. Every existing node ID has exactly the same outcome.
+Committed R1 comparison: baseline 2219 passed / 92 failed / 33 skipped;
+candidate 2403 passed / the identical 92 failed / 33 skipped.
+Every existing node ID has exactly the same outcome.
 The 38 errors are `test_beta_readiness.py`, which requires a running localhost:80
 backend; they are outside the requested backend-independent subset and are
 retained transparently in the superset run. Later added boundary tests are
