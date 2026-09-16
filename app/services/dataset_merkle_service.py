@@ -699,7 +699,9 @@ def build_disk_tree(
 @contextlib.contextmanager
 def private_job(root):
     """Installation-wide lock and recovery. Root must be dedicated to this service."""
-    root = Path(root)
+    root = Path(root).absolute()
+    if root.resolve() != root:
+        raise CommitmentValidationError("unsafe_temp_directory")
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     info = root.lstat()
     if (

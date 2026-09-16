@@ -394,3 +394,22 @@ def test_malformed_proof_rejected(case):
     else:
         root = m.encode_base64url(b"x" * 32)
     assert not m.verify_inclusion_proof(row["leaf_hash"], index, size, proof, root)
+
+
+def test_symlink_parent_refused(tmp_path):
+    real = tmp_path / "real"
+    real.mkdir()
+    source = real / "data"
+    source.write_text('{"x":1}\n')
+    link = tmp_path / "parent-link"
+    link.symlink_to(real, target_is_directory=True)
+    with pytest.raises(m.CommitmentValidationError, match="invalid_source"):
+        m.run_commitment_job(
+            [link / "data"],
+            ParsingDeclaration("ndjson", encoding="utf-8"),
+            [["x", "signed_integer", False, {}]],
+            tmp_path / "jobs",
+        )
+    with pytest.raises(m.CommitmentValidationError, match="unsafe_temp_directory"):
+        with m.private_job(link / "jobs"):
+            raise AssertionError("symlink ancestor admitted")

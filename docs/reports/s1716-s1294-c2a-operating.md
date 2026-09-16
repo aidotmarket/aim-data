@@ -4,7 +4,7 @@ Authority: build-plan §B / §I row 2a and controller ruling fba339b2.
 This procedure performs local parsing and commitment construction only.
 
 1. Obtain a complete immutable local source manifest and explicit schema from
-   the dataset owner. Use original declared artifacts unless preservation of
+   the dataset owner. Use canonical physical paths (no symlink ancestors). Use original declared artifacts unless preservation of
    every logical record and presence/type parameter in a derivative is proven.
    Pass all manifest members to one `run_commitment_job`; never pass previews,
    partial listings or a prefix and label the result the full dataset.

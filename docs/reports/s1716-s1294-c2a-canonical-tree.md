@@ -81,6 +81,127 @@ and successful child exit. No scanning, hosting, signatures or egress occur.
 The runbook is `s1716-s1294-c2a-operating.md`. Existing UI/publication/keys were
 not changed. Final test/evidence attachment follows after the frozen-source run.
 
+## Final acceptance evidence
+
+The final implementation receipt identifies the tested source SHA. A final
+ancestor-symlink guard supplements a451608: every source path component is
+opened without following symlinks, and temp-root symlink ancestors are refused.
+The source-path regression passes alongside leaf-symlink and temp-mode tests. No merge, release,
+marketplace request, router/UI change or key operation was performed.
+
+### Reproducible commands and environments
+
+Working directory: the continuation branch worktree
+`/private/var/tmp/koskadeux/minimal-bridge-worktrees/ab45d16c9f0c-712a06`.
+Baseline: detached `/var/tmp/s1716-c2a-baseline`, fetched origin/main
+`ee7faa457a21d751bc581b6733ac9a40bb80a801`. Backend reference fetched and read at
+`9b6f8c1d590116ffe2792696937a63821336e00c`.
+
+All commands used the required `rtk` prefix. `PY` below denotes the existing
+`/Users/max/Projects/ai-market/aim-data/.venv/bin/python` executable; `PINNED`
+denotes `/var/tmp/s1716-c2a-py311/bin/python` in a separate temporary environment.
+No repository dependency pin or shared environment was changed.
+
+```sh
+rtk proxy "$PY" -m pytest tests --ignore=tests/test_beta_readiness.py --continue-on-collection-errors -q --junitxml=<result.xml>
+rtk proxy "$PY" -m pytest tests/test_dataset_canonicalization.py tests/test_dataset_merkle_service.py -q
+rtk proxy env PYTHONPATH=. "$PINNED" -m pytest --noconftest tests/test_dataset_canonicalization.py tests/test_dataset_merkle_service.py -q
+rtk proxy env PYTHONPATH=. "$PY" docs/reports/s1716-s1294-c2a-benchmark.py 1000000
+rtk proxy env PYTHONPATH=. "$PY" docs/reports/s1716-s1294-c2a-benchmark.py 10000000
+rtk proxy "$PY" docs/reports/s1716-s1294-c2a-mutations.py
+rtk proxy ruff check app tests
+rtk npm test
+rtk npm run build
+rtk npm run lint
+rtk proxy node node_modules/typescript/bin/tsc --noEmit -p tsconfig.app.json
+```
+
+Full regression environment: macOS 27.0 arm64; Python 3.12.12; pytest 7.4.4;
+pytest-asyncio 0.23.3; Pydantic 2.13.4; DuckDB 1.5.3; PyArrow 24.0.0;
+NumPy 1.26.4; psutil 5.9.8; Node 25.6.0; Ruff 0.15.7.
+Pinned focused environment: Python 3.11, DuckDB 0.9.2, NumPy 1.26.4,
+PyArrow 25.0.1, Pydantic 2.13.5, pytest 9.1.1, psutil 7.2.2.
+`--noconftest` avoids unrelated application/database bootstrap in the isolated
+parser environment; it does not skip any selected test. The same selected tests
+also run with the real repository conftest in the full environment.
+The first attempted DuckDB 0.9.2 Python 3.12 source build failed; a compatible
+Python 3.11 environment resolved that tooling issue without changing the pin.
+
+### Coverage and interpretation
+
+- Every dispatch-table row is executable: all listed scalar aliases, declared
+  LIST/STRUCT children, timestamp precisions and offsets, and every unsupported
+  category (including unsupported nested children and future types) fail closed.
+- Real file bytes/declarations for all five formats share exact schema/rows/root
+  only when their logical records match. Missing JSON properties remain distinct
+  from null. Parquet exact binary, decimal(38,9), nanoseconds and nested arrays
+  have dedicated real-file tests. A separate declared 1000-digit decimal checks
+  the backend logical descriptor domain without claiming DuckDB supports it.
+- Descriptor depth 15/16/17, nodes 9999/10000/10001, dictionaries 499/500/501,
+  nested dictionaries, and field counts 24/25/26 are tested. **All three of
+  24/25/26 are valid full-commitment schemas**; the 25-field selected-public-row
+  limit belongs to 2b and is not incorrectly imposed on complete datasets.
+- Tests cover safe metadata integer boundaries in both signs, the complete
+  original unsafe signing object, exact large row integers/decimals, NFC
+  collisions, invalid Unicode, supplementary descriptor names, independent
+  ECMAScript bytes and generic differing-key-order refusal.
+- All original schema/base/leaf/root/root-variant/proof/log/checkpoint bytes are
+  asserted. Duplicate ordinals, odd trees, consistency proofs and valid 62/63
+  sibling paths plus 64-level refusal are exercised. Both deliberate mutations
+  were executed and made the golden assertion fail; neither is present in source.
+- External sort, private directory/file modes, startup cleanup, symlink refusal,
+  concurrent lock refusal, mid-merge cancellation, RSS/disk ceilings, large/wide
+  rows and source changes after reading are tested. Benchmark outputs retain
+  source SHA-256 hashes and only metadata, never generated source rows.
+
+The worker reads every source member and revalidates the manifest before
+returning. It exposes only digest/proof metadata; its local row-bearing tree
+index is job-scoped and removed. It intentionally does not make a public
+package, sign a commitment, implement a marketplace route or alter existing
+readers. Those remain later chunks, not unreported omissions in 2a.
+
+### Existing baseline failures
+
+The full-suite per-test table records each outcome. None of the following
+existing failures was deleted, skipped, weakened or repaired out of scope:
+
+| Existing area | Explanation |
+|---|---|
+| upload/batch/notifications/PII/text/SQL/S145 file tests | Hard-coded `/data` writes fail on the macOS read-only root filesystem |
+| deployment/channel/onboarding/config/source-string assertions | Existing source expectations differ from origin/main behavior (binding, channel use and alias choices) |
+| copilot attachment validation | Existing unprovisioned-install gate precedes expected attachment errors |
+| entitlement and raw download | Existing tests lack configured signing passphrase/install token |
+| diagnostics | Existing zero-duration timing assertion and expected collector-count mismatch |
+| metadata | Existing removed `calculate_searchability_score` method and missing searchability field |
+| metering | Existing tests call `report_usage` without its required session ID |
+| portal/raw-file detail/raw-file registration | Existing missing metadata attribute, draft/listed expectation, and unavailable Starlette status constant |
+| request engine | Existing naive/aware datetime and detached SQLAlchemy instance failures |
+| S145 async and nginx assertions | Existing non-awaitable processing return and stale nginx timeout/body-size expectations |
+| security audit/classification | Existing missing crypto module and stale tool-classification set |
+
+The 33 existing skips are 31 unmarked asynchronous **live allAI** integration
+functions (`tests/integration/test_allai_e2e.py`, needs localhost:8080) and two
+PostgreSQL self-connection tests. They remain visible in both tables and are
+not claimed as passing backend-independent tests. The separately excluded
+38 beta-readiness cases require a live localhost:80 backend; the initial
+all-tests superset run recorded their setup errors on both refs.
+
+Frontend baseline and candidate each have 44 passed / 23 failed of 67 tests,
+with identical per-test statuses. Both builds passed. ESLint reports the same
+10 errors / 25 warnings; TypeScript diagnostics are identical. Repository Ruff
+reports the same 94 existing errors (one cached invalid-noqa warning appears
+only in the initial baseline log). Changed Python files pass Ruff and compile.
+There is no configured repository Python type-check command; the configured
+frontend TypeScript check was executed explicitly.
+
+### Final fixture hashes
+
+- `tests/fixtures/aim_dataset_merkle_v1.json`: `f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af`
+- `tests/fixtures/aim_dataset_merkle_v1_extended.json`: `6f33e31252c267ae6b3b4a920fab723a53ccbecae9742043599efd80e3b2a7fd`
+- `tests/fixtures/aim_dataset_parser_v1.json`: `8ee8ac6b6bdaccd943987afb0a17cbb548a88a7dc7598563a143e7d8ab415754`
+
+Earlier milestone hashes/statuses below are historical. The original golden corpus was never modified.
+
 ## Historical blocker report (superseded, retained as evidence)
 
 **Status: INCOMPLETE. Producer acceptance is blocked by the approved plan's

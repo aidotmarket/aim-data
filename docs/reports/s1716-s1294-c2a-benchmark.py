@@ -26,7 +26,7 @@ def main():
         ]
     }
     with tempfile.TemporaryDirectory(prefix="s1716-c2a-bench-") as tmp:
-        directory = Path(tmp)
+        directory = Path(tmp).resolve()
         source = directory / "generated.ndjson"
         with source.open("w") as stream:
             for i in range(size):
@@ -73,6 +73,7 @@ def main():
             raise AssertionError("cancellation was ignored")
         result["cleanup_cancel"] = not list((directory / "jobs").glob("job-*"))
         assert result["cleanup_success"] and result["cleanup_cancel"]
+        assert result["cancel_reason"] == "cancelled"
         assert result["incremental_rss_bytes"] <= 512 * 1024 * 1024
         print(json.dumps(result, indent=2))
 

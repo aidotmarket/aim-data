@@ -525,13 +525,29 @@ def _json_array(stream):
         raise Error("invalid_json")
 
 
+def _open_source(path):
+    """Open every path component without following a symlink."""
+    path = Path(path).absolute()
+    parent = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for component in path.parts[1:-1]:
+            child = os.open(
+                component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent
+            )
+            os.close(parent)
+            parent = child
+        return os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
+    finally:
+        os.close(parent)
+
+
 def iter_records(
     path: Path, declaration: ParsingDeclaration, schema: CanonicalSchema
 ) -> Iterator[dict[str, Any]]:
     """Read the declared original file completely; reject replacement/mutation."""
     declaration.validate()
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        fd = _open_source(path)
         with os.fdopen(fd, "rb") as source:
             before = os.fstat(source.fileno())
             if not stat.S_ISREG(before.st_mode):
