@@ -337,3 +337,101 @@ async def ensure_vz_install_registered(
 
     logger.warning("VZ install registration failed (%d): %s", resp.status_code, resp.text[:300])
     return None
+
+
+def read_preview_registration_evidence(path):
+    """Read locally supplied owner-bound evidence, never infer it from install ID.
+
+    Existing /register and /rotate-key return IDs only. A fresh registry readback
+    must be supplied by the owner-authorized evidence flow; no new endpoint here.
+    """
+    import json
+    from pathlib import Path
+    from app.services.preview_signing_service import RegistrationEvidence, closed, SigningError
+    try:
+        target = Path(path)
+        if target.is_symlink() or target.stat().st_size > 4096:
+            raise ValueError
+        return RegistrationEvidence(**closed(RegistrationEvidence, json.loads(target.read_bytes())))
+    except Exception:
+        raise SigningError("registration_evidence_unavailable") from None
+
+
+async def rotate_preview_install_key(crypto, *, install_id, access_token):
+    """Stage encrypted Ed25519 key; HTTP success is NOT key readback confirmation.
+
+    Pending sentinel survives crashes/timeouts and blocks signing. Caller must
+    reconcile with owner-bound evidence before invoking activation below.
+    """
+    import os
+    from app.services.preview_signing_service import SigningError
+    pending = crypto.keystore_path.with_suffix(".rotation-pending")
+    staged = crypto.keystore_path.with_suffix(".rotation-staged")
+    try:
+        if not access_token or pending.exists() or staged.exists():
+            raise ValueError
+        old = crypto._read_keystore()
+        crypto._load_keys(old)  # Validate old identity; never generate on loss.
+        fd = os.open(pending, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        os.fsync(fd)
+        os.close(fd)
+        new_priv, new_pub = crypto.generate_ed25519_keypair()
+        encrypted, salt = crypto._encrypt_private_key(new_priv)
+        from app.services.preview_signing_service import public_bytes
+        import base64
+        replacement = dict(old)
+        replacement.update(ed25519_public_key=public_bytes(new_pub).hex(),
+                           encrypted_ed25519_private_key=encrypted.decode("latin-1"), ed25519_salt=salt.hex())
+        stage_crypto = DeviceCrypto(str(staged), crypto._passphrase.decode())
+        stage_crypto._write_keystore(replacement)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{settings.ai_market_url}/api/v1/vz/rotate-key",
+                json={"install_id": install_id, "new_public_key_b64": base64.b64encode(public_bytes(new_pub)).decode()},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if response.status_code != 200 or response.json().get("install_id") != install_id:
+            raise ValueError
+        return "rotation_pending"  # Even success needs independent key readback.
+    except Exception:
+        raise SigningError("rotation_pending") from None
+
+
+def activate_preview_install_rotation(crypto, *, evidence, install_id, seller_id, now, max_age):
+    import os
+    from app.services.preview_signing_service import check_evidence, public_bytes, SigningError
+    staged = crypto.keystore_path.with_suffix(".rotation-staged")
+    pending = crypto.keystore_path.with_suffix(".rotation-pending")
+    try:
+        if not pending.exists() or staged.is_symlink():
+            raise ValueError
+        stage = DeviceCrypto(str(staged), crypto._passphrase.decode())
+        keys = stage._load_keys(stage._read_keystore())
+        check_evidence(evidence, install_id=install_id, seller_id=seller_id,
+                       raw_key=public_bytes(keys[1]), now=now, max_age=max_age)
+        os.replace(staged, crypto.keystore_path)
+        pending.unlink()
+    except Exception:
+        raise SigningError("rotation_pending") from None
+
+
+async def revoke_preview_install(crypto, *, install_id, access_token):
+    import os
+    from app.services.preview_signing_service import SigningError
+    pending = crypto.keystore_path.with_suffix(".rotation-pending")
+    # Revocation uncertainty must prevent any additional local signatures.
+    fd = os.open(pending, os.O_CREAT | os.O_WRONLY, 0o600)
+    os.close(fd)
+    try:
+        if not access_token:
+            raise ValueError
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.delete(
+                f"{settings.ai_market_url}/api/v1/vz/install/{install_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if response.status_code != 204:
+            raise ValueError
+        return "revoked"
+    except Exception:
+        raise SigningError("revocation_pending") from None
