@@ -356,7 +356,7 @@ class CanonicalSchema:
                 return "0" if value == "-0" else value
             raise Error("invalid_integer")
         if tag == "decimal":
-            if not isinstance(value, (str, Decimal)) or (
+            if not (type(value) is int or isinstance(value, (str, Decimal))) or (
                 isinstance(value, str) and not re.fullmatch(r"-?\d+(?:\.\d+)?", value)
             ):
                 raise Error("invalid_decimal")

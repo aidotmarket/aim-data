@@ -336,11 +336,15 @@ def test_source_mutation(tmp_path):
         list(records)
 
 
-def test_shared_real_file_corpus(tmp_path):
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["aim_dataset_parser_v1.json", "aim_dataset_integral_decimal_v1.json"],
+)
+def test_shared_real_file_corpus(tmp_path, fixture_name):
     import base64
     from app.services import dataset_merkle_service as m
 
-    fixture = json.loads((FIXTURES / "aim_dataset_parser_v1.json").read_text())
+    fixture = json.loads((FIXTURES / fixture_name).read_text())
     schema = CanonicalSchema(fixture["schema"])
     assert m.encode_base64url(schema.digest) == fixture["schema_digest"]
     for vector in fixture["vectors"]:
@@ -696,3 +700,32 @@ def test_declared_decimal_contract_precision():
     assert value in schema.canonical_row({"x": value}).decode()
     with pytest.raises(Error, match="invalid_decimal_parameters"):
         dispatch_type("DECIMAL(1000,500)")
+
+
+@pytest.mark.parametrize("value", [12, "12", Decimal("12")])
+def test_integral_decimal_identical_bytes(value):
+    schema = CanonicalSchema(
+        [["amount", "decimal", False, {"precision": 4, "scale": 2}]]
+    )
+    assert schema.canonical_row({"amount": value}) == b'[["amount","decimal","12"]]'
+
+
+@pytest.mark.parametrize(
+    "value,code",
+    [
+        (True, "invalid_decimal"),
+        (12.0, "invalid_decimal"),
+        ("bad", "invalid_decimal"),
+        (Decimal("NaN"), "invalid_decimal"),
+        (100, "decimal_out_of_range"),
+        ("100", "decimal_out_of_range"),
+        (Decimal("100"), "decimal_out_of_range"),
+        ("12.001", "decimal_out_of_range"),
+    ],
+)
+def test_integral_decimal_stable_rejections(value, code):
+    schema = CanonicalSchema(
+        [["amount", "decimal", False, {"precision": 4, "scale": 2}]]
+    )
+    with pytest.raises(Error, match="^" + code + "$"):
+        schema.canonical_row({"amount": value})
