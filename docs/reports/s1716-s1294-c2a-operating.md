@@ -14,7 +14,10 @@ This procedure performs local parsing and commitment construction only.
 3. Construct `ParsingDeclaration`. CSV/TSV require UTF-8, delimiter, quote,
    escape (empty means none), header boolean, locale `C`, and explicit null token.
    JSON-array/NDJSON require UTF-8. Parquet carries physical types; they must
-   match the declaration, including precision and nullability. Naive timestamps
+   match the declaration, including precision. A nullable Arrow field may be
+   declared non-nullable only when every streamed value is present and non-null;
+   otherwise reading fails with `nullability_violation`. This also applies to
+   nested fields. Naive timestamps
    additionally require an explicit `Z` or numeric offset declaration.
 4. Call `run_commitment_job(paths, declaration, descriptors, temp_root, ...)`.
    Use the same dedicated, owner-only installation temp root for every call.

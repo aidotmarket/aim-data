@@ -673,8 +673,52 @@ def _parquet(source, schema, declaration):
     for field in parquet.schema_arrow:
         tag, params = physical(field.type)
         descriptors.append([field.name, tag, field.nullable, params])
-    if CanonicalSchema(descriptors).bytes != schema.bytes:
+
+    def compatible(actual, declared):
+        # A stricter declaration is proven on every streamed value below.
+        if isinstance(actual, dict) and isinstance(declared, dict):
+            return actual.keys() == declared.keys() and all(
+                (key == "nullable" and actual[key] is True and declared[key] is False)
+                or compatible(actual[key], declared[key])
+                for key in actual
+            )
+        if isinstance(actual, list) and isinstance(declared, list):
+            return len(actual) == len(declared) and all(
+                compatible(a, d) for a, d in zip(actual, declared)
+            )
+        return type(actual) is type(declared) and actual == declared
+
+    def field_objects(fields):
+        return [
+            dict(zip(("name", "type", "nullable", "type_parameters"), field))
+            for field in fields
+        ]
+
+    if not compatible(
+        field_objects(CanonicalSchema(descriptors).descriptors),
+        field_objects(schema.descriptors),
+    ):
         raise Error("schema_mismatch")
+
+    def check_fields(record, fields):
+        normalized = {nfc(key): value for key, value in record.items()}
+        for field in fields:
+            value = normalized.get(field["name"])
+            if value is None:
+                if not field["nullable"]:
+                    raise Error("nullability_violation")
+            else:
+                check_value(value, field["type"], field["type_parameters"])
+
+    def check_value(value, tag, params):
+        if tag == "object":
+            check_fields(value, params["object_fields"])
+        elif tag == "array":
+            element = params["element_type"]
+            for child in value:
+                if child is not None:
+                    check_value(child, element["type"], element["type_parameters"])
+
     # Single rows prevent an arbitrarily wide batch; the worker RSS guard also
     # covers Arrow/native page decoding, which cannot be bounded by row count.
     for batch in parquet.iter_batches(batch_size=1, use_threads=False):
@@ -704,10 +748,12 @@ def _parquet(source, schema, declaration):
                 return {field.name: exact_value(scalar[field.name]) for field in typ}
             return scalar.as_py()
 
-        yield {
+        record = {
             name: exact_value(batch.column(i)[0])
             for i, name in enumerate(batch.schema.names)
         }
+        check_fields(record, field_objects(schema.descriptors))
+        yield record
 
 
 def parsing_options_digest(declaration):

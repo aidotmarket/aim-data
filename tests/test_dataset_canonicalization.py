@@ -729,3 +729,48 @@ def test_integral_decimal_stable_rejections(value, code):
     )
     with pytest.raises(Error, match="^" + code + "$"):
         schema.canonical_row({"amount": value})
+
+
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("has_null", [False, True])
+def test_parquet_nullable_arrow_strict_declaration_streamed(tmp_path, nested, has_null):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    values = [12, None if has_null else 13]
+    fields = [["x", "signed_integer", False, {}]]
+    typ = pa.int64()
+    if nested:
+        typ = pa.list_(pa.struct([pa.field("x", pa.int64(), nullable=True)]))
+        values = [[{"x": value}] for value in values]
+        fields = [
+            [
+                "x",
+                "array",
+                False,
+                {
+                    "element_type": {
+                        "type": "object",
+                        "type_parameters": {
+                            "object_fields": [
+                                {
+                                    "name": "x",
+                                    "type": "signed_integer",
+                                    "nullable": False,
+                                    "type_parameters": {},
+                                }
+                            ]
+                        },
+                    }
+                },
+            ]
+        ]
+    path = tmp_path / "nullable.parquet"
+    pq.write_table(pa.table({"x": pa.array(values, type=typ)}), path, row_group_size=1)
+    records = iter_records(path, ParsingDeclaration("parquet"), CanonicalSchema(fields))
+    assert next(records) == {"x": values[0]}
+    if has_null:
+        with pytest.raises(Error, match="^nullability_violation$"):
+            next(records)
+    else:
+        assert list(records) == [{"x": values[1]}]
