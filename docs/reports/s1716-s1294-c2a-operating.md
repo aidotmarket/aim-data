@@ -44,7 +44,8 @@ the measured worker RSS. The watchdog polls at 20 ms: this is sampled RSS, not
 an OS hard memory reservation. Disk accounting includes canonical runs, merge
 outputs, indexes, leaf hashes and all tree hashes. Seller-local disk quota
 adjustment is explicit through `WorkerBudget`; protocol leaf bound stays 2^63-1,
-while unsafe integer metadata is rejected before a result can be exported.
+while unsafe integer metadata is rejected during closed-model construction,
+validation and assignment, as well as canonical export.
 
 Failures expose stable codes (`unsafe_integer`, `noncanonical_key_order`,
 `unsupported_logical_type`, `unsupported_format`, `duplicate_key`,

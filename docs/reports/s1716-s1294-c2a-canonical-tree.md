@@ -1,13 +1,78 @@
 # S1716 S1294 Chunk 2a — canonical parser and tree build
 
-**Status: Chunk 2a implemented and locally verified; committed and pushed,
-not merged.** Full baseline/candidate suites completed with **zero branch-only
-failures**, all **184 added tests passing**, unchanged original golden bytes,
-two observed failing mutations, and successful 1M/10M bounded-worker runs.
-Existing baseline failures remain documented; this is not a claim that the
-repository-wide suites are green, or that later producer/release chunks exist.
+**Status: R2 findings folded and locally verified; not merged.** Full baseline/
+candidate suites have zero branch-only failures; all 219 added tests pass.
+Original golden bytes are unchanged. Existing repository failures remain; this
+is not a release or a claim that repository-wide checks are green.
 
-Final implementation: `21ad23f78a530d33ab731029e0dc55a6a06000d8`.
+Final tested implementation snapshot: `56278d33a39b42661e7f6b62fdbe7a95c1fb6f63`.
+Subsequent commits contain receipt/report packaging only. The exact final review
+HEAD receipt is regenerated after packaging as documented below.
+
+## R2 fold
+
+Gate-3 R1 responses: DeepSeek `response-20260916-232605-845565`
+(APPROVE_WITH_NITS), CC `response-20260916-232636-569164`
+(APPROVE_WITH_NITS), GLM `response-20260916-232622-712848` (REVISE).
+This fold does not imply a new Gate-3 approval.
+
+| Finding | Result | Commit |
+|---|---|---|
+| G1 | Exact int decimal admission; shared JSON/CSV/Parquet root fixture; stable rejection codes | `2f0dff925c59b927d7ee6aa9acb430407841beb6` |
+| D1 | R1 candidate prose corrected to the evidenced 2403 passes | `034355de89a39903595d219ae05f0b5823dad355` |
+| D2 | Regenerated implementation receipt, retained R1 receipt, exact final-HEAD receipt generator | `13c685237d9dfe5de29e44cc6a01f03a4e2eb046` |
+| D3 | Full and affected-suite per-nodeid baseline/candidate outcomes and reproducible comparison | `56278d33a39b42661e7f6b62fdbe7a95c1fb6f63` |
+| D4 | Explicit progress integer bounds, assignment/instance revalidation, constructor and validation boundary tests | `90bc4268852c41e303c0fd895406b3c3e792d878` |
+| D5 | Nullable Arrow / non-nullable declaration admitted only after streamed non-null checks, including nested fields | `ed4e450dda498dd1d2dfea0cb7b9d7fc12b8d5c7` |
+
+D4 inspection found that the R1 source already had the shared construction-time
+`unsafe_integer` validator and proof/commitment field ceilings. R2 makes progress
+field ceilings explicit and verifies constructors, Python/JSON validation,
+assignment, and revalidation of an unvalidated instance. No export is needed to
+trigger rejection. G1 admits `type(value) is int`; bool/float remain rejected.
+D5 checks every yielded record, including a null in a later row group, using
+`nullability_violation`; physical logical-type/precision mismatches still fail.
+The operating runbook now records the nullability ruling.
+
+| Fresh R2 check | origin/main | Candidate |
+|---|---:|---:|
+| Full aim-data pytest (no exclusions) | 2219 passed / 92 failed / 33 skipped / 38 errors | 2438 passed / 92 failed / 33 skipped / 38 errors |
+| Affected suites | 15 passed | 234 passed |
+| Focused parser/tree | Not present | 219 passed |
+| Focused Python 3.11 / DuckDB 0.9.2 | Not present | 219 passed |
+| Repository Ruff | 94 existing errors | Identical diagnostics |
+| Frontend lint | 10 errors / 25 warnings | Identical diagnostics |
+| Frontend TypeScript | Existing diagnostics | Identical diagnostics |
+| Changed Python Ruff, compilation, diff whitespace | — | Passed |
+
+Fetched baseline remains `ee7faa457a21d751bc581b6733ac9a40bb80a801`.
+Full runs completed in 159.77s (baseline) and 164.51s (candidate), with zero
+collection errors. Every pre-existing test outcome is identical. The 38 errors
+are the existing beta-readiness setup failures requiring localhost:80; the 92
+failures and 33 skips remain visible rather than suppressed. Full outcome table:
+[r2/full-per-test.json](s1716-s1294-c2a-evidence/r2/full-per-test.json).
+Affected table: [r2/affected-per-test.json](s1716-s1294-c2a-evidence/r2/affected-per-test.json).
+[Execution and recomputation instructions](s1716-s1294-c2a-evidence/r2/README.md)
+include exact-nodeid capture and metadata-only log handling. Full and affected
+comparisons both have no changed existing outcomes and no branch-only failures.
+Ruff/lint/type log pairs are byte-identical after worktree-path normalization.
+The original fixture SHA-256 remains
+`f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af`;
+the existing extended and parser fixtures are also unchanged.
+
+The committed receipt pins the completed implementation snapshot rather than
+its parent. A commit cannot embed its own SHA: after the final documentation
+commit, `s1716-r2-receipt.py --output /var/tmp/s1716-r2-final-head-receipt.json`
+(via `rtk proxy python3`) regenerates an external receipt at the exact pushed
+HEAD, verifying source identity and binding all R2 evidence hashes. The final
+handoff includes that receipt. The tracked worktree remains clean.
+
+## R1 acceptance history
+
+The sections below retain the earlier measurements and milestones. R1 benchmark
+source hashes and timings describe R1 only; benchmarks, frontend tests/build and
+mutations were not rerun in R2. R2 verification is the table above.
+
 [Per-test pytest parity](s1716-s1294-c2a-pytest-parity.md),
 [frontend parity](s1716-s1294-c2a-frontend-parity.md),
 [operation/runbook](s1716-s1294-c2a-operating.md),
@@ -18,7 +83,7 @@ Final implementation: `21ad23f78a530d33ab731029e0dc55a6a06000d8`.
 | 1,000,000 | 36.71 | 107.41 MiB | Both passed |
 | 10,000,000 | 331.44 | 110.59 MiB | Both passed |
 
-Both benchmark receipts match the final parser/Merkle source SHA-256 values;
+Both R1 benchmark receipts match the R1 parser/Merkle source SHA-256 values;
 selected boundary proofs independently verify. Timings are measured local
 results under concurrent verification load, not a throughput guarantee.
 Metadata-only receipts include roots, proof digests and RSS; generated source
