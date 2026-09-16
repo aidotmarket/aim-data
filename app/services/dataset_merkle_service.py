@@ -56,18 +56,18 @@ def encode_base64url(value: bytes) -> str:
 
 def decode_base64url(value: str) -> bytes:
     if not isinstance(value, str) or not value or "=" in value:
-        raise ValueError("base64url value must be a non-empty unpadded string")
+        raise CommitmentValidationError("invalid_hash_encoding")
     try:
         ascii_value = value.encode("ascii")
-    except UnicodeEncodeError as exc:
-        raise ValueError("base64url value must be ASCII") from exc
+    except UnicodeEncodeError:
+        raise CommitmentValidationError("invalid_hash_encoding") from None
     padding = b"=" * ((4 - len(ascii_value) % 4) % 4)
     try:
         decoded = base64.b64decode(ascii_value + padding, altchars=b"-_", validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ValueError("invalid base64url encoding") from exc
+    except (binascii.Error, ValueError):
+        raise CommitmentValidationError("invalid_hash_encoding") from None
     if encode_base64url(decoded) != value:
-        raise ValueError("base64url encoding is not canonical")
+        raise CommitmentValidationError("invalid_hash_encoding")
     return decoded
 
 
@@ -114,10 +114,13 @@ def canonical_json_bytes(value: Any) -> bytes:
                 raise CommitmentValidationError("invalid_metadata")
             for key in item:
                 normalize(key)
-            return {
-                key: normalize(item[key])
-                for key in sorted(item, key=lambda k: k.encode("utf-16-be"))
-            }
+            keys = sorted(item)
+            # The closed metadata vocabulary has ASCII object keys; user field
+            # names live in arrays. Preserve reference v1 bytes and refuse any
+            # generic object for which code-point and JCS UTF-16 orders differ.
+            if keys != sorted(item, key=lambda k: k.encode("utf-16-be")):
+                raise CommitmentValidationError("noncanonical_key_order")
+            return {key: normalize(item[key]) for key in keys}
         raise CommitmentValidationError("invalid_metadata")
 
     try:
@@ -159,7 +162,7 @@ def compute_node_hash(left_hash: bytes | str, right_hash: bytes | str) -> bytes:
 
 
 def largest_power_of_two_less_than(size: int) -> int:
-    if size <= 1:
+    if type(size) is not int or size <= 1:
         raise CommitmentValidationError("invalid_tree_size")
     return 1 << ((size - 1).bit_length() - 1)
 
@@ -213,7 +216,9 @@ def build_inclusion_proof(
 
 def expected_proof_directions(leaf_index: int, tree_size: int) -> list[str]:
     if (
-        tree_size < 1
+        type(tree_size) is not int
+        or type(leaf_index) is not int
+        or tree_size < 1
         or tree_size > MAX_TREE_SIZE
         or leaf_index < 0
         or leaf_index >= tree_size
@@ -300,7 +305,14 @@ def checkpoint_signing_bytes(
     root_hash: bytes | str,
     checkpoint_at: datetime | str,
 ) -> bytes:
-    if not log_id or "\n" in log_id or tree_size < 1 or tree_size > MAX_TREE_SIZE:
+    if (
+        not isinstance(log_id, str)
+        or not log_id
+        or "\n" in log_id
+        or type(tree_size) is not int
+        or tree_size < 1
+        or tree_size > MAX_TREE_SIZE
+    ):
         raise CommitmentValidationError("invalid_checkpoint")
     return (
         "aim-transparency-checkpoint-v1\n"
@@ -483,6 +495,7 @@ class _DiskBudget:
 
     def remove(self, path):
         self.used -= path.stat().st_size
+        self.next_probe = 0
         path.unlink()
 
 
@@ -836,6 +849,8 @@ def run_commitment_job(
         initial_rss = monitor.memory_info().rss
         peak_rss = initial_rss
         result = None
+        started = time.monotonic()
+        last_bytes = 0
         try:
             while process.is_alive() or parent.poll():
                 if cancel is not None and cancel.is_set():
@@ -856,13 +871,24 @@ def run_commitment_job(
                         break
                     if kind == "error":
                         raise CommitmentValidationError(payload)
-                    if kind == "progress" and progress:
-                        progress(payload)
+                    if kind == "progress":
+                        last_bytes = payload["canonical_bytes"]
+                        if progress:
+                            progress(payload)
                     if kind == "result":
                         result = payload
             process.join(timeout=1)
             if result is None or process.exitcode != 0:
                 raise CommitmentValidationError("worker_failed")
+            if progress:
+                progress(
+                    {
+                        "phase": "ready",
+                        "records": result["commitment"]["leaf_count"],
+                        "canonical_bytes": last_bytes,
+                        "elapsed_seconds": time.monotonic() - started,
+                    }
+                )
             result["peak_rss_bytes"] = peak_rss
             result["incremental_rss_bytes"] = peak_rss - initial_rss
             return result

@@ -211,7 +211,7 @@ class CanonicalSchema:
             if (
                 set(params) != {"precision", "scale"}
                 or any(type(v) is not int for v in params.values())
-                or not 1 <= params["precision"] <= 38
+                or not 1 <= params["precision"] <= 1000
                 or not 0 <= params["scale"] <= params["precision"]
             ):
                 raise Error("invalid_decimal_parameters")
@@ -219,7 +219,7 @@ class CanonicalSchema:
             if (
                 set(params) != {"timestamp_precision"}
                 or type(params["timestamp_precision"]) is not int
-                or params["timestamp_precision"] not in {0, 3, 6, 9}
+                or not 0 <= params["timestamp_precision"] <= 9
             ):
                 raise Error("invalid_timestamp_parameters")
         elif tag == "array":
@@ -278,6 +278,8 @@ class CanonicalSchema:
                 raise Error("invalid_schema")
             name, tag, nullable, params = field
             name = nfc(name)
+            if not 1 <= len(name) <= 255:
+                raise Error("invalid_field_name")
             if name in names:
                 raise Error("duplicate_field")
             if type(nullable) is not bool or not isinstance(tag, str):
@@ -442,7 +444,7 @@ def normalize_timestamp(value, precision, offset):
     except (ValueError, OverflowError):
         raise Error("invalid_timestamp") from None
     suffix = "." + fraction[:precision].ljust(precision, "0") if precision else ""
-    return dt.strftime("%Y-%m-%dT%H:%M:%S") + suffix + "Z"
+    return dt.replace(tzinfo=None).isoformat(timespec="seconds") + suffix + "Z"
 
 
 def _pairs(pairs):

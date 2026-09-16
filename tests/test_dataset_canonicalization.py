@@ -19,7 +19,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 def test_extended_ruling():
     fixture = json.loads((FIXTURES / "aim_dataset_merkle_v1_extended.json").read_text())
     for vector in fixture["must_reject"]:
-        with pytest.raises(Error, match="^unsafe_integer$"):
+        with pytest.raises(Error, match="^" + vector["reason"] + "$"):
             canonical_json_bytes(vector["metadata"])
     for vector in fixture["must_accept"]:
         assert canonical_json_bytes(vector["metadata"]).decode() == vector["canonical"]
@@ -365,7 +365,6 @@ def test_independent_ecmascript_serializer():
     import subprocess
 
     value = {
-        "\ue000": "bmp",
         "\U00010000": "supplementary",
         "a": [-(2**53 - 1), 2**53 - 1, True, None, "Café\n"],
     }
@@ -678,3 +677,22 @@ def test_runtime_struct_declared_nullability():
             "STRUCT(x INTEGER)",
             members=[{"name": "x", "physical": "VARCHAR", "nullable": False}],
         )
+
+
+@pytest.mark.parametrize("length", [0, 1, 255, 256])
+def test_field_name_contract(length):
+    if length in {0, 256}:
+        with pytest.raises(Error, match="invalid_field_name"):
+            CanonicalSchema([["x" * length, "string", True, {}]])
+    else:
+        assert CanonicalSchema([["x" * length, "string", True, {}]])
+
+
+def test_declared_decimal_contract_precision():
+    schema = CanonicalSchema(
+        [["x", "decimal", False, {"precision": 1000, "scale": 500}]]
+    )
+    value = "9" * 500 + "." + "1" * 500
+    assert value in schema.canonical_row({"x": value}).decode()
+    with pytest.raises(Error, match="invalid_decimal_parameters"):
+        dispatch_type("DECIMAL(1000,500)")

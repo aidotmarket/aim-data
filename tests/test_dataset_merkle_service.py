@@ -144,7 +144,7 @@ def test_worker(tmp_path):
         progress=lambda p: phases.append(p["phase"]),
     )
     assert result["commitment"]["leaf_count"] == 2
-    assert phases == ["reading", "sorting", "building_tree", "selecting"]
+    assert phases == ["reading", "sorting", "building_tree", "selecting", "ready"]
     for proof in result["proofs"]:
         assert m.verify_inclusion_proof(
             m.compute_leaf_hash(proof["base_row_digest"], proof["duplicate_ordinal"]),
@@ -338,3 +338,59 @@ def test_closed_progress_and_proof_positions():
             tree_size=1,
             siblings=[],
         )
+
+
+def test_all_golden_root_variants():
+    vector = json.loads(FIXTURE.read_text())
+    assert (
+        m.encode_base64url(m.canonical_json_bytes(vector["canonical_schema"]))
+        == vector["canonical_schema_b64url"]
+    )
+    leaves = [m.decode_digest(row["leaf_hash"]) for row in vector["rows"]]
+    assert (
+        m.encode_base64url(m.build_merkle_root(leaves[:3] + leaves[4:]))
+        == vector["root_variants"]["without_one_duplicate"]
+    )
+    changed = leaves.copy()
+    changed[0] = m.compute_leaf_hash(hashlib.sha256(b"changed-row").digest(), 0)
+    assert (
+        m.encode_base64url(m.build_merkle_root(changed))
+        == vector["root_variants"]["value_changed"]
+    )
+    added = leaves + [m.compute_leaf_hash(hashlib.sha256(b"added-row").digest(), 0)]
+    assert (
+        m.encode_base64url(m.build_merkle_root(added))
+        == vector["root_variants"]["membership_added"]
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["direction", "digest", "index", "size", "short", "long", "boolean_index", "root"],
+)
+def test_malformed_proof_rejected(case):
+    import copy
+
+    vector = json.loads(FIXTURE.read_text())
+    row = vector["rows"][0]
+    proof = copy.deepcopy(row["proof"])
+    index = 0
+    size = 5
+    root = vector["dataset_merkle_root"]
+    if case == "direction":
+        proof[0]["direction"] = "left"
+    elif case == "digest":
+        proof[0]["hash"] = "PRIVATE_INVALID"
+    elif case == "index":
+        index = 5
+    elif case == "boolean_index":
+        index = False
+    elif case == "size":
+        size = 0
+    elif case == "short":
+        proof.pop()
+    elif case == "long":
+        proof *= 22
+    else:
+        root = m.encode_base64url(b"x" * 32)
+    assert not m.verify_inclusion_proof(row["leaf_hash"], index, size, proof, root)

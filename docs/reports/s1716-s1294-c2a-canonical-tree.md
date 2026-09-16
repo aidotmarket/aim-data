@@ -29,7 +29,7 @@ The complete reproducer signing object is now also a must-reject extended vector
 Real-file corpus `tests/fixtures/aim_dataset_parser_v1.json` includes actual file
 bytes for CSV, TSV, JSON-array, NDJSON and Parquet, explicit declarations,
 expected canonical rows/schema/root, and a distinct missing-property control.
-JSON object ordering is independently compared with Node UTF-16 serialization;
+Admitted JSON object ordering is independently compared with Node UTF-16 serialization;
 descriptor arrays retain NFC UTF-8 order. Numeric strings preserve >53-bit values.
 Parquet timestamps are decoded from Arrow integer ticks, including nanoseconds,
 without a Python datetime or float intermediary that loses fractional precision.
@@ -59,6 +59,27 @@ Current fixture SHA-256 (supersedes the early extended-fixture hash above):
 - `tests/fixtures/aim_dataset_merkle_v1.json`: `f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af`
 - `tests/fixtures/aim_dataset_merkle_v1_extended.json`: `96893787c9757aaf9a18d4bb21da3d9b8e1acc1133c382ed33cdf98cfdee9a7e`
 - `tests/fixtures/aim_dataset_parser_v1.json`: `8ee8ac6b6bdaccd943987afb0a17cbb548a88a7dc7598563a143e7d8ab415754`
+
+## Milestone 3: final reference compatibility
+
+Reference `tests/test_dataset_commitment.py` additionally pins the historical
+code-point ordering of generic supplementary-plane object keys. Those keys do
+not occur in the closed descriptor parameter vocabulary: field names are array
+values. The producer now rejects a generic key set with differing Python/JCS
+orders as `noncanonical_key_order`, rather than changing v1 bytes or introducing
+a profile. The extended fixture includes this must-reject guard as well as the
+complete original unsafe-integer signing-object reproducer. All safe admitted
+metadata bytes are identical to reference bytes and independently match Node.
+
+Full field names follow the backend 1..255 NFC character contract. Declared
+logical decimal precision may reach the backend cap 1000; physical DuckDB
+DECIMAL remains limited to the actual 0.9.2 range (38). Declared timestamps admit
+precision 0..9; physical dispatch keeps exact source precision 0/3/6/9.
+
+The final worker emits ready only after complete source identity revalidation
+and successful child exit. No scanning, hosting, signatures or egress occur.
+The runbook is `s1716-s1294-c2a-operating.md`. Existing UI/publication/keys were
+not changed. Final test/evidence attachment follows after the frozen-source run.
 
 ## Historical blocker report (superseded, retained as evidence)
 

@@ -1,5 +1,6 @@
 """Synthetic private-file worker acceptance. Does not read seller datasets."""
 
+import hashlib
 import json
 import sys
 import tempfile
@@ -17,6 +18,13 @@ from app.services.dataset_merkle_service import (
 
 def main():
     size = int(sys.argv[1]) if len(sys.argv) > 1 else 1_000_000
+    source_hashes = {
+        str(p): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in [
+            Path("app/services/dataset_canonicalization.py"),
+            Path("app/services/dataset_merkle_service.py"),
+        ]
+    }
     with tempfile.TemporaryDirectory(prefix="s1716-c2a-bench-") as tmp:
         directory = Path(tmp)
         source = directory / "generated.ndjson"
@@ -38,6 +46,7 @@ def main():
             indices=[0, size - 1],
             progress=lambda p: phases.append(p),
         )
+        result["source_sha256"] = source_hashes
         result["elapsed_seconds"] = time.monotonic() - started
         result["generated_records"] = size
         result["phases"] = sorted({p["phase"] for p in phases})

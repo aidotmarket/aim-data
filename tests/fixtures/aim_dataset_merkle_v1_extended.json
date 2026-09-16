@@ -46,6 +46,14 @@
         "proofs": []
       },
       "reason": "unsafe_integer"
+    },
+    {
+      "name": "generic_supplementary_key_order_conflict",
+      "metadata": {
+        "": "bmp",
+        "𐀀": "supplementary"
+      },
+      "reason": "noncanonical_key_order"
     }
   ],
   "must_accept": [
@@ -60,13 +68,6 @@
         "sequence": -9007199254740991
       },
       "canonical": "{\"sequence\":-9007199254740991}"
-    },
-    {
-      "metadata": {
-        "": "bmp",
-        "𐀀": "supplementary"
-      },
-      "canonical": "{\"𐀀\":\"supplementary\",\"\":\"bmp\"}"
     }
   ],
   "exact_row_control": {
