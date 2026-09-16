@@ -1,0 +1,34 @@
+{
+  "baseline-ruff": {
+    "exit_status": 1,
+    "raw_sha256": "786275899b4ede3ab49670911f0d790a80b79e71d6fcb03de93a1e468f6fec9f"
+  },
+  "baseline-lint": {
+    "exit_status": 1,
+    "raw_sha256": "09c753f93ef45c5a6e9142195948d6051ed825eac26663a4236203e3b86fd44a"
+  },
+  "baseline-types": {
+    "exit_status": 2,
+    "raw_sha256": "4d746b355c868a5a154bc32277df306ee1e4aa93e57989e0fd075cfe5bb18208"
+  },
+  "candidate-ruff": {
+    "exit_status": 1,
+    "raw_sha256": "786275899b4ede3ab49670911f0d790a80b79e71d6fcb03de93a1e468f6fec9f"
+  },
+  "candidate-lint": {
+    "exit_status": 1,
+    "raw_sha256": "7204d22df2f640850be78ba35d71dc6e65992bf1abcd30381e6f3786d7ef5111"
+  },
+  "candidate-types": {
+    "exit_status": 2,
+    "raw_sha256": "4d746b355c868a5a154bc32277df306ee1e4aa93e57989e0fd075cfe5bb18208"
+  },
+  "focused": {
+    "summary": "219 passed, 1 warning in 2.12s",
+    "raw_sha256": "c8432e954f95c4b7beaaf20bff0cf092c579c86d12aca7406491c712ca22e60a"
+  },
+  "pinned": {
+    "summary": "219 passed in 2.57s",
+    "raw_sha256": "bff79a4edb6b71e0aca547ac8a51a1e8f8eddfafb8b0edeeef4b1be4e66e52ee"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "baseline": {
+    "raw_log": "/var/tmp/s1716-r2-baseline-full.log",
+    "sha256": "969c2f9552abd8c791941ab4113f76f0075639dd3d43615c67d6259c90a8c9c1",
+    "policy": "Commit exact nodeids/outcomes and summary only; omit tracebacks, inputs and captured output."
+  },
+  "candidate": {
+    "raw_log": "/var/tmp/s1716-r2-candidate-full.log",
+    "sha256": "8230b789c42bf4f8c8d0d83315676a5e9190bf1e35609fbfb90ec6c8bb3b227a",
+    "policy": "Commit exact nodeids/outcomes and summary only; omit tracebacks, inputs and captured output."
+  }
+}
