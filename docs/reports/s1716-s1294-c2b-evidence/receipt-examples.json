@@ -1,0 +1,50 @@
+{
+  "kind": "synthetic fixture examples; not live public HTTPS receipts",
+  "receipts": [
+    {
+      "url": "https://seller.example/previews/package.json",
+      "method": "GET",
+      "status": 200,
+      "captured_at": "2026-09-17T12:00:00.000000Z",
+      "headers": {
+        "content-type": "application/vnd.aim.preview+json",
+        "cache-control": "no-store",
+        "access-control-allow-origin": "https://ai.market",
+        "access-control-allow-methods": "GET, OPTIONS",
+        "access-control-allow-headers": null,
+        "access-control-allow-credentials": null
+      },
+      "no_set_cookie": true
+    },
+    {
+      "url": "https://seller.example/previews/package.json",
+      "method": "OPTIONS",
+      "status": 204,
+      "captured_at": "2026-09-17T12:00:00.000000Z",
+      "headers": {
+        "content-type": "application/vnd.aim.preview+json",
+        "cache-control": "no-store",
+        "access-control-allow-origin": "https://ai.market",
+        "access-control-allow-methods": "GET, OPTIONS",
+        "access-control-allow-headers": null,
+        "access-control-allow-credentials": null
+      },
+      "no_set_cookie": true
+    },
+    {
+      "url": "https://seller.example/previews/package.json",
+      "method": "GET",
+      "status": 410,
+      "captured_at": "2026-09-17T12:00:00.000000Z",
+      "headers": {
+        "content-type": "application/vnd.aim.preview+json",
+        "cache-control": "no-store",
+        "access-control-allow-origin": "https://ai.market",
+        "access-control-allow-methods": "GET, OPTIONS",
+        "access-control-allow-headers": null,
+        "access-control-allow-credentials": null
+      },
+      "no_set_cookie": true
+    }
+  ]
+}

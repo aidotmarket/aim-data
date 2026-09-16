@@ -1,0 +1,1057 @@
+warning: Invalid `# noqa` directive on app/services/allie_provider.py:95: expected a comma-separated list of codes (e.g., `# noqa: F401, F841`).
+E402 Module level import not at top of file
+  --> app/main.py:16:1
+   |
+14 | faulthandler.enable(file=sys.stderr, all_threads=True)
+15 |
+16 | from app.config import settings
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+17 |
+18 | from app.routers import health, datasets, sql, pii, docs, diagnostics, imports, s3_connections
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:18:1
+   |
+16 | from app.config import settings
+17 |
+18 | from app.routers import health, datasets, sql, pii, docs, diagnostics, imports, s3_connections
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+19 | from app.routers import auth as auth_router_module
+20 | from app.core.database import init_db, close_db
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:19:1
+   |
+18 | from app.routers import health, datasets, sql, pii, docs, diagnostics, imports, s3_connections
+19 | from app.routers import auth as auth_router_module
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+20 | from app.core.database import init_db, close_db
+21 | from app.core.structured_logging import setup_logging
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:20:1
+   |
+18 | from app.routers import health, datasets, sql, pii, docs, diagnostics, imports, s3_connections
+19 | from app.routers import auth as auth_router_module
+20 | from app.core.database import init_db, close_db
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+21 | from app.core.structured_logging import setup_logging
+22 | from app.core.errors import AIMDataError
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:21:1
+   |
+19 | from app.routers import auth as auth_router_module
+20 | from app.core.database import init_db, close_db
+21 | from app.core.structured_logging import setup_logging
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+22 | from app.core.errors import AIMDataError
+23 | from app.core.errors.registry import error_registry
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:22:1
+   |
+20 | from app.core.database import init_db, close_db
+21 | from app.core.structured_logging import setup_logging
+22 | from app.core.errors import AIMDataError
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+23 | from app.core.errors.registry import error_registry
+24 | from app.core.errors.middleware import aim_data_error_handler
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:23:1
+   |
+21 | from app.core.structured_logging import setup_logging
+22 | from app.core.errors import AIMDataError
+23 | from app.core.errors.registry import error_registry
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+24 | from app.core.errors.middleware import aim_data_error_handler
+25 | from app.core.log_middleware import CorrelationMiddleware
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:24:1
+   |
+22 | from app.core.errors import AIMDataError
+23 | from app.core.errors.registry import error_registry
+24 | from app.core.errors.middleware import aim_data_error_handler
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+25 | from app.core.log_middleware import CorrelationMiddleware
+26 | from app.core.issue_tracker import issue_tracker
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:25:1
+   |
+23 | from app.core.errors.registry import error_registry
+24 | from app.core.errors.middleware import aim_data_error_handler
+25 | from app.core.log_middleware import CorrelationMiddleware
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+26 | from app.core.issue_tracker import issue_tracker
+27 | from app.core.resource_guards import resource_monitor_loop, ensure_log_fallback
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:26:1
+   |
+24 | from app.core.errors.middleware import aim_data_error_handler
+25 | from app.core.log_middleware import CorrelationMiddleware
+26 | from app.core.issue_tracker import issue_tracker
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+27 | from app.core.resource_guards import resource_monitor_loop, ensure_log_fallback
+28 | from app.services.deduction_queue import deduction_queue
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:27:1
+   |
+25 | from app.core.log_middleware import CorrelationMiddleware
+26 | from app.core.issue_tracker import issue_tracker
+27 | from app.core.resource_guards import resource_monitor_loop, ensure_log_fallback
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+28 | from app.services.deduction_queue import deduction_queue
+29 | from app.services.serial_metering import (
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:28:1
+   |
+26 | from app.core.issue_tracker import issue_tracker
+27 | from app.core.resource_guards import resource_monitor_loop, ensure_log_fallback
+28 | from app.services.deduction_queue import deduction_queue
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+29 | from app.services.serial_metering import (
+30 |     CreditExhaustedException,
+   |
+
+E402 Module level import not at top of file
+  --> app/main.py:29:1
+   |
+27 |   from app.core.resource_guards import resource_monitor_loop, ensure_log_fallback
+28 |   from app.services.deduction_queue import deduction_queue
+29 | / from app.services.serial_metering import (
+30 | |     CreditExhaustedException,
+31 | |     ActivationRequiredException,
+32 | |     UnprovisionedException,
+33 | | )
+   | |_^
+34 |
+35 |   # DeviceCrypto, register_with_marketplace, stripe_connect_proxy,
+   |
+
+E401 [*] Multiple imports on one line
+   --> app/mcp_server.py:142:9
+    |
+140 |             DEFAULT_SETUP_COST,
+141 |         )
+142 |         import time, hashlib
+    |         ^^^^^^^^^^^^^^^^^^^^
+143 |         if state.state == MIGRATED:
+144 |             strategy = LedgerMeteringStrategy()
+    |
+help: Split imports
+
+F401 [*] `app.auth.api_key_auth._handle_ai_market_token` imported but unused
+  --> app/routers/auth.py:39:5
+   |
+37 |     get_current_user,
+38 |     hmac_hash_secret,
+39 |     _handle_ai_market_token,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+40 | )
+41 | from app.config import settings
+   |
+help: Remove unused import: `app.auth.api_key_auth._handle_ai_market_token`
+
+E402 Module level import not at top of file
+  --> app/routers/auth.py:46:1
+   |
+44 | logger = logging.getLogger(__name__)
+45 |
+46 | from app.services.aim_market_oauth import AuthRoute
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+47 |
+48 | router = APIRouter(route_class=AuthRoute)
+   |
+
+F541 [*] f-string without any placeholders
+    --> app/routers/copilot.py:1603:49
+     |
+1601 |     else:
+1602 |         _strat = SerialMeteringStrategy(store)
+1603 |     _rid = _make_request_id(store.state.serial, f"POST:/api/copilot/brain")
+     |                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+1604 |     await _strat.check_and_meter(_cat, _cost, _rid)
+     |
+help: Remove extraneous `f` prefix
+
+F821 Undefined name `CHANNEL`
+   --> app/routers/health.py:237:48
+    |
+235 |         "features": {
+236 |             "marketplace": settings.marketplace_enabled,
+237 |             "allai": settings.allai_enabled or CHANNEL == ChannelType.aim_data,
+    |                                                ^^^^^^^
+238 |             "earnings": settings.marketplace_enabled,
+239 |         },
+    |
+
+F821 Undefined name `ChannelType`
+   --> app/routers/health.py:237:59
+    |
+235 |         "features": {
+236 |             "marketplace": settings.marketplace_enabled,
+237 |             "allai": settings.allai_enabled or CHANNEL == ChannelType.aim_data,
+    |                                                           ^^^^^^^^^^^
+238 |             "earnings": settings.marketplace_enabled,
+239 |         },
+    |
+
+E402 Module level import not at top of file
+  --> app/routers/pii.py:13:1
+   |
+11 |   logger = logging.getLogger(__name__)
+12 |
+13 | / from app.services.pii_service import (
+14 | |     get_pii_service,
+15 | |     PIIService,
+16 | |     DEFAULT_SAMPLE_SIZE,
+17 | | )
+   | |_^
+18 |   from app.auth.api_key_auth import get_current_user, AuthenticatedUser
+19 |   from app.services.processing_service import get_processing_service, ProcessingService, ProcessingStatus
+   |
+
+E402 Module level import not at top of file
+  --> app/routers/pii.py:18:1
+   |
+16 |     DEFAULT_SAMPLE_SIZE,
+17 | )
+18 | from app.auth.api_key_auth import get_current_user, AuthenticatedUser
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+19 | from app.services.processing_service import get_processing_service, ProcessingService, ProcessingStatus
+20 | from app.services.serial_metering import metered, MeterDecision
+   |
+
+E402 Module level import not at top of file
+  --> app/routers/pii.py:19:1
+   |
+17 | )
+18 | from app.auth.api_key_auth import get_current_user, AuthenticatedUser
+19 | from app.services.processing_service import get_processing_service, ProcessingService, ProcessingStatus
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+20 | from app.services.serial_metering import metered, MeterDecision
+   |
+
+E402 Module level import not at top of file
+  --> app/routers/pii.py:20:1
+   |
+18 | from app.auth.api_key_auth import get_current_user, AuthenticatedUser
+19 | from app.services.processing_service import get_processing_service, ProcessingService, ProcessingStatus
+20 | from app.services.serial_metering import metered, MeterDecision
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+21 |
+22 | router = APIRouter()
+   |
+
+F401 [*] `app.models.raw_listing.RawListing` imported but unused
+  --> app/routers/raw_listings.py:24:36
+   |
+22 | from app.auth.api_key_auth import AuthenticatedUser, get_current_user
+23 | from app.config import settings
+24 | from app.models.raw_listing import RawListing
+   |                                    ^^^^^^^^^^
+25 | from app.routers.marketplace_publish import MarketplacePublishRequest, publish_via_signed_proxy
+26 | from app.schemas.raw_listings import (
+   |
+help: Remove unused import: `app.models.raw_listing.RawListing`
+
+E741 Ambiguous variable name: `l`
+   --> app/routers/raw_listings.py:306:44
+    |
+304 |     listings, total = svc.list_listings(status_filter=status, limit=limit, offset=offset)
+305 |     return RawListingListResponse(
+306 |         listings=[_listing_response(l) for l in listings],
+    |                                            ^
+307 |         total=total,
+308 |         limit=limit,
+    |
+
+E402 Module level import not at top of file
+   --> app/services/aim_market_oauth.py:136:1
+    |
+135 | # Suppress request-scoped credential/exception output before log buffers/export.
+136 | import logging
+    | ^^^^^^^^^^^^^^
+137 | from contextvars import ContextVar
+138 | from fastapi import HTTPException
+    |
+
+E402 Module level import not at top of file
+   --> app/services/aim_market_oauth.py:137:1
+    |
+135 | # Suppress request-scoped credential/exception output before log buffers/export.
+136 | import logging
+137 | from contextvars import ContextVar
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+138 | from fastapi import HTTPException
+139 | from fastapi.responses import JSONResponse
+    |
+
+E402 Module level import not at top of file
+   --> app/services/aim_market_oauth.py:138:1
+    |
+136 | import logging
+137 | from contextvars import ContextVar
+138 | from fastapi import HTTPException
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+139 | from fastapi.responses import JSONResponse
+140 | from fastapi.routing import APIRoute
+    |
+
+E402 Module level import not at top of file
+   --> app/services/aim_market_oauth.py:139:1
+    |
+137 | from contextvars import ContextVar
+138 | from fastapi import HTTPException
+139 | from fastapi.responses import JSONResponse
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+140 | from fastapi.routing import APIRoute
+    |
+
+E402 Module level import not at top of file
+   --> app/services/aim_market_oauth.py:140:1
+    |
+138 | from fastapi import HTTPException
+139 | from fastapi.responses import JSONResponse
+140 | from fastapi.routing import APIRoute
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+141 |
+142 | _sensitive_auth = ContextVar("aim_data_sensitive_auth", default=False)
+    |
+
+E402 Module level import not at top of file
+  --> app/services/batch_service.py:32:1
+   |
+30 | MAX_TOTAL_BYTES = 500 * 1024 * 1024 * 1024  # 500 GB (effectively unlimited for local app)
+31 |
+32 | from app.services.processing_service import PROCESSABLE_TYPES
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+33 |
+34 | # Build dotted extension set from the canonical PROCESSABLE_TYPES
+   |
+
+F401 [*] `app.services.allie_provider.AllieDisabledError` imported but unused
+  --> app/services/copilot_service.py:34:5
+   |
+32 | from app.services.metering_service import metering_service, UsageReport
+33 | from app.services.allie_provider import (
+34 |     AllieDisabledError,
+   |     ^^^^^^^^^^^^^^^^^^
+35 |     AllieUsage,
+36 |     get_allie_provider,
+   |
+help: Remove unused import: `app.services.allie_provider.AllieDisabledError`
+
+F541 [*] f-string without any placeholders
+   --> app/services/db_connector.py:138:31
+    |
+136 |             }
+137 |             sslmode = ssl_map.get(connection.ssl_mode, "prefer")
+138 |             args["options"] = f"-c statement_timeout=30000"
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+139 |             args["sslmode"] = sslmode
+140 |         elif connection.db_type == "mysql":
+    |
+help: Remove extraneous `f` prefix
+
+F541 [*] f-string without any placeholders
+   --> app/services/fulfillment_service.py:170:21
+    |
+168 |                     transfer_id, order_id,
+169 |                     "FILE_READ_ERROR",
+170 |                     f"Dataset file not found on disk",
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+171 |                 )
+172 |                 self._update_log(log_entry, "failed", error_code="FILE_READ_ERROR",
+    |
+help: Remove extraneous `f` prefix
+
+F541 [*] f-string without any placeholders
+   --> app/services/fulfillment_service.py:277:21
+    |
+275 |                     transfer_id, order_id,
+276 |                     "TRANSFER_ABORTED",
+277 |                     f"Internal error",
+    |                     ^^^^^^^^^^^^^^^^^
+278 |                 )
+279 |             except Exception:
+    |
+help: Remove extraneous `f` prefix
+
+F541 [*] f-string without any placeholders
+   --> app/services/import_service.py:238:31
+    |
+236 |                 logger.error("TOCTOU: path changed since import start: %s", e)
+237 |                 entry.status = "error"
+238 |                 entry.error = f"Security: path changed since import start"
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+239 |                 continue
+    |
+help: Remove extraneous `f` prefix
+
+E401 [*] Multiple imports on one line
+  --> app/services/process_worker.py:36:1
+   |
+34 | _mp_ctx = multiprocessing.get_context("spawn")
+35 |
+36 | import os, psutil
+   | ^^^^^^^^^^^^^^^^^
+37 | import pyarrow as pa
+   |
+help: Split imports
+
+E402 Module level import not at top of file
+  --> app/services/process_worker.py:36:1
+   |
+34 | _mp_ctx = multiprocessing.get_context("spawn")
+35 |
+36 | import os, psutil
+   | ^^^^^^^^^^^^^^^^^
+37 | import pyarrow as pa
+   |
+
+F811 [*] Redefinition of unused `os` from line 20
+  --> app/services/process_worker.py:36:8
+   |
+34 | _mp_ctx = multiprocessing.get_context("spawn")
+35 |
+36 | import os, psutil
+   |        ^^ `os` redefined here
+37 | import pyarrow as pa
+   |
+  ::: app/services/process_worker.py:20:8
+   |
+18 | import logging
+19 | import multiprocessing
+20 | import os
+   |        -- previous definition of `os` here
+21 | import signal
+22 | import sys
+   |
+help: Remove definition: `os`
+
+E402 Module level import not at top of file
+  --> app/services/process_worker.py:37:1
+   |
+36 | import os, psutil
+37 | import pyarrow as pa
+   | ^^^^^^^^^^^^^^^^^^^^
+38 |
+39 | logger = logging.getLogger(__name__)
+   |
+
+E401 [*] Multiple imports on one line
+  --> app/services/processing_service.py:12:1
+   |
+10 | import csv
+11 |
+12 | import os, psutil
+   | ^^^^^^^^^^^^^^^^^
+13 |
+14 | from app.config import settings
+   |
+help: Split imports
+
+F811 [*] Redefinition of unused `os` from line 3
+  --> app/services/processing_service.py:12:8
+   |
+10 | import csv
+11 |
+12 | import os, psutil
+   |        ^^ `os` redefined here
+13 |
+14 | from app.config import settings
+   |
+  ::: app/services/processing_service.py:3:8
+   |
+ 1 | import concurrent.futures  # S751: restore import dropped during de-vectorization
+ 2 | import logging
+ 3 | import os
+   |        -- previous definition of `os` here
+ 4 | import uuid
+ 5 | import asyncio
+   |
+help: Remove definition: `os`
+
+F401 [*] `app.config.settings` imported but unused
+  --> app/services/serial_metering.py:27:24
+   |
+25 | from fastapi import Depends, Request
+26 |
+27 | from app.config import settings
+   |                        ^^^^^^^^
+28 | from app.services.serial_store import (
+29 |     DEGRADED,
+   |
+help: Remove unused import: `app.config.settings`
+
+F402 Import `field` from line 21 shadowed by loop variable
+   --> app/services/streaming_processor.py:129:9
+    |
+128 |     arrays = []
+129 |     for field in ref_schema:
+    |         ^^^^^
+130 |         if field.name not in table.column_names:
+131 |             arrays.append(pa.nulls(table.num_rows, type=field.type))
+    |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:24:1
+   |
+22 | os.environ.setdefault("DATABASE_URL", f"sqlite:///{_test_data_dir}/test.db")
+23 |
+24 | import pytest
+   | ^^^^^^^^^^^^^
+25 |
+26 | # Ensure DB tables exist for all tests (create via SQLModel metadata)
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:27:1
+   |
+26 | # Ensure DB tables exist for all tests (create via SQLModel metadata)
+27 | from sqlmodel import SQLModel
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+28 | from app.core.database import get_engine
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:28:1
+   |
+26 | # Ensure DB tables exist for all tests (create via SQLModel metadata)
+27 | from sqlmodel import SQLModel
+28 | from app.core.database import get_engine
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+29 |
+30 | # Import all models so their tables are registered on SQLModel.metadata
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:31:1
+   |
+30 | # Import all models so their tables are registered on SQLModel.metadata
+31 | from app.models.dataset import DatasetRecord  # noqa: F401
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+32 | from app.models.billing import BillingUsage, BillingSubscription  # noqa: F401
+33 | from app.models.api_key import APIKey  # noqa: F401
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:32:1
+   |
+30 | # Import all models so their tables are registered on SQLModel.metadata
+31 | from app.models.dataset import DatasetRecord  # noqa: F401
+32 | from app.models.billing import BillingUsage, BillingSubscription  # noqa: F401
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+33 | from app.models.api_key import APIKey  # noqa: F401
+34 | from app.models.local_auth import LocalUser, LocalAPIKey  # noqa: F401  BQ-127
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:33:1
+   |
+31 | from app.models.dataset import DatasetRecord  # noqa: F401
+32 | from app.models.billing import BillingUsage, BillingSubscription  # noqa: F401
+33 | from app.models.api_key import APIKey  # noqa: F401
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+34 | from app.models.local_auth import LocalUser, LocalAPIKey  # noqa: F401  BQ-127
+35 | from app.models.user import User  # noqa: F401  BQ-VZ-MULTI-USER
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:34:1
+   |
+32 | from app.models.billing import BillingUsage, BillingSubscription  # noqa: F401
+33 | from app.models.api_key import APIKey  # noqa: F401
+34 | from app.models.local_auth import LocalUser, LocalAPIKey  # noqa: F401  BQ-127
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+35 | from app.models.user import User  # noqa: F401  BQ-VZ-MULTI-USER
+36 | from app.models.connectivity import ConnectivityTokenRecord  # noqa: F401  BQ-MCP-RAG
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:35:1
+   |
+33 | from app.models.api_key import APIKey  # noqa: F401
+34 | from app.models.local_auth import LocalUser, LocalAPIKey  # noqa: F401  BQ-127
+35 | from app.models.user import User  # noqa: F401  BQ-VZ-MULTI-USER
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+36 | from app.models.connectivity import ConnectivityTokenRecord  # noqa: F401  BQ-MCP-RAG
+37 | from app.models.state import Session, Message, UserPreferences  # noqa: F401  BQ-128
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:36:1
+   |
+34 | from app.models.local_auth import LocalUser, LocalAPIKey  # noqa: F401  BQ-127
+35 | from app.models.user import User  # noqa: F401  BQ-VZ-MULTI-USER
+36 | from app.models.connectivity import ConnectivityTokenRecord  # noqa: F401  BQ-MCP-RAG
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+37 | from app.models.state import Session, Message, UserPreferences  # noqa: F401  BQ-128
+38 | from app.models.fulfillment import FulfillmentLog  # noqa: F401  BQ-D1
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:37:1
+   |
+35 | from app.models.user import User  # noqa: F401  BQ-VZ-MULTI-USER
+36 | from app.models.connectivity import ConnectivityTokenRecord  # noqa: F401  BQ-MCP-RAG
+37 | from app.models.state import Session, Message, UserPreferences  # noqa: F401  BQ-128
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+38 | from app.models.fulfillment import FulfillmentLog  # noqa: F401  BQ-D1
+39 | from app.models.database_connection import DatabaseConnection  # noqa: F401  BQ-VZ-DB-CONNECT
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:38:1
+   |
+36 | from app.models.connectivity import ConnectivityTokenRecord  # noqa: F401  BQ-MCP-RAG
+37 | from app.models.state import Session, Message, UserPreferences  # noqa: F401  BQ-128
+38 | from app.models.fulfillment import FulfillmentLog  # noqa: F401  BQ-D1
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+39 | from app.models.database_connection import DatabaseConnection  # noqa: F401  BQ-VZ-DB-CONNECT
+40 | from app.models.raw_file import RawFile  # noqa: F401  BQ-VZ-RAW-LISTINGS
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:39:1
+   |
+37 | from app.models.state import Session, Message, UserPreferences  # noqa: F401  BQ-128
+38 | from app.models.fulfillment import FulfillmentLog  # noqa: F401  BQ-D1
+39 | from app.models.database_connection import DatabaseConnection  # noqa: F401  BQ-VZ-DB-CONNECT
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+40 | from app.models.raw_file import RawFile  # noqa: F401  BQ-VZ-RAW-LISTINGS
+41 | from app.models.raw_listing import RawListing  # noqa: F401  BQ-VZ-RAW-LISTINGS
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:40:1
+   |
+38 | from app.models.fulfillment import FulfillmentLog  # noqa: F401  BQ-D1
+39 | from app.models.database_connection import DatabaseConnection  # noqa: F401  BQ-VZ-DB-CONNECT
+40 | from app.models.raw_file import RawFile  # noqa: F401  BQ-VZ-RAW-LISTINGS
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+41 | from app.models.raw_listing import RawListing  # noqa: F401  BQ-VZ-RAW-LISTINGS
+42 | from app.models.notification import Notification  # noqa: F401  BQ-VZ-NOTIFICATIONS
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:41:1
+   |
+39 | from app.models.database_connection import DatabaseConnection  # noqa: F401  BQ-VZ-DB-CONNECT
+40 | from app.models.raw_file import RawFile  # noqa: F401  BQ-VZ-RAW-LISTINGS
+41 | from app.models.raw_listing import RawListing  # noqa: F401  BQ-VZ-RAW-LISTINGS
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+42 | from app.models.notification import Notification  # noqa: F401  BQ-VZ-NOTIFICATIONS
+43 | from app.models.cached_requests import CachedRequest, ResponseDraft  # noqa: F401  BQ-VZ-REQUEST-ENGINE
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:42:1
+   |
+40 | from app.models.raw_file import RawFile  # noqa: F401  BQ-VZ-RAW-LISTINGS
+41 | from app.models.raw_listing import RawListing  # noqa: F401  BQ-VZ-RAW-LISTINGS
+42 | from app.models.notification import Notification  # noqa: F401  BQ-VZ-NOTIFICATIONS
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+43 | from app.models.cached_requests import CachedRequest, ResponseDraft  # noqa: F401  BQ-VZ-REQUEST-ENGINE
+44 | from app.models.s3_connection import S3Connection  # noqa: F401
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:43:1
+   |
+41 | from app.models.raw_listing import RawListing  # noqa: F401  BQ-VZ-RAW-LISTINGS
+42 | from app.models.notification import Notification  # noqa: F401  BQ-VZ-NOTIFICATIONS
+43 | from app.models.cached_requests import CachedRequest, ResponseDraft  # noqa: F401  BQ-VZ-REQUEST-ENGINE
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+44 | from app.models.s3_connection import S3Connection  # noqa: F401
+45 | from app.models.s3_object_metadata import S3ObjectMetadata  # noqa: F401
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:44:1
+   |
+42 | from app.models.notification import Notification  # noqa: F401  BQ-VZ-NOTIFICATIONS
+43 | from app.models.cached_requests import CachedRequest, ResponseDraft  # noqa: F401  BQ-VZ-REQUEST-ENGINE
+44 | from app.models.s3_connection import S3Connection  # noqa: F401
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+45 | from app.models.s3_object_metadata import S3ObjectMetadata  # noqa: F401
+46 | from app.models.s3_scan_job import S3ScanJob  # noqa: F401
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:45:1
+   |
+43 | from app.models.cached_requests import CachedRequest, ResponseDraft  # noqa: F401  BQ-VZ-REQUEST-ENGINE
+44 | from app.models.s3_connection import S3Connection  # noqa: F401
+45 | from app.models.s3_object_metadata import S3ObjectMetadata  # noqa: F401
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+46 | from app.models.s3_scan_job import S3ScanJob  # noqa: F401
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:46:1
+   |
+44 | from app.models.s3_connection import S3Connection  # noqa: F401
+45 | from app.models.s3_object_metadata import S3ObjectMetadata  # noqa: F401
+46 | from app.models.s3_scan_job import S3ScanJob  # noqa: F401
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+47 |
+48 | SQLModel.metadata.create_all(get_engine())
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:51:1
+   |
+50 | # Also create tables on the legacy engine (sessions, messages, user_preferences)
+51 | from app.core.database import get_legacy_engine
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+52 | SQLModel.metadata.create_all(get_legacy_engine())
+   |
+
+E402 Module level import not at top of file
+  --> tests/conftest.py:55:1
+   |
+54 | # Load error registry so AIMDataError returns correct HTTP status codes
+55 | from app.core.errors.registry import error_registry
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+56 | error_registry.load()
+   |
+
+F541 [*] f-string without any placeholders
+   --> tests/test_beta_readiness.py:566:34
+    |
+564 |                 else:
+565 |                     suite.record(prefix, False, time.time() - t0,
+566 |                                  f"Unexpected 2xx with no dataset_id")
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+567 |             else:
+568 |                 suite.record(prefix, False, time.time() - t0,
+    |
+help: Remove extraneous `f` prefix
+
+F541 [*] f-string without any placeholders
+   --> tests/test_beta_readiness.py:666:30
+    |
+664 |             else:
+665 |                 suite.record("negative/empty-file", False, time.time() - t0,
+666 |                              f"2xx but no dataset_id")
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^
+667 |         else:
+668 |             suite.record("negative/empty-file", False, time.time() - t0,
+    |
+help: Remove extraneous `f` prefix
+
+F541 [*] f-string without any placeholders
+   --> tests/test_beta_readiness.py:878:18
+    |
+876 |     lines.append("## Summary")
+877 |     lines.append("")
+878 |     lines.append(f"| Metric | Count |")
+    |                  ^^^^^^^^^^^^^^^^^^^^^
+879 |     lines.append(f"|--------|-------|")
+880 |     lines.append(f"| Total  | {total} |")
+    |
+help: Remove extraneous `f` prefix
+
+F541 [*] f-string without any placeholders
+   --> tests/test_beta_readiness.py:879:18
+    |
+877 |     lines.append("")
+878 |     lines.append(f"| Metric | Count |")
+879 |     lines.append(f"|--------|-------|")
+    |                  ^^^^^^^^^^^^^^^^^^^^^
+880 |     lines.append(f"| Total  | {total} |")
+881 |     lines.append(f"| Passed | {passed} |")
+    |
+help: Remove extraneous `f` prefix
+
+F541 [*] f-string without any placeholders
+   --> tests/test_beta_readiness.py:968:11
+    |
+966 |     vz_version = _get_vz_version(base_url)
+967 |
+968 |     print(f"\nAIM Data Stress Test #2 — Beta-Readiness Integration Tests")
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+969 |     print(f"Target: {base_url}")
+970 |     print(f"VZ Version: {vz_version}")
+    |
+help: Remove extraneous `f` prefix
+
+F541 [*] f-string without any placeholders
+    --> tests/test_beta_readiness.py:1589:20
+     |
+1587 |         num_files = 6
+1588 |         for i in range(num_files):
+1589 |             rows = f"col_x,col_y,col_z\n"
+     |                    ^^^^^^^^^^^^^^^^^^^^^^
+1590 |             for j in range(50):
+1591 |                 rows += f"v{i}_{j},{j * i},{j % 3}\n"
+     |
+help: Remove extraneous `f` prefix
+
+F541 [*] f-string without any placeholders
+    --> tests/test_beta_readiness.py:1797:19
+     |
+1796 |         def _upload_one(idx: int) -> Optional[str]:
+1797 |             csv = f"x,y,z\n"
+     |                   ^^^^^^^^^^
+1798 |             for j in range(500):
+1799 |                 csv += f"{idx}_{j},{j * idx},{j % 3}\n"
+     |
+help: Remove extraneous `f` prefix
+
+E712 Avoid equality comparisons to `True`; use `doc_service.is_document_type(Path("test.pdf")):` for truth checks
+  --> tests/test_documents.py:31:12
+   |
+29 | def test_is_document_type(doc_service):
+30 |     """Test document type detection."""
+31 |     assert doc_service.is_document_type(Path("test.pdf")) == True
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+32 |     assert doc_service.is_document_type(Path("test.docx")) == True
+33 |     assert doc_service.is_document_type(Path("test.csv")) == False
+   |
+help: Replace with `doc_service.is_document_type(Path("test.pdf"))`
+
+E712 Avoid equality comparisons to `True`; use `doc_service.is_document_type(Path("test.docx")):` for truth checks
+  --> tests/test_documents.py:32:12
+   |
+30 |     """Test document type detection."""
+31 |     assert doc_service.is_document_type(Path("test.pdf")) == True
+32 |     assert doc_service.is_document_type(Path("test.docx")) == True
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+33 |     assert doc_service.is_document_type(Path("test.csv")) == False
+   |
+help: Replace with `doc_service.is_document_type(Path("test.docx"))`
+
+E712 Avoid equality comparisons to `False`; use `not doc_service.is_document_type(Path("test.csv")):` for false checks
+  --> tests/test_documents.py:33:12
+   |
+31 |     assert doc_service.is_document_type(Path("test.pdf")) == True
+32 |     assert doc_service.is_document_type(Path("test.docx")) == True
+33 |     assert doc_service.is_document_type(Path("test.csv")) == False
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: Replace with `not doc_service.is_document_type(Path("test.csv"))`
+
+E712 Avoid equality comparisons to `True`; use `doc_service.is_spreadsheet_type(Path("test.xlsx")):` for truth checks
+  --> tests/test_documents.py:38:12
+   |
+36 | def test_is_spreadsheet_type(doc_service):
+37 |     """Test spreadsheet type detection."""
+38 |     assert doc_service.is_spreadsheet_type(Path("test.xlsx")) == True
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+39 |     assert doc_service.is_spreadsheet_type(Path("test.xls")) == True
+40 |     assert doc_service.is_spreadsheet_type(Path("test.csv")) == False
+   |
+help: Replace with `doc_service.is_spreadsheet_type(Path("test.xlsx"))`
+
+E712 Avoid equality comparisons to `True`; use `doc_service.is_spreadsheet_type(Path("test.xls")):` for truth checks
+  --> tests/test_documents.py:39:12
+   |
+37 |     """Test spreadsheet type detection."""
+38 |     assert doc_service.is_spreadsheet_type(Path("test.xlsx")) == True
+39 |     assert doc_service.is_spreadsheet_type(Path("test.xls")) == True
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+40 |     assert doc_service.is_spreadsheet_type(Path("test.csv")) == False
+   |
+help: Replace with `doc_service.is_spreadsheet_type(Path("test.xls"))`
+
+E712 Avoid equality comparisons to `False`; use `not doc_service.is_spreadsheet_type(Path("test.csv")):` for false checks
+  --> tests/test_documents.py:40:12
+   |
+38 |     assert doc_service.is_spreadsheet_type(Path("test.xlsx")) == True
+39 |     assert doc_service.is_spreadsheet_type(Path("test.xls")) == True
+40 |     assert doc_service.is_spreadsheet_type(Path("test.csv")) == False
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: Replace with `not doc_service.is_spreadsheet_type(Path("test.csv"))`
+
+F401 [*] `unittest.mock.patch` imported but unused
+  --> tests/test_ext_api.py:11:27
+   |
+10 | import pytest
+11 | from unittest.mock import patch
+   |                           ^^^^^
+12 |
+13 | from fastapi.testclient import TestClient
+   |
+help: Remove unused import: `unittest.mock.patch`
+
+E712 Avoid equality comparisons to `True`; use `id_profile['is_unique']:` for truth checks
+  --> tests/test_metadata.py:37:12
+   |
+35 |     id_profile = next(p for p in profiles if p['name'] == 'id')
+36 |     assert id_profile['null_percentage'] == 0
+37 |     assert id_profile['is_unique'] == True
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+38 |     assert id_profile['semantic_type'] == 'id'
+   |
+help: Replace with `id_profile['is_unique']`
+
+E712 Avoid equality comparisons to `True`; use `data["pii_found"]:` for truth checks
+   --> tests/test_pii.py:142:12
+    |
+140 |     data = response.json()
+141 |     assert "findings" in data
+142 |     assert data["pii_found"] == True
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+help: Replace with `data["pii_found"]`
+
+F401 [*] `unittest.mock.patch` imported but unused
+  --> tests/test_serial_metering.py:9:49
+   |
+ 7 | import pytest
+ 8 | from decimal import Decimal
+ 9 | from unittest.mock import AsyncMock, MagicMock, patch
+   |                                                 ^^^^^
+10 |
+11 | from app.services.serial_metering import (
+   |
+help: Remove unused import: `unittest.mock.patch`
+
+E712 Avoid equality comparisons to `True`; use `is_valid:` for truth checks
+  --> tests/test_sql.py:22:12
+   |
+20 |     """Test that SELECT queries are allowed."""
+21 |     is_valid, error = sql_service.validate_query("SELECT * FROM some_table")
+22 |     assert is_valid == True
+   |            ^^^^^^^^^^^^^^^^
+23 |     assert error is None
+   |
+help: Replace with `is_valid`
+
+E712 Avoid equality comparisons to `True`; use `is_valid:` for truth checks
+  --> tests/test_sql.py:30:12
+   |
+28 |     query = "WITH cte AS (SELECT * FROM table1) SELECT * FROM cte"
+29 |     is_valid, error = sql_service.validate_query(query)
+30 |     assert is_valid == True
+   |            ^^^^^^^^^^^^^^^^
+   |
+help: Replace with `is_valid`
+
+E712 Avoid equality comparisons to `False`; use `not is_valid:` for false checks
+  --> tests/test_sql.py:36:12
+   |
+34 |     """Test that DROP queries are blocked."""
+35 |     is_valid, error = sql_service.validate_query("DROP TABLE users")
+36 |     assert is_valid == False
+   |            ^^^^^^^^^^^^^^^^^
+37 |     # It fails the whitelist check first
+38 |     assert "only select" in error.lower() or "blocked" in error.lower()
+   |
+help: Replace with `not is_valid`
+
+E712 Avoid equality comparisons to `False`; use `not is_valid:` for false checks
+  --> tests/test_sql.py:44:12
+   |
+42 |     """Test that DELETE queries are blocked."""
+43 |     is_valid, error = sql_service.validate_query("DELETE FROM users WHERE id = 1")
+44 |     assert is_valid == False
+   |            ^^^^^^^^^^^^^^^^^
+   |
+help: Replace with `not is_valid`
+
+E712 Avoid equality comparisons to `False`; use `not is_valid:` for false checks
+  --> tests/test_sql.py:50:12
+   |
+48 |     """Test that INSERT queries are blocked."""
+49 |     is_valid, error = sql_service.validate_query("INSERT INTO users VALUES (1, 'test')")
+50 |     assert is_valid == False
+   |            ^^^^^^^^^^^^^^^^^
+   |
+help: Replace with `not is_valid`
+
+E712 Avoid equality comparisons to `False`; use `not is_valid:` for false checks
+  --> tests/test_sql.py:56:12
+   |
+54 |     """Test that UPDATE queries are blocked."""
+55 |     is_valid, error = sql_service.validate_query("UPDATE users SET name = 'test'")
+56 |     assert is_valid == False
+   |            ^^^^^^^^^^^^^^^^^
+   |
+help: Replace with `not is_valid`
+
+E712 Avoid equality comparisons to `False`; use `not is_valid:` for false checks
+  --> tests/test_sql.py:62:12
+   |
+60 |     """Test that COPY queries are blocked."""
+61 |     is_valid, error = sql_service.validate_query("COPY users TO '/tmp/data.csv'")
+62 |     assert is_valid == False
+   |            ^^^^^^^^^^^^^^^^^
+   |
+help: Replace with `not is_valid`
+
+E712 Avoid equality comparisons to `False`; use `not is_valid:` for false checks
+  --> tests/test_sql.py:68:12
+   |
+66 |     """Test that direct file read functions are blocked."""
+67 |     is_valid, error = sql_service.validate_query("SELECT * FROM read_csv('/etc/passwd')")
+68 |     assert is_valid == False
+   |            ^^^^^^^^^^^^^^^^^
+   |
+help: Replace with `not is_valid`
+
+E712 Avoid equality comparisons to `False`; use `not is_valid:` for false checks
+  --> tests/test_sql.py:74:12
+   |
+72 |     """Test that file paths in queries are blocked."""
+73 |     is_valid, error = sql_service.validate_query("SELECT '/etc/passwd' as path")
+74 |     assert is_valid == False
+   |            ^^^^^^^^^^^^^^^^^
+   |
+help: Replace with `not is_valid`
+
+E712 Avoid equality comparisons to `False`; use `not is_valid:` for false checks
+  --> tests/test_sql.py:80:12
+   |
+78 |     """Test that empty queries are rejected."""
+79 |     is_valid, error = sql_service.validate_query("")
+80 |     assert is_valid == False
+   |            ^^^^^^^^^^^^^^^^^
+81 |     assert "empty" in error.lower()
+   |
+help: Replace with `not is_valid`
+
+E712 Avoid equality comparisons to `True`; use `data["valid"]:` for truth checks
+   --> tests/test_sql.py:110:12
+    |
+108 |     assert response.status_code == 200
+109 |     data = response.json()
+110 |     assert data["valid"] == True
+    |            ^^^^^^^^^^^^^^^^^^^^^
+    |
+help: Replace with `data["valid"]`
+
+E712 Avoid equality comparisons to `False`; use `not data["valid"]:` for false checks
+   --> tests/test_sql.py:120:12
+    |
+118 |     assert response.status_code == 200
+119 |     data = response.json()
+120 |     assert data["valid"] == False
+    |            ^^^^^^^^^^^^^^^^^^^^^^
+121 |     assert data["error"] is not None
+    |
+help: Replace with `not data["valid"]`
+
+Found 94 errors.
+[*] 23 fixable with the `--fix` option (20 hidden fixes can be enabled with the `--unsafe-fixes` option).

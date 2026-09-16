@@ -278,9 +278,10 @@ class PIIService:
 
         Return no matches or diagnostic text. Detector failure is never a pass.
         """
-        from app.services.preview_content_policy import PolicyError, walk_selection
+        from app.services.preview_content_policy import PolicyError, walk_selection, detector_identity
 
         try:
+            detector_identity()
             if language != "en" or "en" not in self.analyzer.supported_languages:
                 raise PolicyError("detector_unavailable")
             for text, _ in walk_selection(rows):

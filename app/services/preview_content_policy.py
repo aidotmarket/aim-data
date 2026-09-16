@@ -19,12 +19,32 @@ from app.services.dataset_merkle_service import (
 
 POLICY = "aim-preview-policy-v1"
 VERSION = "1.0.0"
+DETECTOR_IDENTITY = {
+    "presidio-analyzer": "2.2.362",
+    "spacy": "3.7.2",
+    "en-core-web-sm": "3.7.1",
+}
+
+
+def detector_identity():
+    """Local evidence only. Unknown detector/model versions cannot attest v1."""
+    from importlib.metadata import version
+
+    try:
+        actual = {name: version(name) for name in DETECTOR_IDENTITY}
+        if actual != DETECTOR_IDENTITY:
+            raise ValueError
+        return actual
+    except Exception:
+        raise PolicyError("detector_unavailable") from None
+
+
 # Predicates are versioned protocol choices, not an assurance of legal clearance.
 RULES = {
-    "secret": r"(?i)(-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\b(?:gh[pousr]_|github_pat_|sk_live_|sk_test_|xox[baprs]-)|\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|authorization)\s*[:=]|\bBearer\s+\S+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)",
+    "secret": r"(?i)(-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\b(?:gh[pousr]_|github_pat_|sk_live_|sk_test_|sk-(?:proj-)?|xox[baprs]-)|\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|authorization)\s*[:=]|\bBearer\s+\S+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)",
     "personal_data": r"(?i)([\w.+-]+@[\w.-]+\.[a-z]{2,}|\b\d{3}[- ]?\d{2}[- ]?\d{4}\b|\b(?:\d[ -]?){10,19}\b|\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b|\b(?:\d{1,3}\.){3}\d{1,3}\b)",
     "executable": r"(?i)(<\s*/?\s*[a-z][^>]*>|\bon[a-z]+\s*=|\b(?:javascript|vbscript|data)\s*:|\b(?:Sub\s+Auto_Open|AutoOpen|Workbook_Open|CreateObject|Shell\s*\())",
-    "url": r"(?i)(\b[a-z][a-z0-9+.-]*://|\bwww\.|\b(?:mailto|tel|file|javascript|data):|\]\s*\(|(?:^|\s)//[a-z0-9])",
+    "url": r"(?i)(\b[a-z][a-z0-9+.-]*:|\bwww\.|\b(?:mailto|tel|file|javascript|data):|\]\s*\(|(?:^|\s)//[a-z0-9])",
     "restricted_content": r"(?i)(\bcopyright\b|©|all rights reserved|licensed under|not for redistribution|reproduced (?:from|with)|excerpt (?:from|of)|attribution required)",
 }
 COMPILED = {code: re.compile(pattern) for code, pattern in RULES.items()}
@@ -133,8 +153,49 @@ def scan_attestation_digest(signed_proof_records):
         raise PolicyError("unsigned_proofs")
     try:
         for proof in signed_proof_records:
-            if set(proof) - allowed or len(decode_base64url(proof["signature"])) != 64:
+            if set(proof) != allowed or len(decode_base64url(proof["signature"])) != 64:
                 raise PolicyError("unsigned_proofs")
+            from app.models.dataset_commitment_schemas import CommitmentProof
+            from app.services.preview_package_service import (
+                canonical_uuid,
+                MEDIA_TYPE,
+                PROFILE,
+            )
+            from app.services.preview_origin_service import validate_url
+
+            canonical_uuid(proof["proof_id"])
+            CommitmentProof.model_validate(
+                {
+                    k: proof[k]
+                    for k in (
+                        "base_row_digest",
+                        "duplicate_ordinal",
+                        "leaf_index",
+                        "tree_size",
+                        "siblings",
+                    )
+                }
+            )
+            validate_url(proof["preview_package_url"])
+            if (
+                proof["package_media_type"] != MEDIA_TYPE
+                or proof["package_profile"] != PROFILE
+                or type(proof["package_byte_ceiling"]) is not int
+                or not 0 < proof["package_byte_ceiling"] <= 1048576
+                or proof["scan_policy"] != POLICY
+                or proof["scan_policy_version"] != VERSION
+                or proof["scan_verdict"] != "passed"
+                or proof["signature_algorithm"] != "ed25519"
+                or canonical_rfc3339_utc(proof["scanned_at"]) != proof["scanned_at"]
+                or not re.fullmatch(
+                    r"[0-9a-f-]{36}:[0-9a-f]{64}", proof["signer_reference"]
+                )
+            ):
+                raise PolicyError("unsigned_proofs")
+            canonical_uuid(proof["signer_reference"][:36])
+        digest = sampled_leaf_list_digest(signed_proof_records)
+        if any(p["sampled_leaf_list_digest"] != digest for p in signed_proof_records):
+            raise PolicyError("unsigned_proofs")
         return hashlib.sha256(
             b"aim-preview-scan-attestation-v1\0"
             + canonical_json_bytes(signed_proof_records)
@@ -144,9 +205,22 @@ def scan_attestation_digest(signed_proof_records):
 
 
 def scan_selection(
-    rows, proofs, *, detector, scanned_at, rights_confirmed, language="en"
+    rows,
+    proofs,
+    *,
+    detector,
+    scanned_at,
+    rights_confirmed,
+    public_preview_permission=False,
+    restricted_content_confirmed=False,
+    language="en",
 ):
-    if rights_confirmed is not True or len(rows) != len(proofs):
+    if (
+        rights_confirmed is not True
+        or public_preview_permission is not True
+        or restricted_content_confirmed is not True
+        or len(rows) != len(proofs)
+    ):
         raise PolicyError("approval_required")
     try:
         # Complete detector pass precedes deterministic predicates, even for long text.

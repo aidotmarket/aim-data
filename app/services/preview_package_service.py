@@ -111,6 +111,203 @@ def sample_hash(entries):
     ).hexdigest()
 
 
+def expected_manifest_fixture(envelope, descriptors, package_url):
+    """Conservative pre-T whole-manifest budget, including duplicated evidence.
+
+    Synthetic bounded metadata only: this is neither a signature nor a grant.
+    Chunk 2c must also check actual complete candidate bytes after signing.
+    """
+    from app.services.preview_origin_service import validate_url
+
+    validate_url(package_url)
+    identifier = "00000000-0000-0000-0000-000000000001"
+    digest, signature = "A" * 43, "A" * 86
+    timestamp = "2026-09-17T12:00:00.000000Z"
+    signer = identifier + ":" + "a" * 64
+    sibling = {"hash": digest, "direction": "right"}
+    proofs = []
+    for entry in envelope["entries"]:
+        proofs.append(
+            {
+                **{k: v for k, v in entry.items() if k != "row"},
+                "preview_package_url": package_url,
+                "package_media_type": MEDIA_TYPE,
+                "package_profile": PROFILE,
+                "package_byte_ceiling": CAPS["envelope_bytes"],
+                "scan_policy": "aim-preview-policy-v1",
+                "scan_policy_version": "1.0.0",
+                "scan_verdict": "passed",
+                "scanned_at": timestamp,
+                "sampled_leaf_list_digest": digest,
+                "signer_reference": signer,
+                "signature_algorithm": "ed25519",
+                "signature": signature,
+            }
+        )
+    commitment = {
+        "profile": "aim-dataset-merkle-v1",
+        "commitment_id": identifier,
+        "listing_id": "x" * 255,
+        "seller_dataset_version": "x" * 255,
+        "schema_digest": digest,
+        "dataset_merkle_root": digest,
+        "leaf_count": (1 << 53) - 1,
+        "canonicalization_profile": "aim-dataset-merkle-v1",
+        "hash_algorithm": "sha256",
+        "seller_attestation_digest": digest,
+        "aim_data_signer_reference": signer,
+        "signature_algorithm": "ed25519",
+        "seller_signature": signature,
+        "signed_at": timestamp,
+        "proofs": proofs,
+    }
+    binding = {
+        k: "x" * 255
+        for k in (
+            "listing_id",
+            "seller_id",
+            "approved_by",
+            "listing_version_id",
+            "content_revision",
+            "source_revision",
+            "summary_approval_id",
+            "summary_id",
+            "seller_dataset_version",
+        )
+    }
+    binding.update(
+        {
+            k: identifier
+            for k in (
+                "request_id",
+                "expected_current_disclosure_id",
+                "disclosure_version",
+                "supersedes_disclosure_version",
+                "commitment_id",
+            )
+        }
+    )
+    binding.update(
+        {
+            k: "a" * 64
+            for k in (
+                "sample_hash",
+                "aggregate_hash",
+                "summary_hash",
+                "render_hash",
+                "rights_basis_digest",
+                "scan_attestation_digest",
+            )
+        }
+    )
+    binding.update(
+        profile="aim-preview-disclosure-v1",
+        action="approve",
+        sample_decision="approved",
+        package_profile=PROFILE,
+        preview_type="table",
+        content_type="tabular",
+        schema_digest=digest,
+        schema_descriptors=descriptors,
+        selected_fields=[d[0] for d in descriptors],
+        proof_ids=[p["proof_id"] for p in proofs],
+        sampled_leaf_list_digest=digest,
+        rights_basis_code="other_authorized",
+        public_preview_permission=True,
+        approved_at=timestamp,
+        last_attested_by_seller_at=timestamp,
+        update_cadence_days=(1 << 53) - 1,
+        approval_expires_at=timestamp,
+        signer_reference=signer,
+        signature_algorithm="ed25519",
+        signature_profile="aim-preview-disclosure-signature-v1",
+    )
+    log_entry = {k: v for k, v in commitment.items() if k not in {"proofs", "profile"}}
+    log_entry.update(
+        appended_at=timestamp,
+        previous_commitment_id=identifier,
+        transparency_sequence=(1 << 53) - 1,
+    )
+    fixture = {
+        "profile": "aim-listing-preview-v1",
+        "package_profile": PROFILE,
+        **{
+            k: binding[k]
+            for k in (
+                "listing_id",
+                "listing_version_id",
+                "content_revision",
+                "source_revision",
+                "summary_approval_id",
+                "summary_hash",
+                "render_hash",
+                "disclosure_version",
+                "sample_hash",
+                "aggregate_hash",
+            )
+        },
+        "approval_status": "approved",
+        "preview_type": "table",
+        "content_type": "tabular",
+        "columns": [{"name": d[0], "type": d[1]} for d in descriptors],
+        "selected_fields": [d[0] for d in descriptors],
+        "commitment": commitment,
+        "schema_descriptors": descriptors,
+        "proofs": proofs,
+        "checkpoint": {
+            "log_id": "x" * 120,
+            "tree_size": (1 << 53) - 1,
+            "root_hash": digest,
+            "checkpoint_at": timestamp,
+            "key_id": "x" * 255,
+            "public_key_algorithm": "ed25519",
+            "signature": signature,
+        },
+        "log_evidence": {
+            "entry": log_entry,
+            "inclusion_path": [sibling] * 63,
+            "consistency_path": [digest] * 63,
+            "previous_tree_size": (1 << 53) - 1,
+            "previous_root": digest,
+        },
+        "approval": {
+            "platform_envelope": {
+                "profile": "aim-preview-platform-envelope-v1",
+                "key_id": "x" * 255,
+                "signature_algorithm": "ed25519",
+                "binding": binding,
+                "seller_signature": signature,
+                "signer_keys": [
+                    {
+                        "key_id": identifier,
+                        "algorithm": "ed25519",
+                        "public_key": digest,
+                        "status": "active",
+                        "valid_from": timestamp,
+                        "valid_until": timestamp,
+                        "fingerprint": "a" * 64,
+                    }
+                ]
+                * 4,
+                "signature": signature,
+            }
+        },
+        "package": {
+            "url": package_url,
+            "media_type": MEDIA_TYPE,
+            "byte_ceiling": CAPS["envelope_bytes"],
+        },
+        "last_attested_by_seller_at": timestamp,
+        "stale": False,
+        "freshness_stale_at": timestamp,
+        "freshness_expires_at": timestamp,
+        "generated_at": timestamp,
+        "valid_until": timestamp,
+        "limits": CAPS,
+    }
+    return canonical_json_bytes(fixture)
+
+
 def _logical_record(triples, fields, *, for_scan=False):
     result = {}
     for (name, tag, value), descriptor in zip(triples, fields, strict=True):
@@ -229,10 +426,13 @@ def decode_envelope(raw, *, schema, root, manifest_bytes, content_encoding="iden
         raise PackageError("invalid_package") from None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class PreparedPackage:
     payload: bytes
     scan: dict
+
+    def __init__(self, *args, **kwargs):
+        raise PackageError("approval_required")
 
 
 class CommitmentPreviewBuilder:
@@ -289,6 +489,9 @@ class CommitmentPreviewBuilder:
         scanned_at,
         rights_confirmed,
         manifest_bytes,
+        package_url,
+        public_preview_permission=False,
+        restricted_content_confirmed=False,
     ):
         if (
             not indices
@@ -313,6 +516,14 @@ class CommitmentPreviewBuilder:
         payload = validate_envelope(
             envelope, self.schema, self.tree.root, manifest_bytes=manifest_bytes
         )
+        limit(
+            "manifest_bytes",
+            len(
+                expected_manifest_fixture(
+                    envelope, self.schema.descriptors, package_url
+                )
+            ),
+        )
         rows = [
             _logical_record(
                 json.loads(self.schema.canonical_row(e["row"])),
@@ -327,8 +538,14 @@ class CommitmentPreviewBuilder:
             detector=detector,
             scanned_at=scanned_at,
             rights_confirmed=rights_confirmed,
+            public_preview_permission=public_preview_permission,
+            restricted_content_confirmed=restricted_content_confirmed,
         )
-        return PreparedPackage(payload, scan)
+        # Only the builder creates this handle, after every cap, proof and scan.
+        package = object.__new__(PreparedPackage)
+        object.__setattr__(package, "payload", payload)
+        object.__setattr__(package, "scan", scan)
+        return package
 
 
 @contextlib.contextmanager

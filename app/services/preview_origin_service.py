@@ -24,7 +24,7 @@ HEADER_KEYS = (
     "access-control-allow-headers",
     "access-control-allow-credentials",
 )
-OPERATED_HOSTS = frozenset({"ai.market", "aimarket.ai", "vectoraiz.com"})
+OPERATED_HOSTS = frozenset({"ai.market"})
 PATH = re.compile(r"/previews/([0-9a-f-]{36})/([0-9a-f]{64})\.json\Z")
 
 
@@ -57,9 +57,15 @@ def validate_url(url, *, operated_hosts=()):
             or parsed.port == 0
         ):
             raise ValueError
+        from app.config import settings
+
+        configured = {
+            urlsplit(settings.ai_market_url).hostname,
+            urlsplit(settings.aimarket_url).hostname,
+        } - {None}
         if any(
             host == h or host.endswith("." + h)
-            for h in OPERATED_HOSTS | frozenset(operated_hosts)
+            for h in OPERATED_HOSTS | frozenset(operated_hosts) | configured
         ):
             raise OriginError("platform_origin")
         if host == "r2.dev" or host.endswith(".r2.dev"):
@@ -70,13 +76,28 @@ def validate_url(url, *, operated_hosts=()):
             if "." not in host or not re.fullmatch(r"[a-z0-9.-]+", host):
                 raise ValueError
         else:
-            if not address.is_global:
+            if not is_public_address(address):
                 raise OriginError("private_address")
         return parsed
     except OriginError:
         raise
     except (ValueError, TypeError):
         raise OriginError("invalid_url") from None
+
+
+def is_public_address(address):
+    return (
+        address.is_global
+        and not address.is_multicast
+        and not address.is_reserved
+        and not address.is_loopback
+        and not address.is_link_local
+        and not address.is_unspecified
+        and not (
+            address.version == 6
+            and (address.ipv4_mapped or address.sixtofour or address.teredo)
+        )
+    )
 
 
 def public_addresses(parsed):
@@ -86,7 +107,7 @@ def public_addresses(parsed):
         )
         addresses = list(dict.fromkeys(answer[4][0] for answer in answers))
         if not addresses or any(
-            not ipaddress.ip_address(a).is_global for a in addresses
+            not is_public_address(ipaddress.ip_address(a)) for a in addresses
         ):
             raise OriginError("private_address")
         return addresses

@@ -1,0 +1,88 @@
+[
+  {
+    "mutation": "sample_hash_domain_byte",
+    "mutated": false,
+    "source_sha256": "a5e2af684813c5eb1b463a2ecf3c2345c21f79061a0219ac3e3d54019fe86257",
+    "exit_status": 0,
+    "outcomes": {
+      "tests/test_preview_package_service.py::test_sample_hash_vectors": "passed"
+    },
+    "log_sha256": "d26ae6c2b4c2dd2ec8f27ad7522aa40b5f8521b9f88ce08aeb30d1282f1f485a"
+  },
+  {
+    "mutation": "sample_hash_domain_byte",
+    "mutated": true,
+    "source_sha256": "fd6538ec03d118837178b10c106cf9f37f8938f746a0434366470c88ecb86734",
+    "exit_status": 1,
+    "outcomes": {
+      "tests/test_preview_package_service.py::test_sample_hash_vectors": "failure"
+    },
+    "log_sha256": "9850eec5cbdc8096bf4f02646473b1a1c5a17db097f3df14317fa63904ebe17c"
+  },
+  {
+    "mutation": "cap_comparison_flipped",
+    "mutated": false,
+    "source_sha256": "a5e2af684813c5eb1b463a2ecf3c2345c21f79061a0219ac3e3d54019fe86257",
+    "exit_status": 0,
+    "outcomes": {
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-canonical_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-depth]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-envelope_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-fields]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-manifest_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-nodes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-rows]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-siblings]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-canonical_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-depth]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-envelope_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-fields]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-manifest_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-nodes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-rows]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-siblings]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-canonical_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-depth]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-envelope_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-fields]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-manifest_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-nodes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-rows]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-siblings]": "passed"
+    },
+    "log_sha256": "9decfba1187b7abcfd8f5cc32e397198844421fa72ad2e25d94e3fe7b5248cae"
+  },
+  {
+    "mutation": "cap_comparison_flipped",
+    "mutated": true,
+    "source_sha256": "a1a0708b150c2000a3e5c390bc431621a1df01d4aa59aad6acdeb61ddcb39550",
+    "exit_status": 1,
+    "outcomes": {
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-canonical_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-depth]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-envelope_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-fields]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-manifest_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-nodes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-rows]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-siblings]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-canonical_bytes]": "failure",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-depth]": "failure",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-envelope_bytes]": "failure",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-fields]": "failure",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-manifest_bytes]": "failure",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-nodes]": "failure",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-rows]": "failure",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[0-siblings]": "failure",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-canonical_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-depth]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-envelope_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-fields]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-manifest_bytes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-nodes]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-rows]": "passed",
+      "tests/test_preview_package_service.py::test_all_cap_comparisons[1-siblings]": "passed"
+    },
+    "log_sha256": "ec8ff2e80d430ceff41c61835002da9005617a8ddfcbf4bec382a44f07de9e14"
+  }
+]

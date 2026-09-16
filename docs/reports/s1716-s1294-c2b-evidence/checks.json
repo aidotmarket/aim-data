@@ -1,0 +1,59 @@
+{
+  "ruff": {
+    "baseline": {
+      "raw_sha256": "a6ec80f03d4d108eacc32294ccb1865c53de205b960aac6f786ddf83f74f37cb",
+      "normalized_sha256": "a6ec80f03d4d108eacc32294ccb1865c53de205b960aac6f786ddf83f74f37cb"
+    },
+    "candidate": {
+      "raw_sha256": "a6ec80f03d4d108eacc32294ccb1865c53de205b960aac6f786ddf83f74f37cb",
+      "normalized_sha256": "a6ec80f03d4d108eacc32294ccb1865c53de205b960aac6f786ddf83f74f37cb"
+    }
+  },
+  "lint": {
+    "baseline": {
+      "raw_sha256": "fd341ef6a11a38141476ac15ea107dcdfd99907da02cfb7e9b895fea0d92775f",
+      "normalized_sha256": "d9c868958c4a1e30e96db058571cd17401923f8b3d9304c22abb063ae814f881"
+    },
+    "candidate": {
+      "raw_sha256": "02d6a55d1b10d72509398c06772226a9d2682ae390648afa7f625decc1918f41",
+      "normalized_sha256": "d9c868958c4a1e30e96db058571cd17401923f8b3d9304c22abb063ae814f881"
+    }
+  },
+  "types": {
+    "baseline": {
+      "raw_sha256": "4d746b355c868a5a154bc32277df306ee1e4aa93e57989e0fd075cfe5bb18208",
+      "normalized_sha256": "4d746b355c868a5a154bc32277df306ee1e4aa93e57989e0fd075cfe5bb18208"
+    },
+    "candidate": {
+      "raw_sha256": "4d746b355c868a5a154bc32277df306ee1e4aa93e57989e0fd075cfe5bb18208",
+      "normalized_sha256": "4d746b355c868a5a154bc32277df306ee1e4aa93e57989e0fd075cfe5bb18208"
+    }
+  },
+  "fixture_sha256": {
+    "aim_preview_manifest_budget_v1.json": "fa10ad02a49c5c4d08967d9deb760fbb155676917baab0e08c7ec31a2d89d598",
+    "aim_preview_policy_v1.json": "ff8c85862c6aa90da271a1bb6204a229266dec2b5218b7b061d187119c22008b",
+    "aim_preview_package_vectors_v1.json": "4561ecc2cd9fae5845bcd78b9e5eeae8bb3af8d13f5a9532b99bdf5ffa33787c",
+    "aim_preview_package_v2.json": "4397a036ccf4326edf686b68b9d0fe4beb83e73d1dbc81ea09afb3bdf95ca37a"
+  },
+  "golden_sha256": "f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af",
+  "os": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "python": "3.12.12",
+  "dependencies": {
+    "pytest": "7.4.4",
+    "duckdb": "1.5.3",
+    "presidio-analyzer": "2.2.33",
+    "spacy": "3.7.2",
+    "en-core-web-sm": "3.7.1"
+  },
+  "tested_files_sha256": {
+    "app/services/preview_content_policy.py": "7d1abd80e7be8ca270ea3a631c2bab7b558de74c61c483b05b88adb6299c4fd5",
+    "app/services/preview_package_service.py": "a5e2af684813c5eb1b463a2ecf3c2345c21f79061a0219ac3e3d54019fe86257",
+    "app/services/preview_origin_service.py": "d8a732bbb7432a4cc8985930448d954dc72cc2212b3552b0b377fa7ca670fdac",
+    "app/services/pii_service.py": "50e6a0eb88a8f2c4b5982663b11c71bcec1dc18cb4bc009dc630b0f7b5bfcf15",
+    "app/services/s3_publish_source_resolver.py": "530c333ba06789df9aa8015da638cdad47a47e070901e4555d95febf75e723ac",
+    "scripts/serve-preview-origin.py": "9f09a62ba9f38504a95e1b11838d6341d25b40cf707f72caf1616d1495265240",
+    "tests/test_preview_content_policy.py": "66e59ad87978f2f408ff7f61a26670a56331959a5c80620d300e18f2bb56e743",
+    "tests/test_preview_package_service.py": "5bf29e98ad0b740c534813a9c7f62adc6108109621b1046a129623e6c57f403e",
+    "tests/test_preview_origin_service.py": "fa1d78c093803188a0cfd89bfd40dec0b9012dd9ded54bea7f81ce4237db6623"
+  }
+}
