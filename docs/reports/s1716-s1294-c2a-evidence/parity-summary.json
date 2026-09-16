@@ -1,0 +1,17 @@
+{
+  "baseline": {
+    "passed": 2219,
+    "failure": 92,
+    "skipped": 33
+  },
+  "candidate": {
+    "passed": 2403,
+    "failure": 92,
+    "skipped": 33
+  },
+  "added": {
+    "passed": 184
+  },
+  "changed_existing": {},
+  "branch_only_failures": []
+}

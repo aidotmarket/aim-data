@@ -1,5 +1,32 @@
 # S1716 S1294 Chunk 2a — canonical parser and tree build
 
+**Status: Chunk 2a implemented and locally verified; committed and pushed,
+not merged.** Full baseline/candidate suites completed with **zero branch-only
+failures**, all **184 added tests passing**, unchanged original golden bytes,
+two observed failing mutations, and successful 1M/10M bounded-worker runs.
+Existing baseline failures remain documented; this is not a claim that the
+repository-wide suites are green, or that later producer/release chunks exist.
+
+Final implementation: `21ad23f78a530d33ab731029e0dc55a6a06000d8`.
+[Per-test pytest parity](s1716-s1294-c2a-pytest-parity.md),
+[frontend parity](s1716-s1294-c2a-frontend-parity.md),
+[operation/runbook](s1716-s1294-c2a-operating.md),
+[acceptance evidence](s1716-s1294-c2a-evidence/README.md).
+
+| Generated records | Complete build seconds | Peak incremental RSS | Success / cancellation cleanup |
+|---:|---:|---:|---|
+| 1,000,000 | 36.71 | 107.41 MiB | Both passed |
+| 10,000,000 | 331.44 | 110.59 MiB | Both passed |
+
+Both benchmark receipts match the final parser/Merkle source SHA-256 values;
+selected boundary proofs independently verify. Timings are measured local
+results under concurrent verification load, not a throughput guarantee.
+Metadata-only receipts include roots, proof digests and RSS; generated source
+files and job spill files were cleaned. Scanning, hosting and public preview
+limits remain later-chunk responsibilities. No marketplace, router, UI,
+device-key, dependency or profile-version change occurred.
+
+
 ## Resumed build, controller ruling fba339b2
 
 The 2026-09-16 controller ruling (subject to Max veto) supersedes the historical
@@ -193,6 +220,34 @@ reports the same 94 existing errors (one cached invalid-noqa warning appears
 only in the initial baseline log). Changed Python files pass Ruff and compile.
 There is no configured repository Python type-check command; the configured
 frontend TypeScript check was executed explicitly.
+
+### Completed regression results
+
+| Check | origin/main | Candidate | Branch-only failures |
+|---|---:|---:|---:|
+| Complete backend-independent pytest | 2219 passed / 92 failed / 33 skipped | 2403 passed / 92 failed / 33 skipped | 0 |
+| New focused parser/tree tests | Not present | 184 passed | 0 |
+| Same focused tests, DuckDB 0.9.2 / Python 3.11.16 | Not present | 184 passed | 0 |
+| Frontend Vitest | 44 passed / 23 failed | 44 passed / 23 failed | 0 |
+| Frontend production build | Passed | Passed | 0 |
+| Frontend ESLint | 10 errors / 25 warnings | Identical | 0 |
+| Frontend TypeScript | Existing diagnostics | Identical | 0 |
+| Repository Ruff | 94 errors | Same 94 errors | 0 |
+| Changed Python Ruff / compilation / diff whitespace | — | Passed | 0 |
+
+The final candidate pytest run completed in 148.59 seconds; baseline completed
+in 148.83 seconds. These are completed runs, not collection-only comparisons.
+Every pre-existing test has the same outcome and all 184 added tests pass.
+Per-test tables: [Python](s1716-s1294-c2a-pytest-parity.md) and
+[frontend](s1716-s1294-c2a-frontend-parity.md). Machine-readable counters and
+outcome-only logs/XML are in [evidence](s1716-s1294-c2a-evidence/README.md).
+
+An additional actual `DuckDBService.iter_commitment_records` adapter execution
+read all 5001 generated Parquet records as a generator, preserving >53-bit
+integers, 30-digit decimals and binary bytes. Reproduction:
+`rtk proxy env PYTHONPATH=. "$PY" docs/reports/s1716-s1294-c2a-adapter-check.py`.
+Its receipt contains only pass indicators/counts. Existing reader methods are
+unchanged; their regression outcomes match origin/main in the complete suite.
 
 ### Final fixture hashes
 
@@ -405,3 +460,11 @@ the pinned backend. Keep the original corpus byte-for-byte through any correctio
 After the contract decision, continue on this branch from the exact evidence
 commit, implement and push every requested milestone, then complete the full
 acceptance matrix. The source, worker and test milestones remain open.
+
+## Evidence publication handling
+
+The push secret scanner rejected token-like test traceback text in the initial
+evidence attachment. Before publication, full tracebacks, inputs and captured
+output were removed from committed pytest logs/XML. Every test name/outcome
+and the complete summary remain. Original raw logs stay local, SHA-pinned in
+`log-redactions.json`; no hook was disabled or bypassed.

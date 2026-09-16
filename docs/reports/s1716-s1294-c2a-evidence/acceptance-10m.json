@@ -1,0 +1,196 @@
+{
+  "commitment": {
+    "profile": "aim-dataset-merkle-v1",
+    "schema_digest": "tC4IQZcMCAlbK6kR8JV72QQys9suCfbMaGt0Z4OEHn4",
+    "dataset_merkle_root": "qojd6KNtKH_0Lgt4BCQMWVhLq1G23cUnuIycCwHt3DM",
+    "leaf_count": 10000000
+  },
+  "proofs": [
+    {
+      "base_row_digest": "AAAAGMIg5crUJFjRflGdQsi4z9FCl5uo9VCcQ1suJdU",
+      "duplicate_ordinal": 0,
+      "leaf_index": 0,
+      "tree_size": 10000000,
+      "siblings": [
+        {
+          "hash": "Ipy2uRuyYTwTOu7p1lNyNz079Shpe_MREw1gVMFYcsc",
+          "direction": "right"
+        },
+        {
+          "hash": "-bhstbz4HcqQhNY4geYag2QuuDHxIcYOR_cn58cHTtY",
+          "direction": "right"
+        },
+        {
+          "hash": "RoLYZrK-ZCVhRqnZUTh-RK5y3nyKCirBNFnXzsN0ltk",
+          "direction": "right"
+        },
+        {
+          "hash": "t0sM9ylcL6ClC_uroDIWdpN11vEjBwIqlXAe6SN2Sm4",
+          "direction": "right"
+        },
+        {
+          "hash": "m4e_w8MwuFIUHEM5kCLpiA_pkIbApdQh_PPVQ9372Hk",
+          "direction": "right"
+        },
+        {
+          "hash": "RkD6ld3VKF1MteADqdBR_akOa7SiXN9PCQVORoElLuk",
+          "direction": "right"
+        },
+        {
+          "hash": "o7LA2rHKLNffWwe9ifXLAsbuJ7gtOI_IckIb8JVWWo4",
+          "direction": "right"
+        },
+        {
+          "hash": "JVFpsVQbC5OJ4Ru-33gbe6sG_f8j-RmwWubPIeySE8w",
+          "direction": "right"
+        },
+        {
+          "hash": "ouEPBbnx8g9PtUI1mHyu8RazdtL6r5_5uU-oHN9EDyU",
+          "direction": "right"
+        },
+        {
+          "hash": "4hrxpwGsw42XhBlVJx_OYnrjHFZsFX9NMXbG3_r_sNI",
+          "direction": "right"
+        },
+        {
+          "hash": "kAIR97VCkP_r67uPqeeRe-9VKlaAf_hopWhVHBbBpaw",
+          "direction": "right"
+        },
+        {
+          "hash": "Y4j05sXxcwJcQDix0LoVhGbVXxxdUgdJSxD7-OevyVc",
+          "direction": "right"
+        },
+        {
+          "hash": "9CWpoiyUAYufJF0b0AtbY7HZ8Ba38ueQrKbYkXrZ3cM",
+          "direction": "right"
+        },
+        {
+          "hash": "Lt9vuTxDxptU1ACow9F1sOKzYJeQnZ0tfMBw66H4-tA",
+          "direction": "right"
+        },
+        {
+          "hash": "KpVXkzB16EzN8W-m8sG3fusOBHExIv7dz9Ceo5EkoJg",
+          "direction": "right"
+        },
+        {
+          "hash": "gDH7jILGXUhDYseuNJp3uXTC29U5HyL0riJJSF5tdMQ",
+          "direction": "right"
+        },
+        {
+          "hash": "tIrq6z_hqeJTQu3i-2DmHqWuBmA221LMSyhLUPmnkoA",
+          "direction": "right"
+        },
+        {
+          "hash": "1LciUndaWMNCucJpctC9taWKYOqXndFBivcFTERXgsU",
+          "direction": "right"
+        },
+        {
+          "hash": "XKqsB0249GVpNZ5lCfJdm8-yHZ6V0Eoax7DZ8TeSFpU",
+          "direction": "right"
+        },
+        {
+          "hash": "dKcdI0tDZSk7pj33P9KoKR5XBJgSWl7uEN4Zq318Ajg",
+          "direction": "right"
+        },
+        {
+          "hash": "v4GuiOHOFsn7COSDGowx8OQwtGBasH84KFXwRXUhP0Y",
+          "direction": "right"
+        },
+        {
+          "hash": "rZF_ZV5ItS1VeuKISuVnGVwX3hvpJ5yzjXGL_CvJgQA",
+          "direction": "right"
+        },
+        {
+          "hash": "DFYvc0pbByrZ4MUZzn53w06QzoC2orwz0jloYefynLU",
+          "direction": "right"
+        },
+        {
+          "hash": "i_ubtI2ROII6jDQWZtmfD6uExNaGl6-t65SQK6IWF64",
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "base_row_digest": "____Ugg5w40djIUJemQfrxVAvXKCRwJfkFsoZbcxNyc",
+      "duplicate_ordinal": 12,
+      "leaf_index": 9999999,
+      "tree_size": 10000000,
+      "siblings": [
+        {
+          "hash": "7uFfhPI05yT9dXSkpydP-Hy9hcRByIqVGSr7KrKytu4",
+          "direction": "left"
+        },
+        {
+          "hash": "XDzS5IS0XtlitmCp-afIMWuVcT4xun9eAsajFx1Elts",
+          "direction": "left"
+        },
+        {
+          "hash": "Jcm1C621kuwdWpuzfWfR2LbXexVdwcbN-8EVgqOQAO4",
+          "direction": "left"
+        },
+        {
+          "hash": "hMvAlr08QCTyoKGG8MlgXsEDKc2zt3v9YAmLhxmh7Qk",
+          "direction": "left"
+        },
+        {
+          "hash": "RBlomWw3ePnv6L7MCZuSO26La3H-VKdUM7UiY3xtTjU",
+          "direction": "left"
+        },
+        {
+          "hash": "CFDQ3iC18wffLzHnfNgrRehqrcWTNkdtIG13OhA1yRg",
+          "direction": "left"
+        },
+        {
+          "hash": "0TN8TodAgwhkUYidmDitAGil2Gf_gtuHp9_IcdOdg0A",
+          "direction": "left"
+        },
+        {
+          "hash": "kjr0AQjZQnecZ9NiLGiTnC7m9D8dK3m2oF843IllKsA",
+          "direction": "left"
+        },
+        {
+          "hash": "laPrYMHxnS52L_yjC0_jVweANaddC3LV18etOPuGv6Y",
+          "direction": "left"
+        },
+        {
+          "hash": "OMVDdpQ2Yu5JCOPNdywKC7ledbhbHONIePw8UMlaNnE",
+          "direction": "left"
+        },
+        {
+          "hash": "WIh01gq9FbtY80JarEK5rr9-xXMe0G--dZTmt2WA02w",
+          "direction": "left"
+        },
+        {
+          "hash": "BOP7sOZbLAi2r0JPGooBQbi_5XUPAr1XgOUe8b8qT4A",
+          "direction": "left"
+        },
+        {
+          "hash": "nCocOcLy1ON1gn6VWSS15KX_66kgf2SBq7-rtSWlrTo",
+          "direction": "left"
+        },
+        {
+          "hash": "CalzBIcprdqIkiaF5H_5mQB9dT1y5xFKUs6ED9OBKPw",
+          "direction": "left"
+        }
+      ]
+    }
+  ],
+  "peak_rss_bytes": 115998720,
+  "incremental_rss_bytes": 115965952,
+  "source_sha256": {
+    "app/services/dataset_canonicalization.py": "9f48a5923b9ddcade1ca1ec1f2be3adeafb18c0bd468e72d44b557f8f6545a46",
+    "app/services/dataset_merkle_service.py": "25df4b1ae107d5d33695b00e20896f4d8621acbf21b6ff85fa3c146845588f9a"
+  },
+  "elapsed_seconds": 331.4363637919887,
+  "generated_records": 10000000,
+  "phases": [
+    "building_tree",
+    "reading",
+    "ready",
+    "selecting",
+    "sorting"
+  ],
+  "cleanup_success": true,
+  "cancel_reason": "cancelled",
+  "cleanup_cancel": true
+}

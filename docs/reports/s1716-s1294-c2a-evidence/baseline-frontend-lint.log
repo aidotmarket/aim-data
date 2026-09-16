@@ -1,0 +1,62 @@
+> eslint .
+/private/var/tmp/s1716-c2a-baseline/frontend/src/api/portalApi.ts
+  53:15  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/ListingEditorForm.tsx
+  42:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/onboarding/OnboardingWizard.tsx
+   33:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+   41:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  163:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/ui/badge.tsx
+  29:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/ui/button.tsx
+  47:18  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/ui/command.tsx
+  24:11  error  An interface declaring no members is equivalent to its supertype  @typescript-eslint/no-empty-object-type
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/ui/form.tsx
+  129:10  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/ui/navigation-menu.tsx
+  111:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/ui/sidebar.tsx
+  636:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/ui/sonner.tsx
+  27:19  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/ui/textarea.tsx
+  5:18  error  An interface declaring no members is equivalent to its supertype  @typescript-eslint/no-empty-object-type
+/private/var/tmp/s1716-c2a-baseline/frontend/src/components/ui/toggle.tsx
+  37:18  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/contexts/AuthContext.tsx
+  128:11  warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps')
+  245:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/contexts/BrandContext.tsx
+  16:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/contexts/CoPilotContext.tsx
+  361:6   warning  React Hook useCallback has a missing dependency: 'handleWsMessage'. Either include it or remove the dependency array            react-hooks/exhaustive-deps
+  814:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/contexts/MarketplaceContext.tsx
+  122:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/contexts/ModeContext.tsx
+  77:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+/private/var/tmp/s1716-c2a-baseline/frontend/src/contexts/UploadContext.tsx
+   77:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                   react-refresh/only-export-components
+  288:6   warning  React Hook useCallback has a missing dependency: 'uploadOne'. Either include it or remove the dependency array                                   react-hooks/exhaustive-deps
+  295:6   warning  React Hook useCallback has a missing dependency: 'uploadOne'. Either include it or remove the dependency array                                   react-hooks/exhaustive-deps
+  375:6   warning  React Hook useEffect has missing dependencies: 'onSuccess', 'queue', and 'sendBatchSummary'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+/private/var/tmp/s1716-c2a-baseline/frontend/src/hooks/usePortalAuth.ts
+  94:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+/private/var/tmp/s1716-c2a-baseline/frontend/src/pages/ArtifactsPage.tsx
+   71:13  error  Empty block statement  no-empty
+   79:13  error  Empty block statement  no-empty
+  106:13  error  Empty block statement  no-empty
+/private/var/tmp/s1716-c2a-baseline/frontend/src/pages/RawFileDetail.tsx
+  259:6  warning  React Hook useEffect has a missing dependency: 'file'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+/private/var/tmp/s1716-c2a-baseline/frontend/src/pages/SettingsPage.tsx
+  273:6  warning  React Hook useEffect has a missing dependency: 'apiUrl'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+/private/var/tmp/s1716-c2a-baseline/frontend/src/pages/SqlQuery.tsx
+  170:9   warning  The 'datasets' logical expression could make the dependencies of useEffect Hook (at line 186) change on every render. To fix this, wrap the initialization of 'datasets' in its own useMemo() Hook  react-hooks/exhaustive-deps
+  217:21  error    Unexpected any. Specify a different type                                                                                                                                                            @typescript-eslint/no-explicit-any
+  412:35  error    Unexpected any. Specify a different type                                                                                                                                                            @typescript-eslint/no-explicit-any
+/private/var/tmp/s1716-c2a-baseline/frontend/tailwind.config.ts
+  100:13  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+✖ 35 problems (10 errors, 25 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.

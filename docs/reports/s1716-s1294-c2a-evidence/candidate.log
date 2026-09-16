@@ -1,0 +1,2 @@
+Outcome-only log. Tracebacks and captured data are retained only in the local original.
+92 failed, 2403 passed, 33 skipped, 739 warnings in 148.59s (0:02:28)
