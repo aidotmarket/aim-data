@@ -156,12 +156,9 @@ def test_scan_metadata_and_digest(detector):
         policy.scan_attestation_digest(proofs)
 
 
-def test_signed_attestation_digest():
-    import hashlib
-    from app.services.dataset_merkle_service import (
-        canonical_json_bytes,
-        encode_base64url,
-    )
+@pytest.fixture
+def signed_proofs():
+    from app.services.dataset_merkle_service import encode_base64url
 
     fixture = json.loads(Path("tests/fixtures/aim_preview_package_v2.json").read_text())
     proofs = [{k: v for k, v in p.items() if k != "row"} for p in fixture["entries"]]
@@ -180,6 +177,14 @@ def test_signed_attestation_digest():
             signature_algorithm="ed25519",
             signature=encode_base64url(bytes(64)),
         )
+    return proofs
+
+
+def test_signed_attestation_digest(signed_proofs):
+    import hashlib
+    from app.services.dataset_merkle_service import canonical_json_bytes
+
+    proofs = signed_proofs
     assert (
         policy.scan_attestation_digest(proofs)
         == hashlib.sha256(
@@ -222,3 +227,27 @@ def test_each_explicit_consent_required(detector, missing):
             scanned_at="2026-09-17T12:00:00Z",
             **consents,
         )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("preview_package_url", "https://other.example/preview.json"),
+        ("package_media_type", "application/json"),
+        ("package_profile", "aim-preview-package-v1"),
+        ("package_byte_ceiling", 1000000),
+        ("scan_policy", "other-policy"),
+        ("scan_policy_version", "1.0.1"),
+        ("scan_verdict", "failed"),
+        ("scanned_at", "2026-09-17T12:01:00.000000Z"),
+        ("sampled_leaf_list_digest", "A" * 43),
+        ("signer_reference", "00000000-0000-0000-0000-000000000002:" + "a" * 64),
+        ("signer_reference", "00000000-0000-0000-0000-000000000001:" + "b" * 64),
+        ("signature_algorithm", "other-algorithm"),
+    ],
+)
+def test_mixed_attestation_rejected(signed_proofs, field, value):
+    # URL, ceiling, time and signer variants are individually valid records.
+    signed_proofs[1][field] = value
+    with pytest.raises(policy.PolicyError, match="^unsigned_proofs$"):
+        policy.scan_attestation_digest(signed_proofs)

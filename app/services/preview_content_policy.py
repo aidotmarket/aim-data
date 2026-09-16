@@ -149,6 +149,19 @@ def scan_attestation_digest(signed_proof_records):
         "signature_algorithm",
         "signature",
     }
+    shared_fields = (
+        "preview_package_url",
+        "package_media_type",
+        "package_profile",
+        "package_byte_ceiling",
+        "scan_policy",
+        "scan_policy_version",
+        "scan_verdict",
+        "scanned_at",
+        "sampled_leaf_list_digest",
+        "signer_reference",
+        "signature_algorithm",
+    )
     if not signed_proof_records:
         raise PolicyError("unsigned_proofs")
     try:
@@ -193,6 +206,12 @@ def scan_attestation_digest(signed_proof_records):
             ):
                 raise PolicyError("unsigned_proofs")
             canonical_uuid(proof["signer_reference"][:36])
+        expected = tuple(signed_proof_records[0][key] for key in shared_fields)
+        if any(
+            tuple(proof[key] for key in shared_fields) != expected
+            for proof in signed_proof_records[1:]
+        ):
+            raise PolicyError("unsigned_proofs")
         digest = sampled_leaf_list_digest(signed_proof_records)
         if any(p["sampled_leaf_list_digest"] != digest for p in signed_proof_records):
             raise PolicyError("unsigned_proofs")
