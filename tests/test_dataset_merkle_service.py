@@ -413,3 +413,75 @@ def test_symlink_parent_refused(tmp_path):
     with pytest.raises(m.CommitmentValidationError, match="unsafe_temp_directory"):
         with m.private_job(link / "jobs"):
             raise AssertionError("symlink ancestor admitted")
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "leaf_count",
+        "duplicate_ordinal",
+        "leaf_index",
+        "tree_size",
+        "records",
+        "canonical_bytes",
+    ],
+)
+@pytest.mark.parametrize(
+    "method", ["constructor", "model_validate", "model_validate_json"]
+)
+def test_metadata_integer_ceiling_at_validation(field, method):
+    from app.models.dataset_commitment_schemas import (
+        SAFE_INTEGER,
+        CommitmentProgress,
+        CommitmentProof,
+    )
+
+    digest = m.encode_base64url(bytes(32))
+    if field == "leaf_count":
+        cls = DatasetCommitment
+        data = dict(schema_digest=digest, dataset_merkle_root=digest, leaf_count=1)
+    elif field in {"records", "canonical_bytes"}:
+        cls = CommitmentProgress
+        data = dict(phase="reading", records=0, canonical_bytes=0, elapsed_seconds=0.0)
+    else:
+        cls = CommitmentProof
+        data = dict(
+            base_row_digest=digest,
+            duplicate_ordinal=0,
+            leaf_index=0,
+            tree_size=SAFE_INTEGER,
+            siblings=[],
+        )
+
+    def validate(value):
+        if method == "constructor":
+            return cls(**value)
+        if method == "model_validate_json":
+            return cls.model_validate_json(json.dumps(value))
+        return cls.model_validate(value)
+
+    # Position fields must also remain strictly below tree_size.
+    data[field] = SAFE_INTEGER - (field in {"duplicate_ordinal", "leaf_index"})
+    assert getattr(validate(data), field) == data[field]
+    for invalid in [SAFE_INTEGER + 1, -SAFE_INTEGER - 1]:
+        data[field] = invalid
+        with pytest.raises(ValidationError) as exc:
+            validate(data)
+        assert exc.value.errors()[0]["type"] == "unsafe_integer"
+        assert str(invalid) not in str(exc.value)
+
+
+def test_metadata_ceiling_on_assignment_and_instance_revalidation():
+    from app.models.dataset_commitment_schemas import SAFE_INTEGER, CommitmentProgress
+
+    data = dict(phase="reading", records=0, canonical_bytes=0, elapsed_seconds=0.0)
+    progress = CommitmentProgress(**data)
+    with pytest.raises(ValidationError, match="unsafe_integer"):
+        progress.records = SAFE_INTEGER + 1
+    assert progress.records == 0
+    # model_construct intentionally bypasses validation; normal validation must not.
+    unvalidated = CommitmentProgress.model_construct(
+        **{**data, "records": SAFE_INTEGER + 1}
+    )
+    with pytest.raises(ValidationError, match="unsafe_integer"):
+        CommitmentProgress.model_validate(unvalidated)

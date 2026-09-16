@@ -7,7 +7,13 @@ SAFE_INTEGER = (1 << 53) - 1
 
 
 class ClosedModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        hide_input_in_errors=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -95,6 +101,6 @@ class CommitmentProgress(ClosedModel):
         "hosting",
         "ready",
     ]
-    records: int = Field(ge=0)
-    canonical_bytes: int = Field(ge=0)
+    records: int = Field(ge=0, le=SAFE_INTEGER)
+    canonical_bytes: int = Field(ge=0, le=SAFE_INTEGER)
     elapsed_seconds: float = Field(ge=0)
