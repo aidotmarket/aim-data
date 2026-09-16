@@ -1,0 +1,175 @@
+{
+  "implementation_commit": "eefd3a66f3121a7867d17c1fc983a6cb6825cf00",
+  "baseline_commit": "49985ed34d8a79dd69fec008c946e8feb7acfa12",
+  "source_sha256": {
+    "app/services/preview_content_policy.py": "c284213570b9f939c5b493198eb06af723c533fe4fcf355a32d3aa90373d6362",
+    "app/services/preview_package_service.py": "c6b399d179e9d25a023b3d5eeef2020228e852b85905613120bf61c7ab5b6369",
+    "tests/test_preview_content_policy.py": "0e7affda3e6b24c3b5c0aaaefbbbc35a47928f87790bf1e0afd6e72a32872d74",
+    "tests/test_preview_package_service.py": "845d7dd4d097d91ac449e36c82e919534c836644daac85edfffafb308cd782e4",
+    "tests/test_preview_origin_service.py": "96dfaba35c630a3aed112eaab2c4819c8bf377afca457ef5e1066045f62bf403"
+  },
+  "preview_suites": {
+    "test_preview_content_policy.py": {
+      "passed": 258
+    },
+    "test_preview_package_service.py": {
+      "passed": 68
+    },
+    "test_preview_origin_service.py": {
+      "passed": 42
+    }
+  },
+  "same_normalized_diagnostics": {
+    "ruff": true,
+    "lint": true,
+    "types": true
+  },
+  "changed_python_ruff": "passed",
+  "changed_python_compile": "passed",
+  "python_typecheck": "No configured Python static typecheck; compile is not type checking.",
+  "pinned_import_target": "/var/tmp/s1716-c2b-pinned",
+  "test_environment": {
+    "PREVIEW_PINNED_IMPORT_TARGET": "/var/tmp/s1716-c2b-pinned",
+    "PYTHONPATH": ".:docs/reports",
+    "observer": "s1716_r2_outcomes"
+  },
+  "shared_environment_builder": "detector_unavailable",
+  "isolated_pinned_builder": "passed",
+  "checks": [
+    {
+      "label": "baseline",
+      "check": "affected",
+      "exit": 1,
+      "seconds": 14.05,
+      "command": [
+        "rtk",
+        "proxy",
+        "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_pii.py",
+        "tests/test_pii_scrub.py",
+        "tests/test_pii_text_content.py",
+        "tests/test_s3_publish_source_resolver.py",
+        "tests/test_dataset_canonicalization.py",
+        "tests/test_dataset_merkle_service.py",
+        "-q",
+        "--tb=no",
+        "--continue-on-collection-errors",
+        "-p",
+        "s1716_r2_outcomes"
+      ]
+    },
+    {
+      "label": "baseline",
+      "check": "ruff",
+      "exit": 1,
+      "seconds": 0.04,
+      "command": [
+        "rtk",
+        "proxy",
+        "ruff",
+        "check",
+        "app",
+        "tests"
+      ]
+    },
+    {
+      "label": "baseline",
+      "check": "lint",
+      "exit": 1,
+      "seconds": 2.24,
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "run",
+        "lint"
+      ]
+    },
+    {
+      "label": "baseline",
+      "check": "types",
+      "exit": 2,
+      "seconds": 4.36,
+      "command": [
+        "rtk",
+        "proxy",
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.app.json"
+      ]
+    },
+    {
+      "label": "candidate",
+      "check": "affected",
+      "exit": 1,
+      "seconds": 33.78,
+      "command": [
+        "rtk",
+        "proxy",
+        "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_pii.py",
+        "tests/test_pii_scrub.py",
+        "tests/test_pii_text_content.py",
+        "tests/test_s3_publish_source_resolver.py",
+        "tests/test_dataset_canonicalization.py",
+        "tests/test_dataset_merkle_service.py",
+        "tests/test_preview_content_policy.py",
+        "tests/test_preview_package_service.py",
+        "tests/test_preview_origin_service.py",
+        "-q",
+        "--tb=no",
+        "--continue-on-collection-errors",
+        "-p",
+        "s1716_r2_outcomes"
+      ]
+    },
+    {
+      "label": "candidate",
+      "check": "ruff",
+      "exit": 1,
+      "seconds": 0.04,
+      "command": [
+        "rtk",
+        "proxy",
+        "ruff",
+        "check",
+        "app",
+        "tests"
+      ]
+    },
+    {
+      "label": "candidate",
+      "check": "lint",
+      "exit": 1,
+      "seconds": 1.32,
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "run",
+        "lint"
+      ]
+    },
+    {
+      "label": "candidate",
+      "check": "types",
+      "exit": 2,
+      "seconds": 3.66,
+      "command": [
+        "rtk",
+        "proxy",
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.app.json"
+      ]
+    }
+  ]
+}

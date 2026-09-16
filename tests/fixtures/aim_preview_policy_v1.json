@@ -1,0 +1,184 @@
+{
+  "scan_policy": "aim-preview-policy-v1",
+  "scan_policy_version": "1.0.0",
+  "detector_identity": {
+    "presidio-analyzer": "2.2.362",
+    "spacy": "3.7.2",
+    "en-core-web-sm": "3.7.1"
+  },
+  "cases": [
+    {
+      "id": "blocked-00",
+      "value": "api_key=synthetic",
+      "blocked": true
+    },
+    {
+      "id": "blocked-01",
+      "blocked": true,
+      "parts": [
+        "-----BEGIN ",
+        "PRIVATE ",
+        "KEY-----"
+      ]
+    },
+    {
+      "id": "blocked-02",
+      "blocked": true,
+      "parts": [
+        "AK",
+        "IA",
+        "AAAAAAAAAAAAAAAA"
+      ]
+    },
+    {
+      "id": "blocked-03",
+      "value": "postgres://u:p@host/db",
+      "blocked": true
+    },
+    {
+      "id": "blocked-04",
+      "value": "ghp_aaaaaaaaaaaaaaaaaaaaaaaaa",
+      "blocked": true
+    },
+    {
+      "id": "blocked-05",
+      "value": "abcdefghijklmnopqrstuvwxyz0123456789",
+      "blocked": true
+    },
+    {
+      "id": "blocked-06",
+      "value": "=SUM(A1)",
+      "blocked": true
+    },
+    {
+      "id": "blocked-07",
+      "value": "  +cmd",
+      "blocked": true
+    },
+    {
+      "id": "blocked-08",
+      "value": "-cmd",
+      "blocked": true
+    },
+    {
+      "id": "blocked-09",
+      "value": "@sum",
+      "blocked": true
+    },
+    {
+      "id": "blocked-10",
+      "value": "<script>alert(1)</script>",
+      "blocked": true
+    },
+    {
+      "id": "blocked-11",
+      "value": "onclick=run()",
+      "blocked": true
+    },
+    {
+      "id": "blocked-12",
+      "value": "javascript:run()",
+      "blocked": true
+    },
+    {
+      "id": "blocked-13",
+      "value": "https://example.test/path",
+      "blocked": true
+    },
+    {
+      "id": "blocked-14",
+      "value": "www.example.test",
+      "blocked": true
+    },
+    {
+      "id": "blocked-15",
+      "value": "[click](target)",
+      "blocked": true
+    },
+    {
+      "id": "blocked-16",
+      "value": "mailto:synthetic@example.test",
+      "blocked": true
+    },
+    {
+      "id": "blocked-17",
+      "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "blocked": true
+    },
+    {
+      "id": "blocked-18",
+      "value": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word ",
+      "blocked": true
+    },
+    {
+      "id": "blocked-19",
+      "value": "copyright owner",
+      "blocked": true
+    },
+    {
+      "id": "blocked-20",
+      "value": "all rights reserved",
+      "blocked": true
+    },
+    {
+      "id": "blocked-21",
+      "value": "excerpt from a book",
+      "blocked": true
+    },
+    {
+      "id": "blocked-22",
+      "value": "licensed under X",
+      "blocked": true
+    },
+    {
+      "id": "blocked-23",
+      "value": "a\u0000b",
+      "blocked": true
+    },
+    {
+      "id": "blocked-24",
+      "value": "a‮b",
+      "blocked": true
+    },
+    {
+      "id": "blocked-25",
+      "value": "a⁦b",
+      "blocked": true
+    },
+    {
+      "id": "blocked-26",
+      "value": "Sub Auto_Open",
+      "blocked": true
+    },
+    {
+      "id": "blocked-27",
+      "value": "123-45-6789",
+      "blocked": true
+    },
+    {
+      "id": "blocked-28",
+      "value": "synthetic@example.test",
+      "blocked": true
+    },
+    {
+      "id": "blocked-29",
+      "value": "192.0.2.1",
+      "blocked": true
+    },
+    {
+      "id": "scheme-url",
+      "value": "https:example.test",
+      "blocked": true
+    },
+    {
+      "id": "known-token",
+      "value": "sk-proj-synthetic",
+      "blocked": true
+    }
+  ],
+  "safe_cases": [
+    "oats",
+    "barley",
+    "Café"
+  ]
+}

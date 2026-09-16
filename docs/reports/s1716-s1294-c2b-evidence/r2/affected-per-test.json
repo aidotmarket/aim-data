@@ -1,0 +1,3223 @@
+{
+  "summary": {
+    "baseline": {
+      "passed": 270,
+      "failure": 2
+    },
+    "candidate": {
+      "passed": 638,
+      "failure": 2
+    },
+    "added": {
+      "passed": 368
+    },
+    "changed_existing": [],
+    "branch_only_failures": [],
+    "collection_errors": {
+      "baseline": [],
+      "candidate": []
+    }
+  },
+  "tests": [
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_csv_no_header_declared_order_and_multiline",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_csv_record_limit_before_accumulation",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_exact[-0.00-0]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_exact[12.30-12.3]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_exact[value2-9999999999.99]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_reject[0.001]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_reject[1.2]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_reject[10000000000.00]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_reject[1e2]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_decimal_reject[NaN]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_declared_decimal_contract_precision",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_depth_boundary[15]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_depth_boundary[16]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_depth_boundary[17]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[24]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[25]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[26]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[499]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[500]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dictionary_boundaries[501]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BIGINT-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BINARY-binary]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BLOB-binary]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BOOL-boolean]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BOOLEAN-boolean]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BPCHAR-string]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[BYTEA-binary]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[CHAR-string]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[DATE-date]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[DECIMAL(12,2)-decimal]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[HUGEINT-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INT-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INT1-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INT2-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INT4-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INT8-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[INTEGER-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[LOGICAL-boolean]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[LONG-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[NUMERIC(38,9)-decimal]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[SHORT-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[SIGNED-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[SMALLINT-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[STRING-string]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[TEXT-string]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[TINYINT-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[UBIGINT-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[UINTEGER-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[USMALLINT-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[UTINYINT-signed_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[VARBINARY-binary]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_supported[VARCHAR-string]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[ANY]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[ARRAY]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[BIGNUM]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[BITSTRING]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[BIT]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[CUSTOM]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[DOUBLE PRECISION]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[DOUBLE]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[ENUM]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[FLOAT4]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[FLOAT8]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[FLOAT[]]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[FLOAT]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[GEOMETRY]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[INTEGER[3]]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[INTERVAL]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[JSON]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[MAP]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[NULL]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[REAL]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[SQLNULL]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[TIME WITH TIME ZONE]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[TIMETZ]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[TIME]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[UHUGEINT]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[UNION]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[UNKNOWN]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[UNLISTED]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[UUID]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[VARIANT]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_dispatch_unsupported[VARINT]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_duckdb_pinned_runtime_dispatch",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_duplicate_keys[json-array-[{\"id\":1,\"id\":2}]]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_duplicate_keys[ndjson-{\"id\":1,\"id\":2}\\n]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_extended_ruling",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_field_name_contract[0]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_field_name_contract[1]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_field_name_contract[255]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_field_name_contract[256]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_golden_rows_presence_unicode_numeric",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_independent_ecmascript_serializer",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_identical_bytes[120]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_identical_bytes[121]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_identical_bytes[value2]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[100-decimal_out_of_range0]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[100-decimal_out_of_range1]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[12.0-invalid_decimal]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[12.001-decimal_out_of_range]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[True-invalid_decimal]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[bad-invalid_decimal]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[value3-invalid_decimal]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_integral_decimal_stable_rejections[value6-decimal_out_of_range]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_large_integer_row_string",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_list_struct_dispatch",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_malformed_array[[{\"x\":1} {\"x\":2}]]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_malformed_array[[{\"x\":1},]]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_malformed_array[[{\"x\":1}]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_malformed_array[[{\"x\":1}] trailing]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_malformed_array[[{\"x\":NaN}]]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_depth[15]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_depth[16]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_depth[17]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_fields[499]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_fields[500]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_dictionary_fields[501]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nested_values",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_node_boundary[10000]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_node_boundary[10001]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_node_boundary[9999]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nonreflecting_value_errors[binary-abcd-invalid_binary]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nonreflecting_value_errors[boolean-1-invalid_boolean]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nonreflecting_value_errors[date-infinity-invalid_date]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nonreflecting_value_errors[signed_integer-True-invalid_integer]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_nonreflecting_value_errors[string-bad-invalid_unicode]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_exact_nanos_decimal_binary_nested",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_nullable_arrow_strict_declaration_streamed[False-False]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_nullable_arrow_strict_declaration_streamed[False-True]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_nullable_arrow_strict_declaration_streamed[True-False]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_nullable_arrow_strict_declaration_streamed[True-True]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_rejected_types[fixed_list]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_rejected_types[float]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_parquet_rejected_types[map]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_real_formats",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_runtime_struct_declared_nullability",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_shared_real_file_corpus[aim_dataset_integral_decimal_v1.json]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_shared_real_file_corpus[aim_dataset_parser_v1.json]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_source_mutation",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[DATETIME-6]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMP WITH TIME ZONE-6]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMP-6]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMPTZ-6]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMP_MS-3]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMP_NS-9]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_dispatch[TIMESTAMP_S-0]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_timestamp_exact",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_unicode_order_collisions",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_value_nodes_boundary[10000]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_value_nodes_boundary[10001]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_canonicalization.py::test_value_nodes_boundary[9999]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_all_golden_root_variants",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_cancel_mid_merge",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_cleanup_failure_startup_cancel",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_closed_model",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_closed_progress_and_proof_positions",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[10]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[11]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[12]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[13]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[14]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[15]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[16]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[17]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[18]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[19]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[1]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[2]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[3]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[4]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[5]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[6]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[7]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[8]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_consistency[9]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_disk_budget",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_golden_byte_exact",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_large_record_and_wide_schema",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_lock_excludes_second_job",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_log_checkpoint_vectors",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[boolean_index]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[digest]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[direction]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[index]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[long]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[root]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[short]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_malformed_proof_rejected[size]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_maximum_valid_proof_depth[62]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_maximum_valid_proof_depth[63]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_maximum_valid_proof_depth[64]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_ceiling_on_assignment_and_instance_revalidation",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-canonical_bytes]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-duplicate_ordinal]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-leaf_count]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-leaf_index]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-records]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[constructor-tree_size]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-canonical_bytes]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-duplicate_ordinal]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-leaf_count]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-leaf_index]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-records]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate-tree_size]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-canonical_bytes]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-duplicate_ordinal]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-leaf_count]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-leaf_index]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-records]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_metadata_integer_ceiling_at_validation[model_validate_json-tree_size]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_model_unsafe_integer_no_echo",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_no_symlink_source_and_private_root",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_proof_cap[62]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_proof_cap[63]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_proof_cap[64]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_symlink_parent_refused",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_worker",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_worker_changed_source_after_read",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_dataset_merkle_service.py::test_worker_rss_failure_and_cleanup",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii.py::test_analyze_empty_text",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii.py::test_analyze_text_endpoint",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii.py::test_list_entities_endpoint",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii.py::test_recommendations",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii.py::test_scan_clean_dataset",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii.py::test_scan_clean_text",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii.py::test_scan_dataset_with_pii",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii.py::test_scan_text_with_email",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii.py::test_scan_text_with_phone",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii.py::test_scan_text_with_ssn",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_scrub.py::test_scrub_before_after_counts",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_scrub.py::test_scrub_endpoint_exists",
+      "baseline": "failure",
+      "candidate": "failure"
+    },
+    {
+      "nodeid": "tests/test_pii_scrub.py::test_scrub_endpoint_not_found",
+      "baseline": "failure",
+      "candidate": "failure"
+    },
+    {
+      "nodeid": "tests/test_pii_scrub.py::test_scrub_file_alongside_original",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_scrub.py::test_scrub_hash_strategy",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_scrub.py::test_scrub_invalid_strategy",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_scrub.py::test_scrub_mask_strategy",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_scrub.py::test_scrub_privacy_score_improves",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_scrub.py::test_scrub_redact_strategy",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_text_content.py::TestScanTextContent::test_clean_text_blocks",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_text_content.py::TestScanTextContent::test_column_result_format",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_text_content.py::TestScanTextContent::test_detects_email_in_text_blocks",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_text_content.py::TestScanTextContent::test_detects_phone_in_text_blocks",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_text_content.py::TestScanTextContent::test_empty_text_blocks",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_text_content.py::TestScanTextContent::test_handles_none_and_empty_blocks",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_text_content.py::TestScanTextContent::test_privacy_score_calculated",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_text_content.py::TestScanTextContent::test_result_format_matches_scan_dataset",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_text_content.py::TestScanTextContent::test_sampling_limits_blocks",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_pii_text_content.py::TestScanTextContent::test_truncates_very_long_blocks",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_detector_unavailable_safe_errors",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_each_explicit_consent_required[public_preview_permission]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_each_explicit_consent_required[restricted_content_confirmed]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_each_explicit_consent_required[rights_confirmed]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-0]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-10]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-11]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-12]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-13]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-14]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-15]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-16]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-17]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-18]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-19]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-20]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-21]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-22]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-23]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-24]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-25]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-26]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-27]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-28]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-29]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-2]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-30]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-31]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-32]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-33]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-34]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-35]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-36]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-37]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-38]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-39]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-3]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-40]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-41]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-42]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-43]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-44]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-45]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-46]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-47]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-48]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-49]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-4]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-50]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-51]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-52]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-53]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-54]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-55]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-56]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-57]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-58]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-59]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-5]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-60]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-61]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-62]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-63]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-64]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-65]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-66]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-67]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-68]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-69]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-6]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-70]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-71]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-72]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-73]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-74]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-75]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-76]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-77]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-78]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-79]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-7]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-80]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-81]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-82]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-83]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-84]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-85]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-86]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-87]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-88]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-89]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-8]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-90]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-91]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-92]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-93]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-94]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-95]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-96]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-97]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-98]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-99]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[False-9]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-0]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-10]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-11]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-12]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-13]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-14]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-15]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-16]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-17]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-18]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-19]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-20]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-21]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-22]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-23]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-24]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-25]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-26]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-27]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-28]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-29]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-2]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-30]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-31]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-32]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-33]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-34]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-35]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-36]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-37]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-38]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-39]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-3]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-40]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-41]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-42]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-43]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-44]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-45]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-46]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-47]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-48]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-49]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-4]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-50]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-51]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-52]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-53]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-54]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-55]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-56]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-57]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-58]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-59]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-5]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-60]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-61]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-62]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-63]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-64]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-65]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-66]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-67]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-68]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-69]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-6]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-70]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-71]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-72]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-73]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-74]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-75]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-76]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-77]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-78]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-79]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-7]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-80]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-81]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-82]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-83]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-84]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-85]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-86]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-87]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-88]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-89]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-8]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-90]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-91]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-92]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-93]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-94]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-95]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-96]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-97]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-98]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-99]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_every_row_and_nested_position[True-9]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-11]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-130]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-131]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-150]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-151]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-160]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-161]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-162]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-17]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-190]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-191]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-20]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-220]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-221]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-250]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-251]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-27]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-290]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-291]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-30]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-31]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-32]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-36]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-405]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-40]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-41]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-501]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-6]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-8]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_predicates[rule-9]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_frozen_shared_policy_corpus",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_keys_array_elements_and_no_length_skip",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[package_byte_ceiling-1000000]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[package_media_type-application/json]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[package_profile-aim-preview-package-v1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[preview_package_url-https://other.example/preview.json]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[sampled_leaf_list_digest-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[scan_policy-other-policy]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[scan_policy_version-1.0.1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[scan_verdict-failed]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[scanned_at-2026-09-17T12:01:00.000000Z]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[signature_algorithm-other-algorithm]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[signer_reference-00000000-0000-0000-0000-000000000001:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_mixed_attestation_rejected[signer_reference-00000000-0000-0000-0000-000000000002:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_numeric_negative_vs_formula",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_scan_metadata_and_digest",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_scheme_and_known_token_formats[https:example.test]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_scheme_and_known_token_formats[sk-proj-synthetic]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_scheme_and_known_token_formats[sk-synthetic]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_signed_attestation_digest",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_unknown_model_identity_fails_closed",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_unsupported_values[nan]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_unsupported_values[synthetic]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_content_policy.py::test_unsupported_values[value1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_closed_receipt",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_dns_private_mixed_and_unavailable",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_header_failure_classes[access-control-allow-credentials-true-cors_credentials]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_header_failure_classes[access-control-allow-origin-None-cors_origin]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_header_failure_classes[access-control-allow-origin-https://wrong.example-cors_origin]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_header_failure_classes[cache-control-None-cache_control]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_header_failure_classes[content-encoding-gzip-unsupported_encoding]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_header_failure_classes[content-type-application/json-content_type]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_header_failure_classes[set-cookie-unique_synthetic_cookie_marker-set_cookie]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_non_public_multicast_and_transition_addresses[2002:0a00:0001::]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_non_public_multicast_and_transition_addresses[224.0.0.1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_non_public_multicast_and_transition_addresses[::ffff:10.0.0.1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_non_public_multicast_and_transition_addresses[ff0e::1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_pinned_transport_and_exact_requests",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_preflight_missing_get_and_duplicate_headers",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_real_local_origin_retirement_and_isolation",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_receipt_byte_boundaries[8191]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_receipt_byte_boundaries[8192]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_receipt_byte_boundaries[8193]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_source_connection_never_authorizes_preview",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_status_failures[301-redirect]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_status_failures[302-redirect]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_status_failures[404-http_status]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_status_failures[500-http_status]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_tls_hostname_and_peer_pin",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-15]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-18]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-190]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-191]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-192]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-2071]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-230]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-231]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-232]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-24]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-250]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-251]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-252]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-253]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-26]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-29]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_origin_service.py::test_url_failure_classes[url-30]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-canonical_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-depth]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-envelope_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-fields]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-manifest_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-nodes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-rows]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[-1-siblings]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[0-canonical_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[0-depth]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[0-envelope_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[0-fields]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[0-manifest_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[0-nodes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[0-rows]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[0-siblings]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[1-canonical_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[1-depth]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[1-envelope_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[1-fields]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[1-manifest_bytes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[1-nodes]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[1-rows]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_all_cap_comparisons[1-siblings]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_builder_real_detector_environment[isolated-pinned]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_builder_real_detector_environment[shared-environment]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_builder_wrong_identity_fails_closed",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_byte_exact_golden",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_combined_canonical_byte_boundary[249999]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_combined_canonical_byte_boundary[250000]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_combined_canonical_byte_boundary[250001]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_complete_schema_field_boundaries[24]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_complete_schema_field_boundaries[25]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_complete_schema_field_boundaries[26]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_depth_boundaries[15]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_depth_boundaries[16]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_depth_boundaries[17]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_detector_injection_rejected[substitute0]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_detector_injection_rejected[substitute1]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_detector_injection_rejected[substitute2]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_duplicate_keys_and_compression",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_envelope_mutations[duplicate]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_envelope_mutations[extra]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_envelope_mutations[hash]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_envelope_mutations[order]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_envelope_mutations[profile]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_envelope_mutations[row]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_envelope_mutations[schema]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_envelope_mutations[sibling]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_envelope_mutations[tree]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_failed_policy_writes_nothing",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_invalid_selection",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_journal_export_retirement_and_marker",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_noop_service_injection_rejected",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_public_root_isolation",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_real_row_boundaries[100]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_real_row_boundaries[101]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_real_row_boundaries[99]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_received_envelope_boundaries[1048575]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_received_envelope_boundaries[1048576]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_received_envelope_boundaries[1048577]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_sample_hash_vectors",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_tampered_index_and_published_file",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_total_node_boundaries[10000]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_total_node_boundaries[10001]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_total_node_boundaries[9999]",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_unique_cell_marker_absent_from_journal_and_errors",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_preview_package_service.py::test_unscanned_payload_cannot_be_marked_prepared",
+      "baseline": "NEW",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_bad_role_arn_or_prefix_charset_fails_closed[arn:aws:iam::123456789012:role/aim-data-delivery-/exports/dataset-1-exports/dataset-1/report.csv]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_bad_role_arn_or_prefix_charset_fails_closed[arn:aws:iam::123456789012:role/aim-data-delivery-exports/*-exports/*/report.csv]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_bad_role_arn_or_prefix_charset_fails_closed[arn:aws:iam::123456789012:role/aim-data-delivery-exports/../dataset-1-exports/../dataset-1/report.csv]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_bad_role_arn_or_prefix_charset_fails_closed[arn:aws:iam::123456789012:role/aim-data-delivery-exports/dataset 1-exports/dataset 1/report.csv]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_bad_role_arn_or_prefix_charset_fails_closed[arn:aws:iam::12345678901:role/bad-exports/dataset-1-exports/dataset-1/report.csv]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_connection_lookup_failed_does_not_chain_original_error",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_connection_publish_bucket_root_explicit_allow_returns_empty_prefix",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_connection_publish_bucket_root_requires_explicit_allow",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_connection_publish_prefix_requires_non_root_prefix",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_dataset_lookup_failed_does_not_chain_original_error",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_empty_or_bucket_root_prefix_fails_closed[/]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_empty_or_bucket_root_prefix_fails_closed[None]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_empty_or_bucket_root_prefix_fails_closed[]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_foreign_owner_fails_closed",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_invalid_object_key_fails_closed[/exports/dataset-1/report.csv]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_invalid_object_key_fails_closed[exports/dataset-1/../other/secret.csv]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_missing_dataset_lookup_fails_closed",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_missing_s3_provenance_fails_closed[None-exports/dataset-1/report.csv]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_missing_s3_provenance_fails_closed[connection-1-None]",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_non_s3_dataset_returns_not_s3_without_error",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_object_key_outside_prefix_fails_closed",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_owner_match_success_returns_validated_resolution",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_unknown_serial_id_fails_closed",
+      "baseline": "passed",
+      "candidate": "passed"
+    },
+    {
+      "nodeid": "tests/test_s3_publish_source_resolver.py::test_unverified_connection_fails_closed",
+      "baseline": "passed",
+      "candidate": "passed"
+    }
+  ]
+}

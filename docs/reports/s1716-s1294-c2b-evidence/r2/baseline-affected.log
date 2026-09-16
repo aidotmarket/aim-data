@@ -1,0 +1,76 @@
+.................FF..................................................... [ 26%]
+........................................................................ [ 52%]
+........................................................................ [ 79%]
+........................................................                 [100%]
+=============================== warnings summary ===============================
+app/config.py:100
+  /private<CHECKOUT>/app/config.py:100: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Settings(BaseSettings):
+
+../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/starlette/formparsers.py:10
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/starlette/formparsers.py:10: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/typer/completion.py:122
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/typer/completion.py:122: DeprecationWarning: 'BaseCommand' is deprecated and will be removed in Click 9.0. Use 'Command' instead.
+    cli: click.BaseCommand,
+
+../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/spacy/cli/_util.py:23
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/spacy/cli/_util.py:23: DeprecationWarning: Importing 'parser.split_arg_string' is deprecated, it will only be available in 'shell_completion' in Click 9.0.
+    from click.parser import split_arg_string
+
+../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/weasel/util/config.py:8
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/weasel/util/config.py:8: DeprecationWarning: Importing 'parser.split_arg_string' is deprecated, it will only be available in 'shell_completion' in Click 9.0.
+    from click.parser import split_arg_string
+
+app/routers/pii.py:333
+  /private<CHECKOUT>/app/routers/pii.py:333: DeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    strategy: str = Query("mask", regex="^(mask|redact|hash)$"),
+
+../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/httpx/_client.py:690
+../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/httpx/_client.py:690
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/httpx/_client.py:690: DeprecationWarning: The 'app' shortcut is now deprecated. Use the explicit style 'transport=WSGITransport(app=...)' instead.
+    warnings.warn(message, DeprecationWarning)
+
+tests/test_pii.py: 3 warnings
+tests/test_pii_scrub.py: 13 warnings
+  /private<CHECKOUT>/app/services/pii_service.py:584: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    start_time = datetime.utcnow()
+
+tests/test_pii.py: 3 warnings
+tests/test_pii_scrub.py: 13 warnings
+  /private<CHECKOUT>/app/services/pii_service.py:643: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    end_time = datetime.utcnow()
+
+tests/test_pii_scrub.py::test_scrub_mask_strategy
+tests/test_pii_scrub.py::test_scrub_redact_strategy
+tests/test_pii_scrub.py::test_scrub_hash_strategy
+tests/test_pii_scrub.py::test_scrub_invalid_strategy
+tests/test_pii_scrub.py::test_scrub_privacy_score_improves
+tests/test_pii_scrub.py::test_scrub_before_after_counts
+tests/test_pii_scrub.py::test_scrub_file_alongside_original
+  /private<CHECKOUT>/app/services/pii_service.py:677: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    start_time = datetime.utcnow()
+
+tests/test_pii_scrub.py::test_scrub_mask_strategy
+tests/test_pii_scrub.py::test_scrub_redact_strategy
+tests/test_pii_scrub.py::test_scrub_hash_strategy
+tests/test_pii_scrub.py::test_scrub_privacy_score_improves
+tests/test_pii_scrub.py::test_scrub_before_after_counts
+tests/test_pii_scrub.py::test_scrub_file_alongside_original
+  /private<CHECKOUT>/app/services/pii_service.py:738: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    end_time = datetime.utcnow()
+
+tests/test_pii_text_content.py: 10 warnings
+  /private<CHECKOUT>/app/services/pii_service.py:506: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    start_time = datetime.utcnow()
+
+tests/test_pii_text_content.py: 10 warnings
+  /private<CHECKOUT>/app/services/pii_service.py:544: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    end_time = datetime.utcnow()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_pii_scrub.py::test_scrub_endpoint_not_found - OSError: [Err...
+FAILED tests/test_pii_scrub.py::test_scrub_endpoint_exists - OSError: [Errno ...
+2 failed, 270 passed, 73 warnings in 12.77s

@@ -1,0 +1,137 @@
+[
+  {
+    "label": "baseline",
+    "check": "affected",
+    "exit": 1,
+    "seconds": 14.05,
+    "command": [
+      "rtk",
+      "proxy",
+      "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+      "-m",
+      "pytest",
+      "tests/test_pii.py",
+      "tests/test_pii_scrub.py",
+      "tests/test_pii_text_content.py",
+      "tests/test_s3_publish_source_resolver.py",
+      "tests/test_dataset_canonicalization.py",
+      "tests/test_dataset_merkle_service.py",
+      "-q",
+      "--tb=no",
+      "--continue-on-collection-errors",
+      "-p",
+      "s1716_r2_outcomes"
+    ]
+  },
+  {
+    "label": "baseline",
+    "check": "ruff",
+    "exit": 1,
+    "seconds": 0.04,
+    "command": [
+      "rtk",
+      "proxy",
+      "ruff",
+      "check",
+      "app",
+      "tests"
+    ]
+  },
+  {
+    "label": "baseline",
+    "check": "lint",
+    "exit": 1,
+    "seconds": 2.24,
+    "command": [
+      "rtk",
+      "proxy",
+      "npm",
+      "run",
+      "lint"
+    ]
+  },
+  {
+    "label": "baseline",
+    "check": "types",
+    "exit": 2,
+    "seconds": 4.36,
+    "command": [
+      "rtk",
+      "proxy",
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "--noEmit",
+      "-p",
+      "tsconfig.app.json"
+    ]
+  },
+  {
+    "label": "candidate",
+    "check": "affected",
+    "exit": 1,
+    "seconds": 33.78,
+    "command": [
+      "rtk",
+      "proxy",
+      "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+      "-m",
+      "pytest",
+      "tests/test_pii.py",
+      "tests/test_pii_scrub.py",
+      "tests/test_pii_text_content.py",
+      "tests/test_s3_publish_source_resolver.py",
+      "tests/test_dataset_canonicalization.py",
+      "tests/test_dataset_merkle_service.py",
+      "tests/test_preview_content_policy.py",
+      "tests/test_preview_package_service.py",
+      "tests/test_preview_origin_service.py",
+      "-q",
+      "--tb=no",
+      "--continue-on-collection-errors",
+      "-p",
+      "s1716_r2_outcomes"
+    ]
+  },
+  {
+    "label": "candidate",
+    "check": "ruff",
+    "exit": 1,
+    "seconds": 0.04,
+    "command": [
+      "rtk",
+      "proxy",
+      "ruff",
+      "check",
+      "app",
+      "tests"
+    ]
+  },
+  {
+    "label": "candidate",
+    "check": "lint",
+    "exit": 1,
+    "seconds": 1.32,
+    "command": [
+      "rtk",
+      "proxy",
+      "npm",
+      "run",
+      "lint"
+    ]
+  },
+  {
+    "label": "candidate",
+    "check": "types",
+    "exit": 2,
+    "seconds": 3.66,
+    "command": [
+      "rtk",
+      "proxy",
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "--noEmit",
+      "-p",
+      "tsconfig.app.json"
+    ]
+  }
+]

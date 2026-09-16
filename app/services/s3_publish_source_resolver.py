@@ -56,6 +56,16 @@ class S3PublishSourceResolution:
     serial_id: str
     is_s3: Literal[True] = True
 
+    @property
+    def preview_host_eligible(self) -> Literal[False]:
+        """Read-source authority never grants preview storage/write authority.
+
+        Preview export uses a separately selected seller publication directory;
+        HTTPS/CORS admission belongs to preview_origin_service. Presigned source
+        URLs cannot be preview package URLs, even for a verified connection.
+        """
+        return False
+
 
 PublishSourceResolution = Union[NotS3PublishSource, S3PublishSourceResolution]
 
