@@ -131,3 +131,56 @@ Line references are to the authority files read from runbooks `origin/main`.
 | Caller CC R2 LOW-1 fold; Gate 1 D1a line 56 | Delete member rows on the legacy path too, regardless of current flag state. This narrowly authorized bug fix is the intentional exception to “legacy unchanged”; the original directory root-removal condition is untouched. |
 
 No provider-backed semantic-quality test, customer-file test, live Postgres test, production enablement, publish-wire acceptance or scanner acceptance is claimed. Those are not substituted with the passing stub tests.
+
+
+## R1 fold
+
+Review base: `6706a4147502c880d982f42c8790badf9144edf0`. Caller-supplied Council verdicts: DeepSeek **REQUEST_CHANGES** (1 MEDIUM, 2 LOW, 4 NIT), GLM **APPROVE_WITH_NITS** (1 NIT), CC **APPROVE_WITH_NITS** (1 LOW, 1 NIT). Implementation commit: `0959c9a`; this report commit follows. Worked in the clean existing branch worktree `/private/var/tmp/koskadeux/minimal-bridge-worktrees/57806225a01e-a5e300`, because the supplied bridge checkout was detached at the same review head. No new branch, rebase, history rewrite, PR or deployment. Earlier sections describe the pre-R1 candidate; this section supersedes their affected behavior and counts.
+
+### Findings and dispositions
+
+| Finding | Disposition |
+| --- | --- |
+| DeepSeek F1 MEDIUM | Adopted. Empty member previews do not supply a synthetic `[]` text block to PII. When zero members were profiled or no nonempty preview text was sampled, set only `pii.privacy_score` to `None`, retaining the PII scope and scanner counts; listing metadata inherits `None`. The all-over-cap test checks the persisted unknown score and retains “not profiled” description copy. Four empty-preview cases cover empty rows, empty text, whitespace and null text; a sampled member retains numeric score 10. |
+| DeepSeek F3 LOW = CC LOW-1 | Adopted. A registered directory with profile `not_started` returns overall pipeline status `pending` and “Profiling has not started.” HTTP regression verifies it never reports failure. |
+| DeepSeek F5 NIT | Adopted. `_finish` rewrites any remaining `pending` member to `parse_failed` with the sanitized reason “Profiling interrupted before extraction completed.” Injected `CancelledError` verifies the terminal result is persisted with no pending member entries. |
+| DeepSeek F7 NIT | Adopted. The spawn arguments explicitly carry the parent's actual `multi_file_datasets_enabled` value; the child no longer forces `True`. Real documentation workers exercise both values; the real CSV extraction test still exercises enabled member extraction. |
+| DeepSeek F4 NIT | Adopted. New config field `profile_docs_context_bytes`, default **262144**, environment alias **AIM_DATA_PROFILE_DOCS_CONTEXT_BYTES**. This is a value **outside Gate 2 §6 for the caller to record**. Documentation has its own read-attempt cap of `PROFILE_MAX_MEMBERS` (default 64), separate from the data-member allowance; failed reads consume slots. Documentation still shares the aggregate byte/deadline budget. The new byte value participates in cache identity. Tests cover the alias, byte boundary, cache invalidation and read-attempt cap with failed reads. |
+| CC NIT-1 | Adopted. The count-limit skip keeps member state `too_large` but uses the exact reason `member limit 64 reached` at the default cap. No `skipped_limit` state, §6/D2 vocabulary addition or frontend-label change. |
+| DeepSeek F2 LOW | Not adopted, as instructed. Pipeline routes remain the intended profiling trigger. On a listing-metadata cache miss, `POST /datasets/{id}/listing-metadata` still awaits set profiling to prepare the listing; subsequent metadata reads reuse the persisted result. This preserves the current deliberate fallback behavior, including the synchronous request latency. No scheduling redesign was made. |
+| DeepSeek F6 NIT | Not adopted as a code change. Packet SHA is caller-owned and the caller reports it corrected. This fold does not generate or validate a replacement Council packet. |
+| GLM NIT-1 | Not adopted. The BQ-origin trigger screenshot is the only evidence for the production “0 rows stuck” case and does not identify its file type. The spec-requested `unsupported_type` path remains covered, together with a supported zero-row parse; neither is claimed as reproduction of an unidentified production file. |
+| CC coverage discrepancy | No production change. `test_real_hung_worker_terminated` **passes in this environment**, including the focused run (1.028 seconds). The reviewer-sandbox failure is not reproduced here. |
+
+### R1 validation
+
+Used the same Python environment and frontend dependencies as the original report. Evidence is in `/tmp/s1717-b-evidence/r1-*`, using fresh focused/full serial directories. The focused seven-module command was:
+
+```sh
+rtk proxy env AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-b-evidence/r1-focused-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q tests/test_directory_processing.py tests/test_directory_registration.py tests/test_dataset_members_api.py tests/test_single_file_uploads.py tests/test_member_migration.py tests/test_batch_upload.py tests/test_pipeline.py --tb=short --junitxml=/tmp/s1717-b-evidence/r1-focused.xml
+```
+
+Full suite uses the same environment with `AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-b-evidence/r1-full-serial` and `python -m pytest -q --tb=short --junitxml=/tmp/s1717-b-evidence/r1-full.xml`.
+
+| Check | Result |
+| --- | --- |
+| Focused seven-module backend command | **104 passed**, 0 failures/errors, 57 warnings, 14.35 seconds |
+| Frontend `NODE_OPTIONS=--no-experimental-webstorage npm test` | **75 passed**, 10 files, 1.90 seconds; exit 0 |
+| Frontend `./node_modules/.bin/tsc --noEmit` | Passed without diagnostics; exit 0 |
+| Frontend `npm run build` | Passed, 3.31 seconds; exit 0; existing chunk-size/Browserslist warnings |
+
+Focused module counts: directory_processing **34**, directory_registration **12**, dataset_members_api **10**, single_file_uploads **5**, member_migration **5**, batch_upload **23**, pipeline **15**. The 12 additional passing directory cases cover the R1 fold. Existing background-thread and deprecation warnings remain visible in the logs.
+
+| Full-suite comparison | Passed | Failed | Errors | Skipped | Total | Seconds |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Named `/tmp/s1717-a-evidence/baseline-portable.xml` | 2842 | 55 | 38 | 34 | 2969 | 170.62 |
+| R1 candidate `0959c9a`, `r1-full.xml` | 3021 | 55 | 38 | 34 | 3148 | 165.46 |
+
+**New failing cases: none.** Exact JUnit `classname::name` comparison treats both failure and error as failing. All 93 baseline failure/error identities remain; none disappears. The full suite is therefore still non-green (exit 1), with **798 warnings**, but adds **179 passing cases** over the named baseline. All **34 directory-processing cases**, including the real hung-worker test, also pass in this full run. Machine-readable comparison: `/tmp/s1717-b-evidence/r1-comparison.json`.
+
+Evidence SHA-256 digests:
+
+- `baseline-portable.xml`: `6ed712467982d7f3403174a3ae605b4fb21f6c522e7648605085ec52b0193086`.
+- `r1-focused.xml`: `6f3a91d1418a0169df27789c36214a9f7d8008d0d5ff6ef29adcac60c3e27745`.
+- `r1-full.xml`: `e9078fa5f5c24ae1317b4300757ab1cefbaef8d723e89f7f2f159f7ab5916411`.
+- `r1-comparison.json`: `849c5d5ead4c045d24fb35ea1ac037f07097a3c1fe1c1a2588b2d654f9b4f6c3`.
