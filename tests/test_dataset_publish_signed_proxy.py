@@ -841,6 +841,12 @@ async def test_local_helpers_guard_metadata(local_dataset, metadata):
             mp._local_publish_snapshot(local_dataset)
         with pytest.raises(HTTPException, match="local_publish_metadata_invalid"):
             await mp.publish_status(dataset_id=local_dataset, user=None)
+    # The suite shares its database: do not leave corrupt rows for list endpoints.
+    with get_session_context() as session:
+        record = session.get(DBDatasetRecord, local_dataset)
+        record.metadata_json = "{}"
+        session.add(record)
+        session.commit()
 
 
 @pytest.mark.asyncio
