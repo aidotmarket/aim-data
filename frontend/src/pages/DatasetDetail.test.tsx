@@ -387,6 +387,36 @@ describe("directory members", () => {
 
 
 describe("directory publish control", () => {
+  it("publishes metadata.directory samples through preparation and leaves verification untouched", async () => {
+    vi.spyOn(piiApi, "getConfig").mockResolvedValue({
+      dataset_id: "ds-1", column_actions: {}, privacy_attested: false, updated_at: null,
+    });
+    vi.spyOn(piiApi, "getScan").mockResolvedValue(cleanScan);
+    vi.spyOn(datasetsApi, "getDisclosureSample").mockResolvedValue({ dataset_id: "ds-1", sample: [], count: 0 });
+    const directory = dataset(listingMetadata);
+    directory.file_type = "directory";
+    directory.metadata = { ...directory.metadata, directory: { sample_member_count: 2 } };
+    vi.spyOn(datasetsApi, "get").mockResolvedValue(directory);
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-1" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    renderPreparation(directory);
+    const panel = screen.getByTestId("data-verification-flow");
+    const panelBefore = panel.outerHTML;
+    fireEvent.click(await screen.findByRole("button", { name: "Accept all & continue" }));
+    expect(screen.getByText("2 seller-selected sample files. Sample files are also part of the purchased set.")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Publish selected sample files for free download" })).toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    await screen.findByRole("button", { name: "Published" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetcher.mock.calls[1][1].body).sample_decision).toBe("member_files");
+    expect(screen.getByTestId("data-verification-flow")).toBe(panel);
+    expect(panel.outerHTML).toBe(panelBefore);
+    expect(screen.getByRole("heading", { name: "Optional: add a verified shape label" })).toBeInTheDocument();
+  });
+
   const props = { datasetId: "directory-1", publishPayload: { title: "Set", description: "Set", price_cents: 2500 },
     disclosurePayload: { approved_fields: { title: "Set" }, source_publish_operation_id: "op-1" },
     disabled: false, sampleCount: 2, onPublished: vi.fn() };
