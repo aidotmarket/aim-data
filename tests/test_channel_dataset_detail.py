@@ -49,6 +49,10 @@ def test_aim_data_channel_gets_ring_two_styling():
     assert 'channel === "marketplace" || channel === "aim-data" ? " ring-2 ring-primary/30" : ""' in content
 
 
+def test_verified_shape_label_heading_is_optional():
+    assert "Optional: add a verified shape label" in DATASET_DETAIL_PATH.read_text()
+
+
 def _assert_no_verification_keys(value):
     """Check every serialized key, including nested schema/version members."""
     if isinstance(value, dict):
