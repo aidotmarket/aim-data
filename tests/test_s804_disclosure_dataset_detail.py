@@ -19,7 +19,7 @@ def test_dataset_detail_keeps_three_step_disclosure_flow():
     assert "Review disclosure decision" in source
 
 
-def test_dataset_detail_uses_unredacted_preview_and_retry_without_republish():
+def test_dataset_detail_avoids_unredacted_preview_and_retries_without_republish():
     source = DATASET_DETAIL.read_text()
 
     assert "datasetsApi.getDisclosureSample(dataset.id, 100)" not in source
