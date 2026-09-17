@@ -19,6 +19,7 @@ from app.utils.sanitization import sanitize_filename, sql_quote_literal
 _log = logging.getLogger(__name__)
 
 S3_PROVENANCE_KEYS = (
+    "preview_owner_id",  # Preserve authenticated upload ownership through extraction.
     "source_type",
     "source_connection_id",
     "source_object_key",

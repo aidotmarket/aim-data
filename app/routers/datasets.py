@@ -162,6 +162,7 @@ async def upload_dataset(
 
         # Update actual file size after write completes
         record.file_size_bytes = bytes_written
+        record.metadata["preview_owner_id"] = user.user_id
         storage_fn = record.upload_path.name
         processing._save_record(record, storage_fn)
 
@@ -536,6 +537,7 @@ async def batch_upload(
 
             # Update actual file size
             record.file_size_bytes = bytes_written
+            record.metadata["preview_owner_id"] = user.user_id
             storage_fn = record.upload_path.name
             processing._save_record(record, storage_fn)
 

@@ -814,6 +814,7 @@ def run_commitment_job(
     budget=None,
     cancel=None,
     progress=None,
+    local_review=None,
 ):
     """Separate process, incremental RSS watchdog, private cleanup on every exit.
 
@@ -893,6 +894,13 @@ def run_commitment_job(
                 )
             result["peak_rss_bytes"] = peak_rss
             result["incremental_rss_bytes"] = peak_rss - initial_rss
+            if local_review is not None:
+                # Keep the installation lock and private index only for this live
+                # review session. Restart rebuilds; rows never enter the journal.
+                tree = DiskTree(directory, result["commitment"]["leaf_count"],
+                                decode_digest(result["commitment"]["dataset_merkle_root"]),
+                                decode_digest(result["commitment"]["schema_digest"]), last_bytes)
+                local_review(tree, result)
             return result
         finally:
             if process.is_alive():
