@@ -91,6 +91,19 @@ Your long lived AWS credentials stay in your account. AIM Data only holds a shor
 
 Once green, you can point AIM Data at any bucket and prefix you have read access to. Files appear in the catalog and you can list them on the marketplace.
 
+## Datasets with many files
+
+When folder uploads are enabled for your install, upload a folder to create one dataset.
+Its member table shows each file and its role: data, sample, docs, or other.
+You can mark a member as a free sample and choose which files buyers can try before buying.
+
+Publishing creates **one listing** with the members you chose as the free sample.
+Buyers receive the whole set and download its members from their order page.
+The verified shape label is optional and separate from publishing; you can publish without it.
+
+Directory publishing and delivery require **the current release**, which includes this feature.
+For older installs, follow the [upgrade instructions](#updating) before publishing a folder.
+
 ## Updating
 
 When I release a new version, grab the latest compose file first, then pull and recreate. The compose file pins the version you run, so pulling without refreshing it first just keeps you on your current version.

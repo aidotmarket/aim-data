@@ -36,6 +36,19 @@ The API serves your seller dashboard and the buyer portal. PostgreSQL stores lis
 
 Sign in with ai.market is on by default; set AIM_DATA_OAUTH_ENABLED=false to switch off (rollback).
 
+## Datasets with many files
+
+When folder uploads are enabled for your install, upload a folder to create one dataset.
+Its member table shows each file and its role: data, sample, docs, or other.
+You can mark a member as a free sample and choose which files buyers can try before buying.
+
+Publishing creates **one listing** with the members you chose as the free sample.
+Buyers receive the whole set and download its members from their order page.
+The verified shape label is optional and separate from publishing; you can publish without it.
+
+Directory publishing and delivery require **the current release**, which includes this feature.
+For older installs, follow the [upgrade instructions](docs/INSTALL.md#updating) before publishing a folder.
+
 ## Architecture
 
 ```
