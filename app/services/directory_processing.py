@@ -50,7 +50,7 @@ def pipeline_status(dataset_id):
     profile = profile_snapshot(dataset_id)
     state = profile["status"]
     return {"dataset_id": dataset_id,
-            "status": "running" if state == "running" else "success" if state in ("completed", "profiling_skipped") else "failed",
+            "status": "running" if state == "running" else "success" if state in ("completed", "profiling_skipped") else "pending" if state == "not_started" else "failed",
             "message": profile.get("summary", profile.get("reason", "")),
             "steps": {"directory_profile": {"status": state, "error": profile.get("reason")}},
             "output_files": {}, "directory_profile": profile}
@@ -72,14 +72,14 @@ def _save(dataset_id, profile, *, listing=None):
         session.commit()
 
 
-def _worker(send, operation, payload, output_directory):
+def _worker(send, operation, payload, output_directory, multi_file_datasets_enabled):
     """Spawn-safe, DB-free worker. Parent kills it on deadline or cancellation."""
     try:
+        settings.multi_file_datasets_enabled = multi_file_datasets_enabled
         if operation == "member":
             from app.services.processing_service import ProcessingService
             from app.services.source_artifact_resolver import resolve_member_path
             dataset_values, member_values = payload
-            settings.multi_file_datasets_enabled = True
             dataset, member = SimpleNamespace(**dataset_values), SimpleNamespace(**member_values)
             path = resolve_member_path(dataset, member)
             if path is None:
@@ -106,7 +106,6 @@ def _worker(send, operation, payload, output_directory):
         elif operation == "documentation":
             from app.services.source_artifact_resolver import resolve_member_path
             dataset_values, member_values, limit = payload
-            settings.multi_file_datasets_enabled = True
             path = resolve_member_path(SimpleNamespace(**dataset_values), SimpleNamespace(**member_values))
             if path is None:
                 raise ValueError("Documentation source unavailable")
@@ -131,7 +130,7 @@ async def _isolated(operation, payload, deadline):
     context = multiprocessing.get_context("spawn")
     receive, send = context.Pipe(duplex=False)
     scratch = tempfile.TemporaryDirectory(prefix="aim-profile-")
-    process = context.Process(target=_worker, args=(send, operation, payload, scratch.name), daemon=True)
+    process = context.Process(target=_worker, args=(send, operation, payload, scratch.name, settings.multi_file_datasets_enabled), daemon=True)
     try:
         process.start()
         send.close()
@@ -185,7 +184,8 @@ async def _process(dataset_id):
         "root": record.root_path,
         "members": [[m[k] for k in ("index", "relative_path", "sha256", "size_bytes", "role", "status")] for m in values],
         "policy": [settings.profile_max_members, settings.profile_max_member_bytes,
-                   settings.profile_max_total_bytes, settings.profile_timeout_s],
+                   settings.profile_max_total_bytes, settings.profile_timeout_s,
+                   settings.profile_docs_context_bytes],
     }, sort_keys=True).encode()).hexdigest()
     previous = json.loads(record.metadata_json or "{}").get("directory_profile", {})
     if previous.get("source_key") == source_key and previous.get("status") in ("completed", "profiling_skipped"):
@@ -214,7 +214,8 @@ async def _process(dataset_id):
             elif member["size_bytes"] > settings.profile_max_member_bytes:
                 reason = f"too_large: PROFILE_MAX_MEMBER_BYTES={settings.profile_max_member_bytes}"
             elif attempted >= settings.profile_max_members:
-                reason = f"too_large: PROFILE_MAX_MEMBERS={settings.profile_max_members}"
+                outcome.update(status="too_large", reason=f"member limit {settings.profile_max_members} reached")
+                continue
             elif profile["read_bytes"] + member["size_bytes"] > settings.profile_max_total_bytes:
                 reason = f"too_large: PROFILE_MAX_TOTAL_BYTES={settings.profile_max_total_bytes}"
             elif time.monotonic() >= deadline:
@@ -233,15 +234,21 @@ async def _process(dataset_id):
                 profile["profiled_bytes"] += member["size_bytes"]
                 columns = result.get("columns", [])
                 schemas.add(json.dumps(columns, sort_keys=True, default=str))
-                texts.append(json.dumps(result.get("sample_rows", []), default=str)[:10000])
+                sample_rows = result.get("sample_rows", [])
+                if any(value is not None and str(value).strip()
+                       for row in sample_rows for value in row.values()):
+                    texts.append(json.dumps(sample_rows, default=str)[:10000])
             except TimeoutError:
                 outcome.update(status="timeout", reason=f"timeout: PROFILE_TIMEOUT_S={settings.profile_timeout_s}")
             except Exception:
                 outcome.update(status="parse_failed", reason="parse_failed: Member extraction failed")
         # Documentation is inert UTF-8 quoted context, bounded across the set.
-        # It shares the total input-byte budget and does not consume data slots.
-        docs_left = min(256 * 1024, settings.profile_max_total_bytes - profile["read_bytes"])
+        # It shares the byte budget, with a separate PROFILE_MAX_MEMBERS cap.
+        docs_left = min(settings.profile_docs_context_bytes, settings.profile_max_total_bytes - profile["read_bytes"])
+        docs_attempted = 0
         for member in values:
+            if docs_attempted >= settings.profile_max_members:
+                break
             if member["role"] != "documentation" or docs_left <= 0 or time.monotonic() >= deadline:
                 continue
             if member["size_bytes"] > settings.profile_max_member_bytes:
@@ -249,6 +256,7 @@ async def _process(dataset_id):
             limit = min(docs_left, member["size_bytes"])
             if not limit:
                 continue
+            docs_attempted += 1
             try:
                 text = await _isolated("documentation", (record.model_dump(), member, limit), deadline)
                 documentation.append({"relative_path": member["relative_path"], "quoted_text": text})
@@ -262,6 +270,8 @@ async def _process(dataset_id):
         try:
             profile["pii"] = await _isolated("pii", texts, deadline)
             profile["pii"]["scope"] = "Bounded member previews only; not a whole-set clearance"
+            if profile["profiled_members"] == 0 or not texts:
+                profile["pii"]["privacy_score"] = None
         except TimeoutError:
             profile["pii"] = {"status": "timeout", "reason": f"PROFILE_TIMEOUT_S={settings.profile_timeout_s}"}
         except Exception:
@@ -285,6 +295,9 @@ async def _process(dataset_id):
 
 
 def _finish(profile):
+    for member in profile["members"].values():
+        if member["status"] == "pending":
+            member.update(status="parse_failed", reason="parse_failed: Profiling interrupted before extraction completed")
     n, total = profile["profiled_members"], profile["total_data_members"]
     profile["status"] = "completed" if n else "profiling_skipped"
     profile["summary"] = f"profiled on {n} of {total} files" if n else f"not profiled (0 of {total} files)"

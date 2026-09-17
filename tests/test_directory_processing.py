@@ -82,7 +82,7 @@ def test_member_limit(directory, stub, count, expected):
     assert result['summary'] == f'profiled on {expected} of {count} files'
     if count == 65:
         assert result['members']['64']['status'] == 'too_large'
-        assert 'PROFILE_MAX_MEMBERS=64' in result['members']['64']['reason']
+        assert result['members']['64']['reason'] == 'member limit 64 reached'
     assert len([op for op, _ in stub[0] if op == 'pii']) == 1
     assert stub[1].call_count == 1
 
@@ -109,6 +109,8 @@ def test_all_over_cap_still_listing_allowed(directory, stub):
     assert result['profiled_members'] == 0 and result['total_data_members'] == 2
     assert 'not profiled' in result['summary']
     listing = asyncio.run(get_listing_metadata_service().generate_listing_metadata(dataset_id))
+    assert metadata['listing_metadata']['privacy_score'] is None
+    assert metadata['directory_profile']['pii']['scope'].startswith('Bounded member previews')
     assert 'not profiled' in listing.description
     assert stub[1].call_count == 1  # cached metadata reads never regenerate
 
@@ -161,7 +163,7 @@ def test_unsupported_zero_rows_terminal(directory, stub):
     assert not any(op == 'member' for op, _ in stub[0])
 
 
-def _hang_worker(send, operation, payload, output_directory):
+def _hang_worker(send, operation, payload, output_directory, multi_file_datasets_enabled):
     time.sleep(60)
 
 
@@ -312,3 +314,104 @@ def test_zero_row_supported_parse_is_terminal(directory, stub, monkeypatch):
     profile=run(directory())['directory_profile']
     assert profile['status'] == 'completed' and profile['row_count'] == 0
     assert profile['members']['0']['status'] == 'profiled'
+
+
+@pytest.mark.parametrize('sample_rows', [[], [{'text': ''}], [{'text': '  '}], [{'text': None}]])
+def test_empty_member_previews_have_unknown_privacy(directory, stub, monkeypatch, sample_rows):
+    original = dp._isolated
+    async def empty(op, payload, deadline):
+        result = await original(op, payload, deadline)
+        if op == 'member':
+            result['sample_rows'] = sample_rows
+        elif op == 'pii':
+            result.update(total_rows=len(payload), rows_sampled=len(payload))
+        return result
+    monkeypatch.setattr(dp, '_isolated', empty)
+    metadata = run(directory())
+    assert metadata['directory_profile']['profiled_members'] == 1
+    assert metadata['directory_profile']['status'] == 'completed'
+    assert metadata['directory_profile']['pii']['rows_sampled'] == 0
+    assert metadata['directory_profile']['pii']['total_rows'] == 0
+    assert metadata['directory_profile']['pii']['scope'].startswith('Bounded member previews')
+    assert metadata['listing_metadata']['privacy_score'] is None
+
+
+def test_sampled_member_keeps_numeric_privacy(directory, stub):
+    metadata = run(directory())
+    assert metadata['directory_profile']['profiled_members'] == 1
+    assert metadata['listing_metadata']['privacy_score'] == 10
+
+
+def test_registered_directory_pipeline_status_pending(directory):
+    from app.routers import datasets
+    dataset_id = directory()
+    app = FastAPI(); app.include_router(datasets.router, prefix='/datasets')
+    app.dependency_overrides[datasets.get_current_user] = lambda: SimpleNamespace(user_id='seller')
+    with TestClient(app) as client:
+        response = client.get(f'/datasets/{dataset_id}/pipeline-status')
+    assert response.status_code == 200
+    assert response.json()['status'] == 'pending'
+    assert response.json()['directory_profile']['status'] == 'not_started'
+    assert response.json()['message'] == 'Profiling has not started'
+
+
+def test_cancelled_extraction_finalizes_pending_member(directory, stub, monkeypatch):
+    dataset_id = directory(2)
+    async def cancel(op, payload, deadline):
+        raise asyncio.CancelledError
+    monkeypatch.setattr(dp, '_isolated', cancel)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(dp._process(dataset_id))
+    profile = dp.profile_snapshot(dataset_id)
+    assert profile['status'] == 'profiling_skipped'
+    assert profile['members']['0']['status'] == 'parse_failed'
+    assert 'interrupted' in profile['members']['0']['reason']
+    assert all(member['status'] != 'pending' for member in profile['members'].values())
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_spawned_documentation_worker_inherits_parent_flag(directory, tmp_path, monkeypatch, enabled):
+    dataset_id = directory(roles=['documentation'])
+    (tmp_path / '00000.csv').write_text('docs')
+    record = dp.directory_record(dataset_id)
+    with get_session_context() as session:
+        member = session.get(DatasetMember, (dataset_id, 0)).model_dump()
+    monkeypatch.setattr(settings, 'multi_file_datasets_enabled', enabled)
+    operation = dp._isolated('documentation', (record.model_dump(), member, 4), time.monotonic() + 30)
+    if enabled:
+        assert asyncio.run(operation) == 'docs'
+    else:
+        with pytest.raises(ValueError):
+            asyncio.run(operation)
+
+
+def test_documentation_member_cap_counts_failed_reads(directory, stub, monkeypatch):
+    monkeypatch.setattr(settings, 'profile_max_members', 2)
+    original = dp._isolated
+    async def fail(op, payload, deadline):
+        result = await original(op, payload, deadline)
+        if op == 'documentation':
+            raise ValueError('unreadable')
+        return result
+    monkeypatch.setattr(dp, '_isolated', fail)
+    metadata = run(directory(5, roles=['data'] + ['documentation'] * 4))
+    assert len([op for op, _ in stub[0] if op == 'documentation']) == 2
+    assert metadata['directory_profile']['read_bytes'] == 12
+
+
+def test_documentation_context_budget_and_cache(directory, stub, monkeypatch):
+    monkeypatch.setattr(settings, 'profile_docs_context_bytes', 5)
+    dataset_id = directory(4, roles=['data'] + ['documentation'] * 3)
+    metadata = run(dataset_id)
+    assert [payload[2] for op, payload in stub[0] if op == 'documentation'] == [4, 1]
+    assert metadata['directory_profile']['read_bytes'] == 9
+    monkeypatch.setattr(settings, 'profile_docs_context_bytes', 6)
+    run(dataset_id)
+    assert stub[1].call_count == 2
+    assert [payload[2] for op, payload in stub[0] if op == 'documentation'] == [4, 1, 4, 2]
+
+
+def test_documentation_context_config_alias(monkeypatch):
+    from app.config import Settings
+    monkeypatch.setenv('AIM_DATA_PROFILE_DOCS_CONTEXT_BYTES', '17')
+    assert Settings(_env_file=None).profile_docs_context_bytes == 17
