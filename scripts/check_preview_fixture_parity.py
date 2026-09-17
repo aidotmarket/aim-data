@@ -14,7 +14,9 @@ BACKEND_SHA256 = "f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499
 
 
 def check(root: Path, backend_fixture: Path | None = None) -> int:
-    manifest = json.loads((root / "tests/fixtures/preview-fixture-manifest.json").read_bytes())
+    manifest = json.loads(
+        (root / "tests/fixtures/preview-fixture-manifest.json").read_bytes()
+    )
     if not isinstance(manifest, list) or not manifest:
         raise ValueError("invalid_manifest")
     paths = set()
@@ -29,7 +31,9 @@ def check(root: Path, backend_fixture: Path | None = None) -> int:
             or ".." in Path(name).parts
             or name in paths
             or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])
-            or not all(isinstance(entry[k], str) and entry[k] for k in ("profile", "purpose"))
+            or not all(
+                isinstance(entry[k], str) and entry[k] for k in ("profile", "purpose")
+            )
         ):
             raise ValueError("invalid_manifest_entry")
         paths.add(name)
@@ -57,15 +61,24 @@ def check(root: Path, backend_fixture: Path | None = None) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--backend-fixture", type=Path, help="Exact backend Git object exported to a file")
+    parser.add_argument(
+        "--backend-fixture",
+        type=Path,
+        help="Exact backend Git object exported to a file",
+    )
     args = parser.parse_args()
     try:
         count = check(ROOT, args.backend_fixture)
     except (ValueError, OSError, KeyError, TypeError):
-        print("Preview fixture parity FAILED; inspect manifest and pinned objects.", file=sys.stderr)
+        print(
+            "Preview fixture parity FAILED; inspect manifest and pinned objects.",
+            file=sys.stderr,
+        )
         return 1
-    print(f"Preview fixture parity passed: {count} pinned files; backend copy "
-          + ("byte-equal." if args.backend_fixture else "not supplied (SHA pin checked)."))
+    print(
+        f"Preview fixture parity passed: {count} pinned files; backend copy "
+        + ("byte-equal." if args.backend_fixture else "not supplied (SHA pin checked).")
+    )
     return 0
 
 

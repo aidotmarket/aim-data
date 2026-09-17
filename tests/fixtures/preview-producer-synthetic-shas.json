@@ -1,0 +1,74 @@
+{
+  "notice": "SYNTHETIC CI ONLY; not Gate-4 receipts",
+  "retired_package_sha256": "c6f967859336f3de4d660017e11813f592d2433476971b676f7663a67692c82a",
+  "files": [
+    {
+      "path": "approval-candidate.json",
+      "sha256": "4d2467cb398c4d124ea69490b745c48b89c40dedcdc98cab8f24a2b087a3d5f1"
+    },
+    {
+      "path": "build-receipt.json",
+      "sha256": "2e2088719a8618ea7061377316986a334543ee3cf3996310bad0f0df52edc7f0"
+    },
+    {
+      "path": "commitment.json",
+      "sha256": "27d3e96eb5fde0e71abed057d7d2f9aa6c27e776b9ca660cbe3e261e8024faa2"
+    },
+    {
+      "path": "expected-platform-records.json",
+      "sha256": "49af2f970b993b52db44fbdd4c25e07e2377b7ce9706393bceb356bd4e65f87f"
+    },
+    {
+      "path": "hosting-receipts.json",
+      "sha256": "506776e6a5329462a24ee19a4fbb3d40f139bd2d28cb8b2170d5b1292cee7485"
+    },
+    {
+      "path": "lifecycle-results.json",
+      "sha256": "0bdce13215d01ad748063cea6c38ff9670fe1e5aebd200c62887d181cf9e4ad1"
+    },
+    {
+      "path": "proofs.json",
+      "sha256": "2eb2a3211bcc4ca65fcfac86ca93519c7022f942dd6788403efaa82afbbf8fd4"
+    },
+    {
+      "path": "publication.json",
+      "sha256": "71d1afe8a10d9320087fd68e775366bfb2d36f748df7e38857e89adac885941e"
+    },
+    {
+      "path": "refresh-candidate.json",
+      "sha256": "e2d45041316e9b51a642406e63a93a8091adb11877ebce0887912d842488be77"
+    },
+    {
+      "path": "registration-readback.json",
+      "sha256": "66b5c57b24e023aacb514741bf2b847bb706995c3137c27e0134bbc3e2f3c9b4"
+    },
+    {
+      "path": "retirement-receipts.json",
+      "sha256": "6b083a6a8e821ae371953bda2c85945058e4dd0d69f1306feac83d452807d779"
+    },
+    {
+      "path": "schema-descriptors.json",
+      "sha256": "2c2d32e1c0da092fbcc199d6f81c62703750a47543ca0c6d1de736b97b4bbeb2"
+    },
+    {
+      "path": "seller-attestation.json",
+      "sha256": "8e996cc56b07cf7e908b7d993a6b699b4bf28c86d18e366ab1e1e38717cb560c"
+    },
+    {
+      "path": "signing-preimages.json",
+      "sha256": "994a09a68d4966e5bb9e8ddebc424162df0f0dc23a5921dc388d61ab8fd6c5d3"
+    },
+    {
+      "path": "supersede-candidate.json",
+      "sha256": "ea73c5aea0d07418095a85aaa08eaabf4859bbd5e8c838d5ca827df192d61147"
+    },
+    {
+      "path": "synthetic-provenance.json",
+      "sha256": "13216f3729878cfcebef5a777e23dddcddf3e62e058f90d1134ef20ce4a6d32f"
+    },
+    {
+      "path": "withdraw-candidate.json",
+      "sha256": "1304699f174347f5550723de9dc3b2c33bcd05f5c6f1300520dd91492aa75e79"
+    }
+  ]
+}

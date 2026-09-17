@@ -6,7 +6,9 @@ import shutil
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("fixture_parity", ROOT / "scripts/check_preview_fixture_parity.py")
+spec = importlib.util.spec_from_file_location(
+    "fixture_parity", ROOT / "scripts/check_preview_fixture_parity.py"
+)
 assert spec and spec.loader
 parity = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(parity)
@@ -16,7 +18,9 @@ def test_committed_manifest_and_backend_copy():
     assert parity.check(ROOT, ROOT / parity.REFERENCE) >= 14
 
 
-@pytest.mark.parametrize("mutation", ["bytes", "missing", "omitted", "new", "backend", "duplicate", "escape"])
+@pytest.mark.parametrize(
+    "mutation", ["bytes", "missing", "omitted", "new", "backend", "duplicate", "escape"]
+)
 def test_drift_fails(tmp_path, mutation):
     dest = tmp_path / "tests/fixtures"
     shutil.copytree(ROOT / "tests/fixtures", dest)
