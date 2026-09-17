@@ -120,6 +120,14 @@ class ImportService:
 
     def scan(self, path_str: str, recursive: bool = True, max_depth: int = 5) -> dict:
         """Scan directory for importable files. Bounded: max 10K files, 30s timeout, max depth."""
+        from app.config import settings
+        if settings.multi_file_datasets_enabled:
+            from app.services.directory_registration import scan_directory
+            _, members = scan_directory(path_str)
+            return {"files": [{"relative_path": m["relative_path"], "size_bytes": m["size_bytes"],
+                               "extension": Path(m["relative_path"]).suffix} for m in members],
+                    "total_files": len(members), "total_bytes": sum(m["size_bytes"] for m in members),
+                    "skipped": {}, "truncated": False}
         supported = _get_supported_extensions()
         resolved = validate_import_path(path_str)
         if not resolved.is_dir():

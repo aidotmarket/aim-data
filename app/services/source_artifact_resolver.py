@@ -18,7 +18,7 @@ from sqlmodel import select
 
 from app.config import settings
 from app.core.database import get_session_context
-from app.models.dataset import DatasetRecord
+from app.models.dataset import DatasetRecord, DatasetMember
 from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 
@@ -76,8 +76,12 @@ class ResolvedArtifact:
 
 
 def _resolve_file_path(
-    dataset: DatasetRecord, *, upload_directory: str, processed_directory: str
+    dataset: DatasetRecord, *, upload_directory: str, processed_directory: str, member=None
 ) -> Optional[str]:
+    if dataset.file_type == "directory":
+        if not settings.multi_file_datasets_enabled or member is None:
+            return None
+        return resolve_member_path(dataset, member)
     if dataset.processed_path and os.path.isfile(dataset.processed_path):
         return os.path.realpath(dataset.processed_path)
     standard = os.path.join(processed_directory, f"{dataset.id}.parquet")
@@ -87,6 +91,33 @@ def _resolve_file_path(
     if os.path.isfile(upload):
         return os.path.realpath(upload)
     return None
+
+
+def resolve_member_path(dataset, member) -> Optional[str]:
+    """D-bytes only. Directory-root verification belongs to chunk E."""
+    import unicodedata
+    from app.services.dataset_manifest import canonical_path
+    if not settings.multi_file_datasets_enabled:
+        return None
+    if not dataset.root_path or member.dataset_id != dataset.id or member.status in ("missing", "removed"):
+        return None
+    try:
+        relative = canonical_path(member.relative_path)
+        root = Path(dataset.root_path)
+        if root.is_symlink():
+            return None
+        current = root.resolve(strict=True)
+        for segment in relative.split("/"):
+            # Filesystems may store decomposed Unicode names; the manifest is NFC.
+            matches = [p for p in current.iterdir() if unicodedata.normalize("NFC", p.name) == segment]
+            if len(matches) != 1 or matches[0].is_symlink():
+                return None
+            current = matches[0]
+        if not current.resolve(strict=True).is_relative_to(root.resolve(strict=True)):
+            return None
+        return str(current) if current.is_file() else None
+    except (OSError, ValueError):
+        return None
 
 
 def _find_dataset(session, listing_id: str, *, processed_directory: str) -> Optional[DatasetRecord]:
@@ -156,10 +187,21 @@ def resolve_source_artifact(
                 metadata=_detach(session, metadata),
             )
 
+        member = None
+        if dataset.file_type == "directory" and settings.multi_file_datasets_enabled:
+            members = session.exec(select(DatasetMember).where(
+                DatasetMember.dataset_id == dataset.id,
+                DatasetMember.status != "removed",
+            ).limit(2)).all()
+            if len(members) == 1:
+                member = members[0]
+            elif members:
+                raise ArtifactResolutionError("Directory requires an explicit member; set resolution is unavailable")
         path = _resolve_file_path(
             dataset,
             upload_directory=upload_root,
             processed_directory=processed_root,
+            member=member,
         )
         if path is None:
             return ResolvedArtifact(

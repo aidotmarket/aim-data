@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from datetime import datetime, timezone
 from itertools import combinations
 from types import SimpleNamespace
@@ -189,3 +190,32 @@ def test_cloud_visible_commitments_offer_no_dictionary_equality_or_ordering_orac
         for name in object_names
     }
     assert all(attacker_guesses.isdisjoint(commitments) for commitments in commitments_by_key)
+
+
+def test_directory_member_original_bytes_no_parquet_fallback(tmp_path, monkeypatch):
+    from app.models.dataset import DatasetMember
+    monkeypatch.setattr(resolver.settings, 'multi_file_datasets_enabled', True)
+    root = tmp_path / 'original'; root.mkdir()
+    original = root / 'input.csv'; original.write_bytes(b'x\n1\n')
+    parquet = tmp_path / 'preferred.parquet'; parquet.write_bytes(b'PAR1different')
+    dataset = DatasetRecord(id='directory-bytes', original_filename=root.name,
+                            storage_filename=root.name, file_type='directory', root_path=str(root),
+                            processed_path=str(parquet))
+    member = DatasetMember(dataset_id=dataset.id, index=0, relative_path=original.name,
+                           size_bytes=4, detected_type='csv', sha256='0' * 64)
+    args = dict(upload_directory=str(tmp_path), processed_directory=str(tmp_path), member=member)
+    assert resolver._resolve_file_path(dataset, **args) == str(original)
+    original.unlink()
+    assert resolver._resolve_file_path(dataset, **args) is None
+    original.symlink_to(parquet)
+    assert resolver._resolve_file_path(dataset, **args) is None
+
+
+def test_directory_member_unicode_path(tmp_path, monkeypatch):
+    from app.models.dataset import DatasetMember
+    monkeypatch.setattr(resolver.settings, 'multi_file_datasets_enabled', True)
+    path = tmp_path / 'e\u0301.csv'; path.write_bytes(b'original')
+    dataset = DatasetRecord(id='unicode', original_filename='root', storage_filename='root',
+                            file_type='directory', root_path=str(tmp_path))
+    member = DatasetMember(dataset_id=dataset.id, index=0, relative_path='é.csv', detected_type='csv')
+    assert Path(resolver.resolve_member_path(dataset, member)).read_bytes() == b'original'

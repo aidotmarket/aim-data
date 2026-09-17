@@ -248,6 +248,7 @@ export interface ApiDataset {
     columns?: Array<{ name: string; type: string }>;
     size_bytes?: number;
     pii_scan?: { overall_risk: string; columns_with_pii: number };
+    directory?: { member_count: number; data_member_count: number; sample_member_count: number; total_data_bytes: number; manifest_hash: string };
     listing_metadata?: DatasetListingMetadata;
   };
 }
@@ -772,7 +773,34 @@ export class UploadAbortedError extends Error {
   }
 }
 
+export interface DatasetMember {
+  dataset_id: string;
+  index: number;
+  relative_path: string;
+  size_bytes: number;
+  sha256: string | null;
+  detected_type: string;
+  role: "data" | "documentation" | "other";
+  is_sample: boolean;
+  status: "current" | "removed" | "missing" | "unsupported";
+  reason: string | null;
+}
+export interface DatasetMemberPage {
+  members: DatasetMember[];
+  total: number;
+  page: number;
+  page_size: number;
+  editable: boolean;
+}
+
 export const datasetsApi = {
+  registerDirectory: (path: string) => apiFetch<{ dataset_id: string }>("/api/datasets/register-directory", {
+    method: "POST", body: JSON.stringify({ path }),
+  }),
+  members: (id: string, page = 1, role = "", status = "") =>
+    apiFetch<DatasetMemberPage>(`/api/datasets/${id}/members?${new URLSearchParams({ page: String(page), ...(role ? { role } : {}), ...(status ? { status } : {}) })}`),
+  patchMember: (id: string, index: number, patch: Partial<Pick<DatasetMember, "role" | "is_sample">>) =>
+    apiFetch<DatasetMember>(`/api/datasets/${id}/members/${index}`, { method: "PATCH", body: JSON.stringify(patch) }),
   list: () => apiFetch<DatasetListResponse>('/api/datasets/'),
 
   get: (id: string) => apiFetch<ApiDataset>(`/api/datasets/${id}`),
