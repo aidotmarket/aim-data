@@ -68,7 +68,68 @@ S1294 `dataset_canonicalization.py` imports a serializer from `dataset_merkle_se
 
 ## Tests
 
-RESULTS_PENDING
+Re-run on 2026-09-17 against candidate `35c19904d80513069a34165c1380956f29bd1ab9`, preserving the existing bridge commit. This follow-up changes this report only; no implementation or test code was changed.
+
+### Focused backend results
+
+The ten-module command below completed with **128 passed, 0 failed, 0 errors**, 23 warnings in 18.65 seconds (exit 0). Each module also has the same passing count in the full candidate run:
+
+| Module | Focused passed | Full candidate passed | Failed / errors (both runs) |
+| --- | ---: | ---: | ---: |
+| `tests/test_directory_registration.py` | 12 | 12 | 0 / 0 |
+| `tests/test_dataset_manifest.py` | 19 | 19 | 0 / 0 |
+| `tests/test_dataset_members_api.py` | 9 | 9 | 0 / 0 |
+| `tests/test_member_migration.py` | 2 | 2 | 0 / 0 |
+| `tests/test_alembic_025_026.py` | 1 | 1 | 0 / 0 |
+| `tests/test_directory_import.py` | 3 | 3 | 0 / 0 |
+| `tests/test_single_file_uploads.py` | 4 | 4 | 0 / 0 |
+| `tests/test_batch_upload.py` | 23 | 23 | 0 / 0 |
+| `tests/test_data_verification_resolver.py` | 6 | 6 | 0 / 0 |
+| `tests/test_data_verification_local_service.py` | 49 | 49 | 0 / 0 |
+| **Total** | **128** | **128** | **0 / 0** |
+
+Evidence: `/tmp/s1717-a-evidence/report-focused.log` and `report-focused.xml`. The focused command used `AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-a-evidence/report-focused-serial` and appended `--tb=short --junitxml=/tmp/s1717-a-evidence/report-focused.xml` to the listed module command.
+
+### Full backend comparison
+
+The base results are the requested existing `/tmp/s1717-a-evidence/baseline-portable.xml`, not a substituted baseline. The candidate was rerun with the reproduction command below, using fresh `AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-a-evidence/report-candidate-serial` and adding `--junitxml=/tmp/s1717-a-evidence/report-candidate.xml`.
+
+| Revision / evidence | Passed | Failed | Errors | Skipped | Total | Seconds |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base `97da3f096787b6010ce914803fdd30978a9d5bfd` / `baseline-portable.xml` | 2842 | 55 | 38 | 34 | 2969 | 170.62 |
+| Candidate `35c19904d80513069a34165c1380956f29bd1ab9` / `report-candidate.xml` | 2894 | 56 | 38 | 34 | 3022 | 185.23 |
+
+Candidate exit status: **1**, with 786 warnings. Raw output: `/tmp/s1717-a-evidence/report-candidate.log`. The full suite is **not green**. Comparison uses exact JUnit `classname::name` identities and treats either failure or error as failing.
+
+**New failing cases relative to `baseline-portable.xml` (explicit list):**
+
+- `tests.test_sql::test_query_execution_blocked` — expected HTTP 400, received HTTP 403 from unprovisioned serial metering.
+
+**Base failing cases that now pass:** none in this comparison. All 55 base failures and 38 base errors remain failing; the candidate adds 53 passing cases and the SQL case above changes from pass to fail.
+
+**Correction to the previous summary:** the requested statement that `tests.test_sql::test_query_execution_blocked` is a base failure that now passes is not supported by the named baseline or this rerun. It passes in `baseline-portable.xml` and the earlier `candidate-r2.xml`, but fails in the saved `base-flag-off.xml`, `final.xml`, and this candidate rerun. The earlier candidate-r2 comparison therefore had no new failing cases, but that is not this rerun's result.
+
+One-line explanation: this SQL case has suite-state-dependent metering behavior (403 while unprovisioned, before the expected 400 query rejection), not a demonstrated SQL fix; fresh isolated runs fail identically on both base and candidate.
+
+The fresh isolated checks used the same Python virtualenv and `pytest -q tests/test_sql.py::test_query_execution_blocked --tb=short`, with separate new serial directories `report-base-sql-serial` and `report-candidate-sql-serial`; each returned **1 failed** (exit 1), with the same 403-versus-400 assertion. Logs: `/tmp/s1717-a-evidence/report-base-sql.log` and `report-candidate-sql.log`. SQL routing, serial metering, the SQL test and shared conftest are unchanged from the base. These results reproduce the failure on the unchanged base; no introduced implementation regression was established, so no code fix was made.
+
+### Frontend results
+
+All three listed frontend commands were rerun from `frontend/` with the existing dependency tree:
+
+| Command | Result | Evidence under `/tmp/s1717-a-evidence/` |
+| --- | --- | --- |
+| `NODE_OPTIONS=--no-experimental-webstorage npm test` | **70 passed**, 10 test files passed, exit 0; 11.57 seconds | `report-frontend-test.log` |
+| `npm run build` | **Passed**, exit 0; 14.23 seconds; Vite warns about chunks over 500 kB | `report-frontend-build.log` |
+| `./node_modules/.bin/tsc --noEmit` | **Passed**, exit 0; no diagnostics | `report-frontend-types.log` |
+
+**Acceptance limitation:** the requested approved, sanitized real-install AC7 database copy was not supplied. Its path was requested during the build. The migration tests use an explicitly synthetic copied SQLite install covering all named row shapes. They do not establish the real-install AC7 gate. No production flag was enabled, deployment performed, or PR opened. Gate 3 belongs to the caller on the pushed head; this report does not claim Gate 3 or complete BQ acceptance.
+
+JUnit evidence SHA-256:
+
+- `baseline-portable.xml`: `6ed712467982d7f3403174a3ae605b4fb21f6c522e7648605085ec52b0193086`.
+- `report-focused.xml`: `36ef4063a2291bc3725651bdae26e63e858b59d879e2a07fc97c99da5a251c97`.
+- `report-candidate.xml`: `d5fb3a247373149228e28b76410eb15ff30a04362a8d9b6f805ce0216e09612a`.
 
 Local raw diagnostics live in `/tmp/s1717-a-evidence/`; committed evidence logs contain command context, outcomes/counts and test identities, omitting captured bodies and configuration values. The separate base worktree is `/tmp/s1717-a-baseline` at the exact requested base. Both runs use the same existing Python virtualenv and frontend dependency tree. No dependencies or application environment files were changed.
 
