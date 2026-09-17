@@ -1,0 +1,24 @@
+{
+  "baseline_sha": "97da3f096787b6010ce914803fdd30978a9d5bfd",
+  "baseline_counts": {
+    "skipped": 34,
+    "passed": 2801,
+    "failed": 134
+  },
+  "branch_counts": {
+    "skipped": 34,
+    "passed": 2885,
+    "failed": 134
+  },
+  "branch_only_failures": [],
+  "missing_baseline_nodeids": [],
+  "affected_baseline_counts": {
+    "passed": 539,
+    "skipped": 1
+  },
+  "affected_branch_counts": {
+    "passed": 623,
+    "skipped": 1
+  },
+  "affected_branch_only_failures": []
+}

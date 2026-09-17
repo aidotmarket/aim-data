@@ -1,0 +1,37 @@
+{
+  "approve": {
+    "request_id": "00000000-0000-4000-8000-000000000007",
+    "full_request_sha256": "b85f13965f68e30b965d0d4e7291435a90f88ce3de93945cd5e28c08107363fc",
+    "request_bytes": 6855,
+    "whole_manifest_budget_bytes": 21096,
+    "intended_path": "/api/v1/listings/00000000-0000-4000-8000-000000000004/at-a-glance/approve"
+  },
+  "none": {
+    "request_id": "00000000-0000-4000-8000-000000000021",
+    "full_request_sha256": "cb3ec81a74c45db7d5208eb7ecdb11b84d8149902b54b4f3029c703ff40484da",
+    "request_bytes": 1885,
+    "whole_manifest_budget_bytes": 1885,
+    "intended_path": "/api/v1/listings/00000000-0000-4000-8000-000000000004/at-a-glance/approve"
+  },
+  "withdraw": {
+    "request_id": "00000000-0000-4000-8000-000000000031",
+    "full_request_sha256": "894e8171085b8f7087c6b1e05e79693ded3fda2305b0555e6fe720f44fd5a99c",
+    "request_bytes": 1954,
+    "whole_manifest_budget_bytes": 1954,
+    "intended_path": "/api/v1/listings/00000000-0000-4000-8000-000000000004/at-a-glance/withdraw"
+  },
+  "refresh": {
+    "request_id": "00000000-0000-4000-8000-000000000033",
+    "full_request_sha256": "69c4bbc73b91bbedcaf8bcdb7c2637240026ea03c3cb2d80dba6fd810963164f",
+    "request_bytes": 6922,
+    "whole_manifest_budget_bytes": 21163,
+    "intended_path": "/api/v1/listings/00000000-0000-4000-8000-000000000004/at-a-glance/approve"
+  },
+  "supersede": {
+    "request_id": "00000000-0000-4000-8000-000000000035",
+    "full_request_sha256": "53dcd371a2d3f268472d6553bbff750f3592da6c5e7645acb6c24b8b50330d5b",
+    "request_bytes": 6914,
+    "whole_manifest_budget_bytes": 21155,
+    "intended_path": "/api/v1/listings/00000000-0000-4000-8000-000000000004/at-a-glance/approve"
+  }
+}
