@@ -749,4 +749,4 @@ async def prepare_preview_disclosure(listing_id: str, request: Request, user=Dep
 
 # Seller-local preview jobs share the authenticated marketplace namespace.
 from app.routers.preview_builds import router as preview_builds_router
-router.include_router(preview_builds_router)
+router.include_router(preview_builds_router, prefix="/marketplace")

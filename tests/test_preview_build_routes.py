@@ -28,7 +28,7 @@ def setup(tmp_path):
     )
     service = PreviewBuildService(root / "jobs", processing, root)
     app = FastAPI()
-    app.include_router(router, prefix="/marketplace")
+    app.include_router(router)
     app.dependency_overrides[get_build_service] = lambda: service
     app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
         user_id=OWNER, key_id="authenticated-test", scopes=["read", "write"]
@@ -675,3 +675,19 @@ def test_idle_timeout_configuration(setup, monkeypatch, tmp_path):
             PreviewBuildService(
                 tmp_path.resolve() / "invalid", service.processing, service.upload_root
             )
+
+
+def test_production_mount_requires_authentication(monkeypatch):
+    """Use main.py's real prefix/admin wrapper, with auth enabled, not test bypass."""
+    from fastapi import Depends
+    from app.middleware.auth import require_admin
+    from app.auth import api_key_auth
+
+    monkeypatch.setattr(api_key_auth, "_is_auth_enabled", lambda: True)
+    application = FastAPI()
+    application.include_router(router, prefix="/api", dependencies=[Depends(require_admin)])
+    with TestClient(application) as client:
+        for method in ("GET", "POST"):
+            response = client.request(method, "/api/marketplace/preview-builds")
+            assert response.status_code == 401
+        assert client.get("/api/preview-builds").status_code == 404
