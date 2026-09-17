@@ -128,9 +128,6 @@ class Settings(BaseSettings):
     sample_max_file_bytes: int = Field(default=67108864, ge=1, validation_alias=_env_alias("sample_max_file_bytes"))
     sample_seller_quota_bytes: int = Field(default=2147483648, ge=1, validation_alias=_env_alias("sample_seller_quota_bytes"))
     transfer_max_member_bytes: int = Field(default=2147483648, ge=1, validation_alias=_env_alias("transfer_max_member_bytes"))
-    transfer_max_total_bytes: int = Field(default=68719476736, ge=1, validation_alias=_env_alias("transfer_max_total_bytes"))
-    transfer_session_ttl_s: int = Field(default=21600, ge=1, validation_alias=_env_alias("transfer_session_ttl_s"))
-    abandoned_order_ttl_s: int = Field(default=604800, ge=1, validation_alias=_env_alias("abandoned_order_ttl_s"))
 
     # Feature flags for connected ai.market capabilities.
     allai_enabled: bool = Field(
