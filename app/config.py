@@ -131,6 +131,10 @@ class Settings(BaseSettings):
     sample_seller_quota_bytes: int = Field(default=2147483648, ge=1, validation_alias=_env_alias("sample_seller_quota_bytes"))
     transfer_max_member_bytes: int = Field(default=2147483648, ge=1, validation_alias=_env_alias("transfer_max_member_bytes"))
 
+    transfer_metadata_wait_s: float = Field(default=30, gt=0, validation_alias=_env_alias("transfer_metadata_wait_s", "TRANSFER_METADATA_WAIT_S"))
+    transfer_complete_retry_budget_s: float = Field(default=1800, gt=0, validation_alias=_env_alias("transfer_complete_retry_budget_s", "TRANSFER_COMPLETE_RETRY_BUDGET_S"))
+    transfer_retry_after_s: float = Field(default=20, gt=0, validation_alias=_env_alias("transfer_retry_after_s", "TRANSFER_RETRY_AFTER_S"))
+
     # Feature flags for connected ai.market capabilities.
     allai_enabled: bool = Field(
         default=True,
@@ -294,7 +298,7 @@ class Settings(BaseSettings):
     )
     aimarket_url: str = Field(default=_DEFAULT_AI_MARKET_URL, validation_alias=_env_alias("aimarket_url"))  # ai-market serial authority base URL
     app_version: str = Field(
-        default_factory=lambda: os.environ.get("AIM_DATA_VERSION") or os.environ.get("VECTORAIZ_VERSION", "dev"),
+        default_factory=lambda: os.environ.get("AIM_DATA_VERSION") or os.environ.get("VECTORAIZ_VERSION", "1.24.0"),
         validation_alias=_env_alias("app_version", "AIM_DATA_VERSION", "VECTORAIZ_VERSION"),
     )
     serial_data_dir: str = Field(default="/data", validation_alias=_env_alias("serial_data_dir"))  # Directory for serial.json + pending_usage.jsonl

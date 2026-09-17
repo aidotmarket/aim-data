@@ -51,7 +51,7 @@ FROM python:3.11.11-slim-bookworm AS runtime
 
 LABEL maintainer="ai.market <ops@ai.market>"
 LABEL description="AIM Data — Self-hosted listing management for ai.market"
-ARG VERSION=dev
+ARG VERSION=1.24.0
 
 WORKDIR /app
 
