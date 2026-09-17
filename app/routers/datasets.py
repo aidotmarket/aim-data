@@ -272,7 +272,7 @@ async def upload_dataset(
 
         # Queue background processing (sequential — one file at a time)
         if settings.multi_file_datasets_enabled:
-            await run_sync(_register_saved_upload, record, file.filename)
+            await asyncio.to_thread(_register_saved_upload, record, file.filename)
         else:
             from app.services.processing_queue import get_processing_queue
             await get_processing_queue().submit(record.id)
@@ -293,7 +293,8 @@ async def upload_dataset(
         return JSONResponse(
             status_code=202,  # Accepted
             content={
-                "message": "File uploaded successfully. Processing started.",
+                "message": ("File registered successfully." if settings.multi_file_datasets_enabled
+                            else "File uploaded successfully. Processing started."),
                 "dataset_id": record.id,
                 "status": record.status.value,
                 "filename": record.original_filename,
@@ -637,7 +638,7 @@ async def batch_upload(
 
             # Queue background extraction (sequential — one file at a time)
             if settings.multi_file_datasets_enabled:
-                await run_sync(_register_saved_upload, record, fname)
+                await asyncio.to_thread(_register_saved_upload, record, fname)
             else:
                 from app.services.processing_queue import get_processing_queue
                 await get_processing_queue().submit(record.id)

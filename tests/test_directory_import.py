@@ -15,7 +15,10 @@ from app.services import import_service
 
 @pytest.mark.parametrize('enabled', [False, True])
 def test_directory_import_flag(tmp_path, monkeypatch, enabled):
-    monkeypatch.setattr(settings, 'multi_file_datasets_enabled', enabled)
+    from app import config
+    from app.services import directory_registration
+    for instance in (settings, config.settings, directory_registration.settings):
+        monkeypatch.setattr(instance, 'multi_file_datasets_enabled', enabled)
     monkeypatch.setattr(import_service, 'IMPORT_ROOT', tmp_path.resolve())
     root = tmp_path / 'directory'; root.mkdir()
     (root / 'a.csv').write_bytes(b'x')
@@ -43,3 +46,31 @@ def test_directory_import_flag(tmp_path, monkeypatch, enabled):
         svc.start_import.assert_called_once_with(str(root), ['a.csv','b.csv'])
         svc.run_import.assert_awaited_once_with(legacy_job)
         assert response.json() == {'job_id':'legacy','total_files':2,'total_bytes':0,'status':'running'}
+
+
+@pytest.mark.asyncio
+async def test_flag_off_import_keeps_one_record_per_file(tmp_path, monkeypatch):
+    from app import config
+    from app.services import processing_queue
+    from app.models.dataset import DatasetRecord
+    for instance in (settings, config.settings):
+        monkeypatch.setattr(instance, 'multi_file_datasets_enabled', False)
+    monkeypatch.setattr(import_service, 'IMPORT_ROOT', tmp_path.resolve())
+    monkeypatch.setattr(import_service, 'UPLOAD_DIR', tmp_path / 'uploads')
+    root = tmp_path / 'legacy-import'; root.mkdir()
+    for name in ('a.csv', 'b.csv'): (root / name).write_bytes(b'x\n1\n')
+    usage = import_service.shutil.disk_usage(tmp_path)
+    monkeypatch.setattr(import_service.shutil, 'disk_usage', lambda _: usage)
+    submit = AsyncMock()
+    monkeypatch.setattr(processing_queue.get_processing_queue(), 'submit', submit)
+    service = import_service.ImportService()
+    job = service.start_import(str(root), ['a.csv', 'b.csv'])
+    await service.run_import(job)
+    assert job.status == 'complete'
+    ids = {entry.dataset_id for entry in job.files}
+    assert len(ids) == 2 and None not in ids
+    with get_session_context() as session:
+        for dataset_id in ids:
+            row = session.get(DatasetRecord, dataset_id)
+            assert row.file_type == 'csv' and row.root_path is None
+    assert submit.await_count == 2

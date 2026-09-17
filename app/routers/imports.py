@@ -61,7 +61,7 @@ async def start_import(
     if settings.multi_file_datasets_enabled:
         from app.core.database import get_session_context
         from app.services.directory_registration import register_directory
-        from app.core.async_utils import run_sync
+        import asyncio
         def register():
             with get_session_context() as session:
                 dataset = register_directory(session, req.path)
@@ -72,7 +72,7 @@ async def start_import(
                 return {"dataset_id": dataset.id, "status": "complete",
                         "total_files": summary["member_count"], "total_bytes": dataset.file_size_bytes}
         try:
-            return await run_sync(register)
+            return await asyncio.to_thread(register)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from None
     try:

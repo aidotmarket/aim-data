@@ -1305,7 +1305,7 @@ def test_d_bytes_local_probe_uses_original_member(tmp_path, monkeypatch):
     from uuid import uuid4
     from app.models.dataset import DatasetMember
     from app.config import settings
-    monkeypatch.setattr(settings, 'multi_file_datasets_enabled', True)
+    monkeypatch.setattr(resolver.settings, 'multi_file_datasets_enabled', True)
     root = tmp_path / 'original'; root.mkdir()
     original = root / 'data.csv'; original.write_bytes(b'x\n1\n')
     processed = tmp_path / 'processed.parquet'; processed.write_bytes(b'wrong bytes')
