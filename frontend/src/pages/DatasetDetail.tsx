@@ -71,7 +71,7 @@ import {
 } from "@/lib/api";
 import { type ColumnSchema, type Dataset } from "@/types/mockDatasets";
 import { toast } from "@/hooks/use-toast";
-import PublishModal from "@/components/PublishModal";
+import PublishModal, { DirectoryPublishControl } from "@/components/PublishModal";
 import ChatPanel from "@/components/copilot/ChatPanel";
 import { DataVerificationFlow } from "@/components/DataVerificationFlow";
 import { useMarketplace } from "@/contexts/MarketplaceContext";
@@ -1307,7 +1307,18 @@ export function ListingPreparation({
               </Label>
             </div>
 
-            <Button
+            {dataset.file_type === "directory" ? <DirectoryPublishControl
+              datasetId={dataset.id}
+              sampleCount={dataset.metadata?.directory?.sample_member_count ?? 0}
+              disabled={publishing || !finalDisclosureConfirmed || !approvedMetadataDraft}
+              publishPayload={{ title: form.title.trim(), description: form.description.trim(), tags: form.tags,
+                category: form.category, price_cents: Math.round(Number.parseFloat(form.priceUsd) * 100), file_format: "directory" }}
+              disclosurePayload={approvedMetadataDraft && finalDisclosureConfirmed ? {
+                ...buildDisclosureSnapshotPayload({ approvedFields: approvedMetadataDraft, sampleDecision: "none",
+                  approvedSample: null, confirmed: true, sourcePublishOperationId: newPublishOperationId() }),
+              } : null}
+              onPublished={() => { setPublishComplete(true); void datasetsApi.get(dataset.id).then(onDatasetRefresh); }}
+            /> : <Button
               onClick={handlePublish}
               disabled={Boolean(publishedListingId) || publishing || !finalDisclosureConfirmed || !approvedMetadataDraft || (sampleDecision === "approved_rows" && !approvedSample)}
               size="sm"
@@ -1315,11 +1326,12 @@ export function ListingPreparation({
             >
               {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
               {publishedListingId ? "Published" : publishing ? "Publishing..." : "Publish to ai.market"}
-            </Button>
+            </Button>}
           </CardContent>
         </Card>
       )}
 
+      <h2 className="border-t pt-6 font-medium">Optional: add a verified shape label</h2>
       <DataVerificationFlow
         datasetId={dataset.id}
         sourceName={dataset.original_filename}
