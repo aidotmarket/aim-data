@@ -317,12 +317,12 @@ def test_settings_defaults_and_release_metadata(monkeypatch):
     for name in ['AIM_DATA_VERSION', 'VECTORAIZ_VERSION', 'APP_VERSION', 'AIM_DATA_APP_VERSION', 'VECTORAIZ_APP_VERSION']:
         monkeypatch.delenv(name, raising=False)
     config = Settings(_env_file=None)
-    assert config.app_version == '1.24.0'
+    assert config.app_version == '1.25.0'
     assert config.transfer_metadata_wait_s == 30
     assert config.transfer_complete_retry_budget_s == 1800
     assert config.transfer_retry_after_s == 20
     assert WINDOW_SIZE == 4 and ACK_TIMEOUT_S == 30 and CHUNK_SIZE == 65536
-    assert 'ARG VERSION=1.24.0' in Path('Dockerfile.customer').read_text()
+    assert 'ARG VERSION=1.25.0' in Path('Dockerfile.customer').read_text()
     assert 'payload["agent_version"] = settings.app_version' in Path('app/routers/marketplace_publish.py').read_text()
 
 async def legacy_messages(service_class, tmp_path, monkeypatch, enabled, extra_fields=False):
@@ -569,13 +569,13 @@ async def test_continuous_completion_repairs_share_one_retry_budget(retained, mo
 def test_agent_version_is_in_actual_local_publish_payload(monkeypatch):
     from app.routers.marketplace_publish import _build_publish_payload, VersionPublishEmit
     monkeypatch.setattr(settings, 'multi_file_datasets_enabled', True)
-    monkeypatch.setattr(settings, 'app_version', '1.24.0')
+    monkeypatch.setattr(settings, 'app_version', '1.25.0')
     body = SimpleNamespace(model_dump=lambda **kwargs: {'vz_dataset_id': 'dataset-id'})
     version = VersionPublishEmit(version_label='frozen-version', object_count=1, total_size_bytes=3,
         manifest_hash='a'*64, source_kind='aim_data_local', members_total=1, sample_members_total=0,
         members_upload_id=uuid.uuid4())
     payload = _build_publish_payload(body, None, versions=[version])
-    assert payload['agent_version'] == '1.24.0'
+    assert payload['agent_version'] == '1.25.0'
     assert 'agent_version' not in payload['versions'][0]
 
 @pytest.mark.asyncio

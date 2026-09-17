@@ -298,7 +298,7 @@ class Settings(BaseSettings):
     )
     aimarket_url: str = Field(default=_DEFAULT_AI_MARKET_URL, validation_alias=_env_alias("aimarket_url"))  # ai-market serial authority base URL
     app_version: str = Field(
-        default_factory=lambda: os.environ.get("AIM_DATA_VERSION") or os.environ.get("VECTORAIZ_VERSION", "1.24.0"),
+        default_factory=lambda: os.environ.get("AIM_DATA_VERSION") or os.environ.get("VECTORAIZ_VERSION", "1.25.0"),
         validation_alias=_env_alias("app_version", "AIM_DATA_VERSION", "VECTORAIZ_VERSION"),
     )
     serial_data_dir: str = Field(default="/data", validation_alias=_env_alias("serial_data_dir"))  # Directory for serial.json + pending_usage.jsonl
