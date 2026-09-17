@@ -338,3 +338,74 @@ async def test_missing_version_id_retries_and_never_records_publish(local_datase
     assert len(calls) == 3 and calls[0] == calls[1] == calls[2]
     with get_session_context() as session:
         assert session.get(DBDatasetRecord, local_dataset).listing_id is None
+
+@pytest.mark.asyncio
+async def test_local_publish_round_trip_signs_chunks_and_retains_before_upload(local_dataset, monkeypatch):
+    from app.models.published_manifest import PublishedManifest
+    from app.services.marketplace_action_signer import canonical_payload_hash
+    key = Ed25519PrivateKey.from_private_bytes(bytes([9]) * 32)
+    calls = []
+    monkeypatch.setattr(settings, 'publish_member_chunk', 2)
+    monkeypatch.setattr(settings, 'app_version', '1.24.0')
+    monkeypatch.setattr(mp, '_get_crypto', lambda: SimpleNamespace(get_or_create_keypairs=lambda: (key, None, None, None)))
+    monkeypatch.setattr(mp, 'get_serial_store', lambda: SimpleNamespace(state=SimpleNamespace(last_status_cache={}, ai_market_seller_id='seller', ai_market_access_token='token')))
+    async def register(*args, **kwargs): return 'install'
+    monkeypatch.setattr(mp, 'ensure_vz_install_registered', register)
+    monkeypatch.setattr(mp, 'resolve_s3_publish_source', lambda *args: None)
+    version_id = str(uuid4())
+    class Client:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, url, **kwargs):
+            payload = kwargs['json']; calls.append((url, payload))
+            claims = jwt.decode(kwargs['headers']['Authorization'].removeprefix('Bearer '), key.public_key(), algorithms=['EdDSA'])
+            assert claims['metadata_hash'] == canonical_payload_hash(payload)
+            assert claims['action'] == 'publish_listing'
+            if url.endswith('/publish'):
+                version = payload['versions'][0]
+                return SimpleNamespace(status_code=200, json=lambda: {'listing_id': 'listing', 'versions': [dict(version_id=version_id, version_label=version['version_label'], status='pending_members')]})
+            with get_session_context() as session:
+                record = session.get(DBDatasetRecord, local_dataset)
+                import json
+                state = json.loads(record.metadata_json)['local_publish']
+                snapshot = session.get(PublishedManifest, (version_id, state['manifest_hash']))
+                assert snapshot is not None and record.listing_id == 'listing'
+            return SimpleNamespace(status_code=200, json=lambda: {'status': 'active' if '/samples/' in url else 'pending_members'})
+    monkeypatch.setattr(mp.httpx, 'AsyncClient', Client)
+    body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id=local_dataset)
+    result = await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    assert result['status'] == 'published'
+    assert result['version']['version_id'] == version_id
+    assert [len(payload['members']) for url, payload in calls if url.endswith('/members')] == [2, 1]
+    assert len(calls) == 4
+
+
+def test_full_s3_payload_golden_is_independent_of_flag_and_app_version(monkeypatch):
+    from app.core.channel_config import CHANNEL
+    body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id='dataset')
+    fields = dict(version_label='v1', object_count=1, total_size_bytes=42, manifest_hash='a'*64)
+    source_fields = dict(bucket='example-bucket', region='us-east-1', role_arn='arn:aws:iam::123456789012:role/example', prefix='datasets/', serial_id='example-serial')
+    from app.services.s3_publish_source_resolver import S3PublishSourceResolution
+    source = S3PublishSourceResolution(**source_fields)
+    golden = canonical_json_bytes(dict(title='Test', description='Test', tags=[], pricing_type='one_time',
+        price_cents=2500, vz_raw_listing_id='dataset', download_channel=CHANNEL.value, versions=[fields], s3_connection=source_fields))
+    for flag in (False, True):
+        monkeypatch.setattr(settings, 'multi_file_datasets_enabled', flag)
+        monkeypatch.setattr(settings, 'app_version', '1.24.0' if flag else 'dev')
+        assert canonical_json_bytes(mp._build_publish_payload(body, source, [mp.VersionPublishEmit(**fields)])) == golden
+
+
+def test_migrated_legacy_dataset_republish_uses_retained_original_binding(local_dataset):
+    with get_session_context() as session:
+        row = session.get(DBDatasetRecord, local_dataset)
+        row.file_type = "csv"; row.processed_path = "/unchanged/legacy.parquet"
+        row.batch_id = "shared"; row.listing_id = "legacy-listing"
+        session.add(row); session.commit()
+    local = mp._local_publish_snapshot(local_dataset)
+    assert local['version'].source_kind == 'aim_data_local'
+    mp._record_local_publish(local, 'legacy-listing', str(uuid4()), 'pending_members')
+    with get_session_context() as session:
+        row = session.get(DBDatasetRecord, local_dataset)
+        assert row.file_type == 'csv' and row.processed_path == '/unchanged/legacy.parquet'
+        assert row.batch_id == 'shared' and row.listing_id == 'legacy-listing'

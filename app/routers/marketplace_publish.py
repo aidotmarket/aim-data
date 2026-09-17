@@ -293,6 +293,8 @@ def _local_publish_snapshot(dataset_id, version_label=None):
         record = session.get(DatasetRecord, dataset_id)
         if record is None or not record.root_path:
             return None
+        if json.loads(record.metadata_json).get("source_type") == "s3":
+            return None
         if session.exec(select(S3ObjectMetadata).where(S3ObjectMetadata.dataset_id == dataset_id)).first():
             return None
         progress = json.loads(record.metadata_json).get("local_publish", {})

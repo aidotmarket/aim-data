@@ -646,6 +646,7 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [published, setPublished] = useState(false);
+  const [shareSamples, setShareSamples] = useState(sampleCount > 0);
   const [snapshotRetry, setSnapshotRetry] = useState<{ listingId: string; payload: Record<string, unknown> } | null>(null);
   const send = async (path: string, payload: Record<string, unknown>) => {
     const response = await fetch(`${getApiUrl()}/api${path}`, {
@@ -667,7 +668,7 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
         if (result.status !== "published") throw new Error(result.error || `Version ${result.status}; publication is not active.`);
         if (!result.listing_id) throw new Error("ai.market did not return a listing_id.");
         retry = { listingId: result.listing_id, payload: { ...disclosurePayload,
-          dataset_id: datasetId, sample_decision: sampleCount ? "member_files" : "none", approved_sample: null } };
+          dataset_id: datasetId, sample_decision: shareSamples && sampleCount ? "member_files" : "none", approved_sample: null } };
         setSnapshotRetry(retry);
       }
       await send(`/marketplace/listings/${encodeURIComponent(retry.listingId)}/disclosure-snapshots`, retry.payload);
@@ -677,6 +678,11 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
   };
   return <div className="space-y-2">
     <p>{sampleCount} seller-selected sample files. Sample files are also part of the purchased set.</p>
+    {sampleCount > 0 && <label className="flex items-center gap-2">
+      <input type="checkbox" checked={shareSamples} disabled={busy || published || Boolean(snapshotRetry)}
+        onChange={event => setShareSamples(event.target.checked)} />
+      Publish selected sample files for free download
+    </label>}
     {status === "pending_members" && <p role="status">Pending members — upload is not complete. Retry publishing to resume.</p>}
     {error && <p role="alert">{error}</p>}
     <Button onClick={publish} disabled={disabled || busy || published}>
