@@ -281,7 +281,8 @@ def test_changed_member_invalidates_profile_cache(directory, stub):
 def test_hung_provider_reaches_terminal_fallback(directory, stub, monkeypatch):
     monkeypatch.setattr(settings, 'profile_timeout_s', 1)
     async def hang(*args, **kwargs): await asyncio.sleep(60)
-    monkeypatch.setattr(get_listing_metadata_service(), 'author_directory_metadata', hang)
+    from app.services.listing_metadata_service import ListingMetadataService
+    monkeypatch.setattr(ListingMetadataService, 'author_directory_metadata', hang)
     started=time.monotonic()
     metadata=run(directory())
     assert time.monotonic()-started < 2

@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from app.config import settings
 from app.models.listing_metadata_schemas import ListingMetadata, ColumnSummary
 from app.services.duckdb_service import ephemeral_duckdb_service
 
@@ -105,7 +106,6 @@ class ListingMetadataService:
         processing = get_processing_service()
         record = processing.get_dataset(dataset_id)
 
-        from app.config import settings
         if settings.multi_file_datasets_enabled and record and record.file_type == "directory":
             # Reads never trigger a second provider request for the same run.
             cached = record.metadata.get("listing_metadata")
