@@ -190,6 +190,8 @@ const PublishModal = ({ open, onOpenChange, dataset, onPublishSuccess }: Publish
       }
 
       const result = await res.json();
+      if (result.status === "pending_members") throw new Error("Pending members — upload is not complete. Retry publishing to resume.");
+      if (result.status === "quarantined" || result.status === "superseded") throw new Error(result.error || `Version ${result.status}; publication is not active.`);
       setMarketplaceUrl(result.marketplace_url || null);
       setIsPublishing(false);
       setPublishSuccess(true);
@@ -631,3 +633,69 @@ const PublishModal = ({ open, onOpenChange, dataset, onPublishSuccess }: Publish
 };
 
 export default PublishModal;
+
+// Directory publication uses the stored seller-selected members, never row previews.
+export function DirectoryPublishControl({ datasetId, publishPayload, disclosurePayload, disabled, sampleCount, onPublished }: {
+  datasetId: string;
+  publishPayload: Record<string, unknown>;
+  disclosurePayload: Record<string, unknown> | null;
+  disabled: boolean;
+  sampleCount: number;
+  onPublished: () => void;
+}) {
+  const { apiKey } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [published, setPublished] = useState(false);
+  const [shareSamples, setShareSamples] = useState(sampleCount > 0);
+  const [snapshotRetry, setSnapshotRetry] = useState<{ listingId: string; payload: Record<string, unknown> } | null>(null);
+  const send = async (path: string, payload: Record<string, unknown>) => {
+    const response = await fetch(`${getApiUrl()}/api${path}`, {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: apiKey ? `Bearer ${apiKey}` : "" },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      const detail = result.detail;
+      const message = typeof detail === "string" ? detail
+        : detail && typeof detail.code === "string" && typeof detail.detail === "string"
+          ? `${detail.code}: ${detail.detail}`
+          : JSON.stringify(detail ?? result.error ?? "Publish failed");
+      throw new Error(message);
+    }
+    return result;
+  };
+  const publish = async () => {
+    if (busy || !disclosurePayload) return;
+    setBusy(true); setError("");
+    try {
+      let retry = snapshotRetry;
+      if (!retry) {
+        const result = await send("/marketplace/publish", { ...publishPayload, vz_dataset_id: datasetId });
+        if (result.status === "pending_members") { setStatus("pending_members"); return; }
+        if (result.status !== "published") throw new Error(result.error || `Version ${result.status}; publication is not active.`);
+        if (!result.listing_id) throw new Error("ai.market did not return a listing_id.");
+        retry = { listingId: result.listing_id, payload: { ...disclosurePayload,
+          dataset_id: datasetId, sample_decision: shareSamples && sampleCount ? "member_files" : "none", approved_sample: null } };
+        setSnapshotRetry(retry);
+      }
+      await send(`/marketplace/listings/${encodeURIComponent(retry.listingId)}/disclosure-snapshots`, retry.payload);
+      setSnapshotRetry(null); setPublished(true); setStatus("published"); onPublished();
+    } catch (e) { setError(e instanceof Error ? e.message : "Publish failed"); }
+    finally { setBusy(false); }
+  };
+  return <div className="space-y-2">
+    <p>{sampleCount} seller-selected sample files. Sample files are also part of the purchased set.</p>
+    {sampleCount > 0 && <label className="flex items-center gap-2">
+      <input type="checkbox" checked={shareSamples} disabled={busy || published || Boolean(snapshotRetry)}
+        onChange={event => setShareSamples(event.target.checked)} />
+      Publish selected sample files for free download
+    </label>}
+    {status === "pending_members" && <p role="status">Pending members — upload is not complete. Retry publishing to resume.</p>}
+    {error && <p role="alert">{error}</p>}
+    <Button onClick={publish} disabled={disabled || busy || published}>
+      {published ? "Published" : busy ? "Publishing..." : snapshotRetry ? "Retry disclosure" : "Publish to ai.market"}
+    </Button>
+  </div>;
+}

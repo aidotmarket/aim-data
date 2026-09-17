@@ -137,7 +137,7 @@ def patch_dataset_member(dataset_id: str, index: int, body: MemberPatch,
         member.updated_at = datetime.now(timezone.utc)
         session.add(member)
         session.flush()
-        if dataset.file_type == "directory":
+        if dataset.root_path:
             refresh_directory_metadata(session, dataset)
         session.commit()
         session.refresh(member)

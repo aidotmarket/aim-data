@@ -10,7 +10,10 @@ import { MarketplaceProvider, useMarketplace } from "@/contexts/MarketplaceConte
 
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ onboarding_required: false }) }));
 vi.mock("@/contexts/ModeContext", () => ({ useMode: () => ({ hasFeature: () => true, channel: "aim-data" }) }));
-vi.mock("@/components/PublishModal", () => ({ default: () => null }));
+vi.mock("@/components/PublishModal", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/components/PublishModal")>(), default: () => null,
+}));
+import { DirectoryPublishControl } from "@/components/PublishModal";
 vi.mock("@/components/copilot/ChatPanel", () => ({ default: () => null }));
 
 function MarketplaceProbe() {
@@ -139,6 +142,7 @@ describe("seller listing preparation", () => {
     renderPreparation(dataset());
 
     expect(screen.getByTestId("data-verification-flow")).toHaveTextContent("ds-1");
+    expect(screen.getByRole("heading", { name: "Optional: add a verified shape label" })).toBeInTheDocument();
 
     const continueButton = await screen.findByRole("button", { name: "Continue to metadata" });
     await waitFor(() => expect(continueButton).toBeEnabled());
@@ -382,6 +386,84 @@ describe("directory members", () => {
     render(<DirectoryMembers dataset={dataset()} />);
     await screen.findByText("Published member choices are frozen.");
     expect(screen.getByLabelText("Role for README.md")).toBeDisabled();
+  });
+});
+
+
+describe("directory publish control", () => {
+  it("publishes metadata.directory samples through preparation and leaves verification untouched", async () => {
+    vi.spyOn(piiApi, "getConfig").mockResolvedValue({
+      dataset_id: "ds-1", column_actions: {}, privacy_attested: false, updated_at: null,
+    });
+    vi.spyOn(piiApi, "getScan").mockResolvedValue(cleanScan);
+    vi.spyOn(datasetsApi, "getDisclosureSample").mockResolvedValue({ dataset_id: "ds-1", sample: [], count: 0 });
+    const directory = dataset(listingMetadata);
+    directory.file_type = "directory";
+    directory.metadata = { ...directory.metadata, directory: { sample_member_count: 2 } };
+    vi.spyOn(datasetsApi, "get").mockResolvedValue(directory);
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-1" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    renderPreparation(directory);
+    const panel = screen.getByTestId("data-verification-flow");
+    const panelBefore = panel.outerHTML;
+    fireEvent.click(await screen.findByRole("button", { name: "Accept all & continue" }));
+    expect(screen.getByText("2 seller-selected sample files. Sample files are also part of the purchased set.")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Publish selected sample files for free download" })).toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    await screen.findByRole("button", { name: "Published" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetcher.mock.calls[1][1].body).sample_decision).toBe("member_files");
+    expect(screen.getByTestId("data-verification-flow")).toBe(panel);
+    expect(panel.outerHTML).toBe(panelBefore);
+    expect(screen.getByRole("heading", { name: "Optional: add a verified shape label" })).toBeInTheDocument();
+  });
+
+  const props = { datasetId: "directory-1", publishPayload: { title: "Set", description: "Set", price_cents: 2500 },
+    disclosurePayload: { approved_fields: { title: "Set" }, source_publish_operation_id: "op-1" },
+    disabled: false, sampleCount: 2, onPublished: vi.fn() };
+
+  it("accepts member_files without opening verification", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-1" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    render(<DirectoryPublishControl {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    await screen.findByRole("button", { name: "Published" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const wire = JSON.parse(fetcher.mock.calls[0][1].body);
+    expect(wire).not.toHaveProperty("verification");
+    expect(wire.vz_dataset_id).toBe("directory-1");
+    const disclosure = JSON.parse(fetcher.mock.calls[1][1].body);
+    expect(disclosure.sample_decision).toBe("member_files");
+    expect(disclosure.approved_sample).toBeNull();
+  });
+
+  it("shows pending_members and permits a resume without claiming publication", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: "pending_members", listing_id: "listing-1" }) });
+    vi.stubGlobal("fetch", fetcher);
+    render(<DirectoryPublishControl {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Pending members");
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeEnabled();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the receiver's paid-set refusal", async () => {
+    const detail = "at least one non-sample data member is required";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ detail }) }));
+    render(<DirectoryPublishControl {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(detail);
+  });
+
+  it("renders the receiver's named upgrade refusal", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ detail: { code: "agent_upgrade_required", minimum_version: "1.24.0", detail: "upgrade AIM Data to 1.24.0" } }) }));
+    render(<DirectoryPublishControl {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("agent_upgrade_required: upgrade AIM Data to 1.24.0");
   });
 });
 

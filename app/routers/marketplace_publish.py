@@ -14,6 +14,8 @@ import logging
 import re
 import json
 from datetime import datetime, timezone
+from pathlib import Path
+from uuid import UUID, uuid5, NAMESPACE_URL
 from typing import Annotated, Any, Literal, Optional
 
 import httpx
@@ -25,6 +27,11 @@ from app.config import settings
 from app.core.channel_config import CHANNEL
 from app.core.crypto import DeviceCrypto
 from app.core.database import get_session_context
+from app.models.dataset import DatasetRecord, DatasetMember
+from app.models.published_manifest import PublishedManifest
+from app.services.dataset_manifest import build_manifest
+from app.services.sample_upload_client import validate_sample_members, upload_samples
+from app.services.marketplace_push_service import upload_member_chunks
 from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
@@ -86,7 +93,7 @@ class DisclosureSnapshotProxyRequest(BaseModel):
     model_config = {"extra": "forbid", "hide_input_in_errors": True}
     dataset_id: str = Field(..., min_length=1)
     approved_fields: dict[str, Any]
-    sample_decision: Literal["none"]
+    sample_decision: Literal["none", "member_files"]
     approved_sample: None = None
     ai_training_notification_ack: bool
     ai_training_notification_text: str = Field(..., min_length=1)
@@ -104,7 +111,7 @@ async def _closed_legacy_none(request: Request):
         from app.services.dataset_canonicalization import _pairs
         from app.models.dataset_commitment_schemas import reject_content
         data = json.loads(raw, object_pairs_hook=_pairs)
-        if data.get("sample_decision") != "none" or data.get("approved_sample") is not None:
+        if data.get("sample_decision") not in (("none", "member_files") if settings.multi_file_datasets_enabled else ("none",)) or data.get("approved_sample") is not None:
             raise ValueError
         reject_content(data.get("approved_fields"))
         return DisclosureSnapshotProxyRequest.model_validate(data)
@@ -127,6 +134,10 @@ class VersionPublishEmit(BaseModel):
     object_count: int = Field(..., ge=0)
     total_size_bytes: int = Field(..., ge=0)
     manifest_hash: str = Field(..., min_length=1, max_length=256)
+    source_kind: Literal["s3", "aim_data_local"] = "s3"
+    members_total: Optional[int] = Field(None, ge=1)
+    sample_members_total: Optional[int] = Field(None, ge=0)
+    members_upload_id: Optional[UUID] = None
 
 
 class S3ConnectionPublishEmit(BaseModel):
@@ -142,12 +153,13 @@ class S3ConnectionPublishEmit(BaseModel):
 
 
 class MarketplaceVersionPublishRequest(MarketplacePublishRequest):
-    s3_connection_id: str
-    scan_job_id: str
+    s3_connection_id: Optional[str] = None
+    scan_job_id: Optional[str] = None
     version_label: str = Field(..., min_length=1, max_length=64)
 
 
 class MarketplaceVersionPublishResponse(MarketplacePublishResponse):
+    version_id: Optional[str] = None
     version_label: str
     version_status: Optional[str] = None
     quarantine_reason: Optional[str] = None
@@ -222,6 +234,16 @@ def _build_s3_connection_emit(resolution: S3PublishSourceResolution) -> dict[str
 
 
 def _build_version_emit(version: VersionPublishEmit) -> dict[str, Any]:
+    if version.source_kind == "s3":
+        if version.members_total is not None or version.members_upload_id is not None or version.sample_members_total is not None:
+            raise HTTPException(422, "members fields require aim_data_local")
+        return version.model_dump(mode="json", exclude={"source_kind", "members_total", "sample_members_total", "members_upload_id"})
+    if not settings.multi_file_datasets_enabled:
+        raise HTTPException(404, "Not found")
+    if version.members_total is None or version.members_upload_id is None or version.sample_members_total is None:
+        raise HTTPException(422, "Local version requires members_total, sample_members_total and members_upload_id")
+    if version.members_total - version.sample_members_total < 1:
+        raise HTTPException(409, "paid_set_required: at least one non-sample data member is required")
     return version.model_dump(mode="json")
 
 
@@ -238,6 +260,8 @@ def _build_publish_payload(
         payload["s3_connection"] = _build_s3_connection_emit(s3_source)
     if versions:
         payload["versions"] = [_build_version_emit(version) for version in versions]
+        if any(version.source_kind == "aim_data_local" for version in versions):
+            payload["agent_version"] = settings.app_version
     return payload
 
 
@@ -257,6 +281,149 @@ def _manifest_hash_for_scan_rows(rows: list[S3ObjectMetadata]) -> str:
         for row in rows
     ]
     return _jcs_hash({"objects": manifest})
+
+
+def _response_version(data, label):
+    if isinstance(data.get("version"), dict):
+        return data["version"]
+    return next((v for v in data.get("versions", []) if v.get("version_label") == label), {})
+
+
+def _local_member_profiles(metadata, members, registration_to_published_index=None):
+    """Project chunk B's stored outcomes onto the Gate 2 section 3a carrier."""
+    directory = metadata.get("directory_profile")
+    outcomes = directory.get("members") if isinstance(directory, dict) else None
+    if not isinstance(outcomes, dict):
+        return []
+    source_indices = {published: int(registration) for registration, published in
+                      (registration_to_published_index or {}).items()}
+    profiles = []
+    for member in members:
+        if member["role"] != "data":
+            continue
+        outcome = outcomes.get(str(source_indices.get(member["index"], member["index"])))
+        if not isinstance(outcome, dict) or outcome.get("status") != "profiled":
+            continue
+        profile = outcome.get("profile")
+        columns = profile.get("columns") if isinstance(profile, dict) else None
+        if not isinstance(columns, list) or any(
+            not isinstance(column, dict)
+            or not isinstance(column.get("name"), str)
+            or not isinstance(column.get("type"), str)
+            for column in columns
+        ):
+            continue
+        profiles.append({"index": member["index"], "columns": [
+            {"name": column["name"], "type": column["type"]} for column in columns
+        ]})
+    return profiles
+
+
+def _local_metadata(record):
+    if record is None:
+        raise HTTPException(409, "dataset_removed_during_publish")
+    try:
+        metadata = json.loads(record.metadata_json or "{}")
+    except (TypeError, ValueError):
+        raise HTTPException(409, "local_publish_metadata_invalid") from None
+    if not isinstance(metadata, dict) or not isinstance(metadata.get("local_publish", {}), dict):
+        raise HTTPException(409, "local_publish_metadata_invalid")
+    return metadata
+
+
+def _local_publish_snapshot(dataset_id, version_label=None):
+    if not settings.multi_file_datasets_enabled:
+        return None
+    with get_session_context() as session:
+        record = session.get(DatasetRecord, dataset_id)
+        metadata = _local_metadata(record)
+        if not record.root_path:
+            return None
+        if metadata.get("source_type") == "s3":
+            return None
+        if session.exec(select(S3ObjectMetadata).where(S3ObjectMetadata.dataset_id == dataset_id)).first():
+            return None
+        progress = metadata.get("local_publish", {})
+        retained = session.get(PublishedManifest, (progress.get("version_id", ""), progress.get("manifest_hash", ""))) if progress else None
+        if retained and progress.get("status") == "pending_members":
+            manifest = build_manifest(retained.members)
+            index_mapping = retained.registration_to_published_index or {str(m["index"]): m["index"] for m in retained.members}
+            root = retained.root_path
+            label = progress["version_label"]
+            offset = progress.get("offset", 0)
+            accepted_samples = progress.get("accepted_sample_indices", [])
+        else:
+            rows = session.exec(select(DatasetMember).where(DatasetMember.dataset_id == dataset_id,
+                DatasetMember.status != "removed").order_by(DatasetMember.index)).all()
+            try:
+                if any(m.status == "missing" for m in rows):
+                    raise ValueError("missing dataset member; re-register before publish")
+                index_mapping = {str(row.index): position for position, row in enumerate(rows)}
+                manifest = build_manifest([dict(row.model_dump(), index=position)
+                                           for position, row in enumerate(rows)])
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from None
+            root = str(Path(record.root_path).resolve())
+            label = version_label or f"manifest-{manifest['manifest_hash'][:32]}"
+            offset = 0
+            accepted_samples = []
+        if manifest["data_member_count"] - manifest["sample_member_count"] < 1:
+            raise HTTPException(409, "paid_set_required: data_member_count - sample_member_count must be >= 1")
+        try:
+            validate_sample_members(manifest["members"])
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+        upload_id = uuid5(NAMESPACE_URL, canonical_json_bytes([dataset_id, root, label, manifest["manifest_hash"]]).decode())
+        return {"dataset_id": dataset_id, "root_path": root, "manifest": manifest, "offset": offset,
+            "accepted_sample_indices": accepted_samples,
+            "registration_to_published_index": index_mapping,
+            "member_profiles": _local_member_profiles(metadata, manifest["members"], index_mapping),
+            "retained_version_id": progress.get("version_id") if retained and progress.get("status") == "pending_members" else None,
+            "version": VersionPublishEmit(version_label=label, object_count=manifest["data_member_count"],
+                total_size_bytes=manifest["total_data_bytes"], manifest_hash=manifest["manifest_hash"],
+                source_kind="aim_data_local", members_total=manifest["member_count"],
+                sample_members_total=manifest["sample_member_count"], members_upload_id=upload_id)}
+
+
+def _record_local_publish(local, listing_id, version_id, status):
+    """Record the publish and frozen bytes authority in ONE transaction."""
+    with get_session_context() as session:
+        record = session.get(DatasetRecord, local["dataset_id"])
+        if record is None:
+            raise HTTPException(409, "dataset_removed_during_publish")
+        key = (version_id, local["manifest"]["manifest_hash"])
+        existing = session.get(PublishedManifest, key)
+        if existing and (existing.root_path != local["root_path"] or existing.members != local["manifest"]["members"]):
+            raise HTTPException(409, "published_manifest_conflict")
+        if not existing:
+            session.add(PublishedManifest(listing_version_id=version_id, manifest_hash=key[1],
+                dataset_id=record.id, root_path=local["root_path"], members=local["manifest"]["members"],
+                registration_to_published_index=local["registration_to_published_index"]))
+        metadata = _local_metadata(record)
+        metadata["local_publish"] = {"version_id": version_id, "manifest_hash": key[1],
+            "version_label": local["version"].version_label, "status": status,
+            "offset": local.get("offset", 0),
+            "accepted_sample_indices": local.get("accepted_sample_indices", [])}
+        record.metadata_json = json.dumps(metadata)
+        record.listing_id = listing_id
+        session.add(record)
+        session.commit()
+
+
+def _local_progress(dataset_id, offset, status, sample_index=None):
+    with get_session_context() as session:
+        record = session.get(DatasetRecord, dataset_id)
+        metadata = _local_metadata(record)
+        if not metadata.get("local_publish"):
+            raise HTTPException(409, "local_publish_progress_missing")
+        metadata["local_publish"].update(offset=offset, status=status)
+        if sample_index is not None:
+            accepted = set(metadata["local_publish"].get("accepted_sample_indices", []))
+            accepted.add(sample_index)
+            metadata["local_publish"]["accepted_sample_indices"] = sorted(accepted)
+        record.metadata_json = json.dumps(metadata)
+        session.add(record)
+        session.commit()
 
 
 def _manifest_hash_for_scan_job(session, scan_job: S3ScanJob) -> str:
@@ -379,6 +546,12 @@ def _persist_disclosure_decision(
     last_error: Optional[str] = None,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
+    if settings.multi_file_datasets_enabled:
+        with get_session_context() as session:
+            current = session.get(DatasetRecord, record.id)
+            progress = _local_metadata(current).get("local_publish")
+            if progress:
+                record.metadata["local_publish"] = progress
     existing = record.metadata.get("disclosure_decision")
     created_at = existing.get("created_at") if isinstance(existing, dict) else None
     decision = {
@@ -419,16 +592,17 @@ async def publish_to_marketplace(
     """Publish a dataset listing to ai.market via signed JWT proxy."""
     data = await publish_via_signed_proxy(body, request, user)
     listing_id = data.get("listing_id")
-    if listing_id and hasattr(processing, "get_dataset"):
+    if listing_id and not (settings.multi_file_datasets_enabled and data.get("version")) and hasattr(processing, "get_dataset"):
         record = processing.get_dataset(body.vz_dataset_id)
         if record:
             record.listing_id = str(listing_id)
             storage_fn = record.upload_path.name if record.upload_path else record.id
             processing._save_record(record, storage_fn)
     return MarketplacePublishResponse(
-        status="published",
+        status=data.get("status", "published"),
         listing_id=listing_id,
         marketplace_url=data.get("marketplace_url"),
+        error=data.get("version", {}).get("quarantine_reason"),
     )
 
 
@@ -444,7 +618,7 @@ async def create_disclosure_snapshot(
     processing: ProcessingService = Depends(get_processing_service),
 ):
     """Forward a seller-authorized disclosure snapshot request to ai.market."""
-    if body.sample_decision != "none" or body.approved_sample is not None:
+    if body.sample_decision not in (("none", "member_files") if settings.multi_file_datasets_enabled else ("none",)) or body.approved_sample is not None:
         raise HTTPException(status_code=422, detail="legacy_sample_unavailable")
     if not listing_id.strip():
         raise HTTPException(status_code=422, detail="listing_id is required")
@@ -528,12 +702,18 @@ async def publish_version_to_marketplace(
     user=Depends(get_current_user),
 ):
     """Publish a new dataset version to ai.market via the signed publish proxy."""
-    version = _version_emit_from_scan(
-        connection_id=body.s3_connection_id,
-        scan_job_id=body.scan_job_id,
-        version_label=body.version_label,
-        user=user,
-    )
+    local = _local_publish_snapshot(body.vz_dataset_id, body.version_label)
+    if local is not None:
+        version = local["version"]
+    else:
+        if not body.s3_connection_id or not body.scan_job_id:
+            raise HTTPException(422, "S3 connection and scan job are required")
+        version = _version_emit_from_scan(
+            connection_id=body.s3_connection_id,
+            scan_job_id=body.scan_job_id,
+            version_label=body.version_label,
+            user=user,
+        )
     publish_body = MarketplacePublishRequest(
         **body.model_dump(exclude={"s3_connection_id", "scan_job_id", "version_label"})
     )
@@ -546,7 +726,8 @@ async def publish_version_to_marketplace(
             versions_data[0],
         )
     return MarketplaceVersionPublishResponse(
-        status="published",
+        status=data.get("status", "published"),
+        version_id=version_data.get("version_id"),
         listing_id=data.get("listing_id"),
         marketplace_url=data.get("marketplace_url"),
         version_label=body.version_label,
@@ -615,6 +796,15 @@ async def publish_via_signed_proxy(
     s3_source_override: Optional[S3PublishSourceResolution] = None,
 ) -> dict[str, Any]:
     """Publish a dataset listing to ai.market via the canonical signed proxy."""
+    # D3 bounds precede even registration/signing. No new reads on flag-off.
+    local = _local_publish_snapshot(body.vz_dataset_id, versions[0].version_label if versions else None)
+    if local is not None:
+        versions = [local["version"]]
+        schema_info = dict(body.schema_info or {})
+        schema_info.pop("member_profiles", None)
+        if local["member_profiles"]:
+            schema_info["member_profiles"] = local["member_profiles"]
+        body = body.model_copy(update={"schema_info": schema_info})
     # 1. Load crypto + keypairs
     crypto = _get_crypto()
     ed_priv, _ed_pub, _x_priv, _x_pub = crypto.get_or_create_keypairs()
@@ -693,7 +883,86 @@ async def publish_via_signed_proxy(
 
     # 6. Return response
     if resp.status_code in (200, 201):
-        return resp.json()
+        data = resp.json()
+        if local is None:
+            return data
+        # Retry the same publish if the receiver omitted its assigned key.
+        for attempt in range(2):
+            version_data = _response_version(data, local["version"].version_label)
+            if version_data.get("version_id"):
+                break
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                retry = await client.post(url, json=payload, headers={
+                    "Authorization": f"Bearer {_build_jwt(str(seller_id), install_id, metadata_hash, ed_priv)}",
+                    "Content-Type": "application/json",
+                })
+            if retry.status_code not in (200, 201):
+                raise HTTPException(retry.status_code, "local_publish_retry_failed")
+            data = retry.json()
+        version_data = _response_version(data, local["version"].version_label)
+        if not version_data.get("version_id") or not data.get("listing_id"):
+            raise HTTPException(502, "local_publish_missing_version_id; retry publish")
+        version_id = str(version_data["version_id"])
+        if local.get("retained_version_id") != version_id:
+            local["offset"] = 0
+            local["accepted_sample_indices"] = []
+        _record_local_publish(local, str(data["listing_id"]), version_id, version_data.get("status", "pending_members"))
+
+        async def post(path, signed_payload, *, action, content=None):
+            signed = build_action_jwt(seller_id=str(seller_id), install_id=install_id,
+                action=action, payload_hash=_jcs_hash(signed_payload), private_key=ed_priv,
+                hash_claim="metadata_hash")
+            headers = {"Authorization": f"Bearer {signed}"}
+            if content is None:
+                headers["Content-Type"] = "application/json"
+                transport = {"json": signed_payload}
+            else:
+                headers.update({"Content-Type": "application/octet-stream",
+                                "Content-Length": str(signed_payload["size_bytes"])})
+                transport = {"content": content}
+            try:
+                async with httpx.AsyncClient(timeout=settings.sample_upload_timeout_s if content is not None else 30.0) as client:
+                    response = await client.post(settings.ai_market_url.rstrip("/") + path,
+                        headers=headers, **transport)
+            except httpx.RequestError as exc:
+                raise HTTPException(502, "pending_members: upload interrupted; retry publish") from exc
+            if response.status_code not in (200, 201):
+                try:
+                    detail = response.json().get("detail", "pending_members")
+                except ValueError:
+                    detail = "pending_members"
+                raise HTTPException(response.status_code, detail)
+            return response.json()
+
+        def checkpoint(offset, result):
+            _local_progress(body.vz_dataset_id, offset, result.get("status", "pending_members"))
+
+        def sample_checkpoint(index, result):
+            _local_progress(body.vz_dataset_id, len(local["manifest"]["members"]),
+                result.get("status", "pending_members"), sample_index=index)
+
+        # A repeated publish returns the existing version status. In particular,
+        # recovering a lost final-sample ACK must not resend to an active version.
+        if version_data.get("status") == "pending_members":
+            result = await upload_member_chunks(version_id=version_id,
+                members_upload_id=local["version"].members_upload_id, members=local["manifest"]["members"],
+                post=post, checkpoint=checkpoint, start_offset=local.get("offset", 0))
+            version_data.update(result)
+        if version_data.get("status") == "pending_members":
+            try:
+                sample_result = await upload_samples(dataset_id=body.vz_dataset_id, root_path=local["root_path"],
+                    version_id=version_id, members_upload_id=local["version"].members_upload_id,
+                    members=local["manifest"]["members"], post=post,
+                    accepted_indices=local.get("accepted_sample_indices", []), checkpoint=sample_checkpoint)
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from None
+            if sample_result:
+                version_data.update(sample_result)
+        _local_progress(body.vz_dataset_id, len(local["manifest"]["members"]), version_data.get("status", "pending_members"))
+        data["version"] = version_data
+        status = version_data.get("status")
+        data["status"] = "published" if status == "active" else status if status in ("quarantined", "superseded") else "pending_members"
+        return data
 
     # Error passthrough
     try:
@@ -707,24 +976,31 @@ async def publish_via_signed_proxy(
 
 
 @router.get("/marketplace/publish-status")
-async def publish_status(user=Depends(get_current_user)):
+async def publish_status(dataset_id: Optional[str] = None, user=Depends(get_current_user)):
     """Check if this AIM Data installation is ready to publish to ai.market."""
+    progress = {}
+    if settings.multi_file_datasets_enabled and dataset_id:
+        with get_session_context() as session:
+            record = session.get(DatasetRecord, dataset_id)
+            progress = _local_metadata(record).get("local_publish", {})
+            if progress.get("status") != "pending_members":
+                progress = {}
     # Must have keystore passphrase
     if not settings.keystore_passphrase:
-        return {"can_publish": False, "reason": "Keystore passphrase not configured"}
+        return {**progress, "can_publish": False, "reason": "Keystore passphrase not configured"}
 
     # Must have keypairs
     try:
         crypto = _get_crypto()
         crypto.get_or_create_keypairs()
     except Exception as e:
-        return {"can_publish": False, "reason": f"Keypair error: {e}"}
+        return {**progress, "can_publish": False, "reason": f"Keypair error: {e}"}
 
     # Must have device registration (platform keys)
     if not crypto.has_platform_keys():
-        return {"can_publish": False, "reason": "Device not registered with ai.market"}
+        return {**progress, "can_publish": False, "reason": "Device not registered with ai.market"}
 
-    return {"can_publish": True, "reason": None}
+    return {**progress, "can_publish": True, "reason": None}
 
 
 @router.post("/marketplace/listings/{listing_id}/at-a-glance/approve")

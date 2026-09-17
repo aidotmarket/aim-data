@@ -24,6 +24,7 @@ from app.models.connectivity import ConnectivityTokenRecord  # noqa: F401  BQ-MC
 from app.models.raw_file import RawFile  # noqa: F401  BQ-VZ-RAW-LISTINGS
 from app.models.raw_listing import RawListing  # noqa: F401  BQ-VZ-RAW-LISTINGS
 from app.models.data_verification import DataVerificationRun  # noqa: F401  S1590
+from app.models.published_manifest import PublishedManifest  # noqa: F401  S1717
 from app.services.deduction_queue import deductions_metadata
 
 config = context.config
