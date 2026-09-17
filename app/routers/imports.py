@@ -57,6 +57,24 @@ async def start_import(
     user: AuthenticatedUser = Depends(get_current_user),
     svc: ImportService = Depends(get_import_service),
 ):
+    from app.config import settings
+    if settings.multi_file_datasets_enabled:
+        from app.core.database import get_session_context
+        from app.services.directory_registration import register_directory
+        from app.core.async_utils import run_sync
+        def register():
+            with get_session_context() as session:
+                dataset = register_directory(session, req.path)
+                session.commit()
+                session.refresh(dataset)
+                import json
+                summary = json.loads(dataset.metadata_json)["directory"]
+                return {"dataset_id": dataset.id, "status": "complete",
+                        "total_files": summary["member_count"], "total_bytes": dataset.file_size_bytes}
+        try:
+            return await run_sync(register)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
     try:
         job = svc.start_import(req.path, req.files)
     except ValueError as e:

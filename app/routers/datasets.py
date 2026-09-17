@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File, Form, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pathlib import Path
 import aiofiles
 import asyncio
@@ -10,7 +10,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 from app.core.async_utils import run_sync
 from app.core.errors import AIMDataError
@@ -56,6 +56,99 @@ SUPPORTED_EXTENSIONS = {f'.{t}' for t in PROCESSABLE_TYPES}
 def get_file_extension(filename: str) -> str:
     """Extract file extension from filename."""
     return Path(filename).suffix.lower().strip()
+
+
+class RegisterDirectoryRequest(BaseModel):
+    path: str
+
+
+class MemberPatch(BaseModel):
+    role: Optional[Literal["data", "documentation", "other"]] = None
+    is_sample: Optional[StrictBool] = None
+
+
+def _require_directory_flag():
+    if not settings.multi_file_datasets_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+@router.post("/register-directory", dependencies=[Depends(_require_directory_flag)])
+def register_directory_endpoint(body: RegisterDirectoryRequest, user: AuthenticatedUser = Depends(get_current_user)):
+    from app.services.directory_registration import register_directory
+    try:
+        with get_session_context() as session:
+            dataset = register_directory(session, body.path)
+            session.commit()
+            session.refresh(dataset)
+            return {"dataset_id": dataset.id, "status": dataset.status,
+                    **json.loads(dataset.metadata_json)["directory"]}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+@router.get("/{dataset_id}/members", dependencies=[Depends(_require_directory_flag)])
+def dataset_members(dataset_id: str, role: Optional[str] = None, status: Optional[str] = None,
+                    page: int = Query(1, ge=1), user: AuthenticatedUser = Depends(get_current_user)):
+    from sqlalchemy import func
+    from sqlmodel import select
+    from app.models.dataset import DatasetMember
+    from app.services.dataset_manifest import ROLES, STATUSES
+    if role is not None and role not in ROLES or status is not None and status not in STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid member filter")
+    with get_session_context() as session:
+        dataset = session.get(DBDatasetRecord, dataset_id)
+        if dataset is None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        clauses = [DatasetMember.dataset_id == dataset_id]
+        if role is not None:
+            clauses.append(DatasetMember.role == role)
+        if status is not None:
+            clauses.append(DatasetMember.status == status)
+        total = session.exec(select(func.count()).select_from(DatasetMember).where(*clauses)).one()
+        members = session.exec(select(DatasetMember).where(*clauses).order_by(DatasetMember.index)
+                               .offset((page - 1) * 100).limit(100)).all()
+        return {"members": [m.model_dump() for m in members], "total": total,
+                "page": page, "page_size": 100, "editable": not bool(dataset.listing_id)}
+
+
+@router.patch("/{dataset_id}/members/{index}", dependencies=[Depends(_require_directory_flag)])
+def patch_dataset_member(dataset_id: str, index: int, body: MemberPatch,
+                         user: AuthenticatedUser = Depends(get_current_user)):
+    from sqlmodel import select
+    from app.models.dataset import DatasetMember
+    from app.services.directory_registration import refresh_directory_metadata
+    changes = body.model_dump(exclude_unset=True)
+    if not changes or any(value is None for value in changes.values()):
+        raise HTTPException(status_code=422, detail="Provide role or is_sample")
+    with get_session_context() as session:
+        dataset = session.exec(select(DBDatasetRecord).where(DBDatasetRecord.id == dataset_id).with_for_update()).first()
+        if dataset is None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        if dataset.listing_id:
+            raise HTTPException(status_code=409, detail="Published member choices are frozen")
+        member = session.get(DatasetMember, (dataset_id, index))
+        if member is None:
+            raise HTTPException(status_code=404, detail="Member not found")
+        role = changes.get("role", member.role)
+        if changes.get("is_sample") is True and role != "data":
+            raise HTTPException(status_code=422, detail="is_sample requires role=data")
+        member.role = role
+        member.is_sample = changes.get("is_sample", member.is_sample) if role == "data" else False
+        member.updated_at = datetime.now(timezone.utc)
+        session.add(member)
+        session.flush()
+        if dataset.file_type == "directory":
+            refresh_directory_metadata(session, dataset)
+        session.commit()
+        session.refresh(member)
+        return member.model_dump()
+
+
+def _register_saved_upload(record, filename):
+    from app.services.directory_registration import register_uploaded_file
+    with get_session_context() as session:
+        register_uploaded_file(session, record.id, record.upload_path, filename)
+        session.commit()
 
 
 @router.get("/")
@@ -178,8 +271,11 @@ async def upload_dataset(
             )
 
         # Queue background processing (sequential — one file at a time)
-        from app.services.processing_queue import get_processing_queue
-        await get_processing_queue().submit(record.id)
+        if settings.multi_file_datasets_enabled:
+            await run_sync(_register_saved_upload, record, file.filename)
+        else:
+            from app.services.processing_queue import get_processing_queue
+            await get_processing_queue().submit(record.id)
 
         # Create success notification
         try:
@@ -540,8 +636,11 @@ async def batch_upload(
             processing._save_record(record, storage_fn)
 
             # Queue background extraction (sequential — one file at a time)
-            from app.services.processing_queue import get_processing_queue
-            await get_processing_queue().submit(record.id)
+            if settings.multi_file_datasets_enabled:
+                await run_sync(_register_saved_upload, record, fname)
+            else:
+                from app.services.processing_queue import get_processing_queue
+                await get_processing_queue().submit(record.id)
 
             items.append({
                 "client_file_index": idx,

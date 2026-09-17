@@ -1299,3 +1299,26 @@ async def test_two_independent_starts_use_each_responses_key(tmp_path, monkeypat
                     install_id="install_fixture", install_private_key=object())
     assert selected == expected
     assert selected[0] != selected[1]
+
+
+def test_d_bytes_local_probe_uses_original_member(tmp_path, monkeypatch):
+    from uuid import uuid4
+    from app.models.dataset import DatasetMember
+    from app.config import settings
+    monkeypatch.setattr(settings, 'multi_file_datasets_enabled', True)
+    root = tmp_path / 'original'; root.mkdir()
+    original = root / 'data.csv'; original.write_bytes(b'x\n1\n')
+    processed = tmp_path / 'processed.parquet'; processed.write_bytes(b'wrong bytes')
+    dataset = DatasetRecord(id=str(uuid4()), original_filename=root.name, storage_filename=root.name,
+                            file_type='directory', root_path=str(root), listing_id=str(uuid4()),
+                            processed_path=str(processed), status='preview_ready')
+    with get_session_context() as session:
+        session.add(dataset)
+        session.add(DatasetMember(dataset_id=dataset.id, index=0, relative_path='data.csv',
+                                  detected_type='csv', size_bytes=4, sha256='0' * 64))
+        session.commit(); session.refresh(dataset)
+        captured = []
+        monkeypatch.setattr(local_service, 'probe_object_count', lambda name, payload: captured.append((name, payload)) or 1)
+        probe, _ = local_service._probe(dataset, False)
+        assert probe.source_reachable
+        assert captured == [('data.csv', original.read_bytes())]
