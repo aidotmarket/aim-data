@@ -102,3 +102,9 @@ Load the existing `/data/keystore.json` through `DeviceCrypto` with its passphra
 On rotation, stage the encrypted Ed25519 replacement, call only the existing owner-authenticated rotate endpoint, and keep signing blocked until independent readback confirms the new key. On uncertainty preserve the staged identity and reconcile; never alternate keys. Revocation blocks further local signing even when its network outcome is uncertain. In this chunk these endpoints are exercised only through mocks.
 
 For retirement, preserve the source dataset/entitlements; act on the exact preview object and retain pending status until both no-body receipts validate. Local fixture signing, hosted-object removal, platform withdrawal acknowledgement and installed-customer release are separate facts.
+
+## R2 fold
+
+Review source: DeepSeek `response-20260917-121500-938722`, CC `response-20260917-121529-807322`, GLM `response-20260917-121517-622711`; original reviewed candidate `0a409a7329d82e14d0281d3b169bf3af57c4eaef`.
+
+DS-F4 corrected review extent: `app/models/dataset_commitment_schemas.py` contains 339 lines; 233 was the diff insertion count, not its full length.
