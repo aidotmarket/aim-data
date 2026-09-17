@@ -92,7 +92,7 @@ it('shows local awaiting-backend state and key fingerprint on recovery',async ()
 });
 
 it('reviews source, origin and fingerprint before signing, then records pending submission',async () => {
-  job={...job,state:'hosted',selection:{leaf_indices:[0],display_columns:['value'],rows:1,fields:1,canonical_bytes:40},
+  job={...job,state:'hosted',review_ready:false,selection:{leaf_indices:[0],display_columns:['value'],rows:1,fields:1,canonical_bytes:40},
     policy:{policy:'aim-preview-policy-v1',version:'1.0.0',passed:true,reason_codes:[]},
     publication:{destination:'export',local_directory:'/app/exports',relative_path:'previews/v/h.json',package_sha256:'a'.repeat(64),byte_count:100,sample_hash:'b'.repeat(64),disclosure_version:'v'},
     origin:'https://seller.example/previews/v/h.json',signing:{fingerprint:'f'.repeat(64),code:null},
@@ -114,4 +114,15 @@ it('reviews source, origin and fingerprint before signing, then records pending 
   fireEvent.click(await screen.findByRole('button',{name:'Finish local preparation'}));
   expect(await screen.findByText('Prepared locally; marketplace preview submission awaits backend support')).toBeInTheDocument();
   expect(previewBuildApi.candidate).toHaveBeenCalledWith('job',{rights_basis:'owner',public_preview_permission:true,restricted_content_confirmed:true,metadata_accuracy_confirmed:true});
+});
+
+it('offers a fresh build after an expired review without polling or reading rows',async () => {
+  job={...job,state:'expired',code:'review_expired',review_ready:false};
+  vi.mocked(previewBuildApi.latest).mockResolvedValue(job);
+  render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('review_expired');
+  expect(screen.getByRole('button',{name:'Prepare verified preview'})).toBeEnabled();
+  expect(previewBuildApi.rows).not.toHaveBeenCalled();
+  await new Promise(resolve => setTimeout(resolve, 850));
+  expect(previewBuildApi.status).not.toHaveBeenCalled();
 });

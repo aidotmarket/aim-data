@@ -65,7 +65,8 @@ async def invoke(fn, *args):
     try:
         return await run_in_threadpool(fn, *args)
     except BuildError as exc:
-        raise HTTPException(exc.status, exc.code) from None
+        detail = {"code": exc.code, "job_id": exc.job_id} if exc.job_id else exc.code
+        raise HTTPException(exc.status, detail) from None
     except (
         CommitmentValidationError,
         PackageError,

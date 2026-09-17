@@ -185,7 +185,7 @@ async function apiFetch<T>(
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
     // Support both flat { detail: "..." } and structured { error: { safe_message: "..." } } formats
-    const message = error.detail || error.error?.safe_message || error.error?.title || `API error: ${response.status}`;
+    const message = error.detail?.code || error.detail || error.error?.safe_message || error.error?.title || `API error: ${response.status}`;
     throw new Error(message);
   }
 
@@ -220,7 +220,7 @@ async function apiFetchWithoutAuthRedirect<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    const message = error.detail || error.error?.safe_message || error.error?.title || `API error: ${response.status}`;
+    const message = error.detail?.code || error.detail || error.error?.safe_message || error.error?.title || `API error: ${response.status}`;
     throw new Error(message);
   }
 

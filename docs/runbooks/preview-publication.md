@@ -110,15 +110,46 @@ silently inferred from sample rows. The current UI accepts these declarations as
 JSON; CSV/TSV must include all required parser choices. Unsupported formats remain
 ineligible. No client-supplied source or publication filesystem path is accepted.
 
-Jobs are local to one application process and use 2a's installation-wide private
-worker lock, resource watchdog and source checks. A live review keeps the private
-index inside `private_job`; cancellation/withdrawal releases it. A browser reload
-finds the latest owned job. After application restart, source identity is checked
-and the private index is rebuilt before serving any rows. Job/candidate journals
-contain metadata, indices and digests, never records. An unexported scanned
-package is not persisted: rescan after restart. An exported package has the 2b
-publication journal and can be downloaded again. Operate this local UI with the
-normal single application process; cross-process job dispatch is not implemented.
+Jobs are local to one application process, with independent review sessions per
+(owner, dataset). Heavy 2a builds remain serialized under the installation worker
+flock; waiting builds have a live cancellable session. When computation finishes,
+the build flock is released while the review retains only its scoped private
+index/flock. Different datasets and owners can therefore review independently.
+The scope directory is SHA-256 of the closed owner/dataset tuple, not a supplied
+path. Cross-process job dispatch remains unsupported.
+
+A review expires after **1,800 seconds (30 minutes)** since its last authorized
+owner API interaction. Set `PREVIEW_REVIEW_IDLE_SECONDS` to a positive finite
+number of seconds to configure it; invalid settings fail startup. Background
+progress does not renew the lease. An independent idle watcher covers queued,
+building and ready reviews. The UI polls only builds, never completed/released
+reviews. API status/row/selection interactions renew an unexpired lease.
+
+| State/action | HTTP / stable code | Session and private row index |
+|---|---|---|
+| `building` (queued or computing) | 200 / null | Live; bounded idle lease plus existing 2a worker budgets |
+| `ready`, `selected`, `scanned` | 200 / null | Live; same idle lease |
+| Same owner/dataset second create | 409 / `detail: {code: job_already_running, job_id: <existing>}` | Existing session unchanged; no new job row |
+| Another owner requests this dataset/job | 403 / `dataset_owner_unverified` or `job_owner_mismatch` | No foreign job id/content or lease renewal |
+| Another owned dataset create/list/status | 200 / normal result (list may be null) | Independent session; computation may queue |
+| Synchronous start failure | 409 / `detail: {code: build_start_failed, job_id: <failed>}` | Durable `failed` row, no live session; never stranded `building` |
+| Worker failure | 200 status / `build_failed` or stable 2a code | `failed`; released and index deleted |
+| Idle expiry or reload without a live review | 200 status / `review_expired` | `expired`; no automatic rebuild; row operations return 409 / `review_expired` |
+| Reload while live | 200 / existing state | Reattaches the same owner session/index |
+| Package written | 200 / `packaged` | Released; index deleted before action returns |
+| Candidate prepared / submit | 200 / `signed_candidate` (submit adds local outcome) | Released; metadata/proofs suffice, no index rebuild |
+| Cancel | 200 / `cancelled`; published job: 409 / `withdraw_required` | Cancelled build/review released and index deleted before return |
+| Withdraw | `withdrawn` / `external_retirement_pending`, then `retired` / null | Released and index deleted, including pending external retirement |
+
+Job/candidate journals contain metadata, selected proof paths, indices and digests,
+never records. A packaged job continues through origin review, candidate signing,
+local submit and retirement without reopening an index. Publication bytes retain
+the existing 2b journal/download/retirement rules. After process death, startup
+cleans orphan private indexes under their locks; unfinished review recovery reports
+`expired` / `review_expired`, and the seller explicitly starts a fresh preparation.
+An expired review cannot resume a stale scan. Cancellation, package completion,
+prepared candidate, submit and withdrawal all release the live session; the heavy
+worker's cancellation/termination cleanup completes before a terminal API returns.
 
 Publication roots are beneath the dedicated `preview-builds` directory in the
 configured data directory. The exact owner-specific directory and immutable

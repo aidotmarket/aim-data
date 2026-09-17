@@ -1,18 +1,22 @@
-"""Owner-scoped local jobs. Only metadata persists; private indexes rebuild on restart."""
+"""Owner-scoped local jobs. Only metadata persists; abandoned private reviews expire."""
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
+import os
 from pathlib import Path
 import sqlite3
 import struct
 import threading
+import time
 from uuid import uuid4
 
 from app.services.dataset_canonicalization import CanonicalSchema, ParsingDeclaration
 from app.services.dataset_merkle_service import (
     run_commitment_job,
+    private_job,
     canonical_json_bytes,
     canonical_rfc3339_utc,
     CommitmentValidationError,
@@ -45,8 +49,8 @@ RIGHTS = {
 
 
 class BuildError(ValueError):
-    def __init__(self, code, status=409):
-        self.code, self.status = code, status
+    def __init__(self, code, status=409, job_id=None):
+        self.code, self.status, self.job_id = code, status, job_id
         super().__init__(code)
 
 
@@ -112,7 +116,14 @@ def schema_has_binary(descriptors):
 
 
 class PreviewBuildService:
-    def __init__(self, root, processing, upload_root):
+    def __init__(self, root, processing, upload_root, *, idle_seconds=None):
+        self.idle_seconds = float(
+            idle_seconds
+            if idle_seconds is not None
+            else os.environ.get("PREVIEW_REVIEW_IDLE_SECONDS", "1800")
+        )
+        if not math.isfinite(self.idle_seconds) or self.idle_seconds <= 0:
+            raise ValueError("invalid_review_idle_timeout")
         self.root = Path(root).absolute()
         with directory_fd(self.root, private=True):
             pass
@@ -128,6 +139,21 @@ class PreviewBuildService:
             )
         self.db_path.chmod(0o600)
         self.journal = PreviewJournal(self.root / "candidates.sqlite")
+        # Recover row indexes left by process death, respecting live flock holders.
+        worker_root = self.root / "worker"
+        with directory_fd(worker_root, private=True):
+            pass
+        if worker_root.exists():
+            roots = [worker_root] + [
+                p for p in worker_root.iterdir() if p.is_dir() and len(p.name) == 64
+            ]
+            for root in roots:
+                try:
+                    with private_job(root):
+                        pass
+                except CommitmentValidationError as exc:
+                    if exc.code != "job_already_running":
+                        raise
 
     @contextmanager
     def db(self):
@@ -145,7 +171,7 @@ class PreviewBuildService:
                 (job["id"], job["owner"], job["dataset_id"], json.dumps(job)),
             )
 
-    def load(self, job_id, owner):
+    def load(self, job_id, owner, *, interaction=True):
         with self.db() as db:
             row = db.execute(
                 "SELECT owner,payload FROM jobs WHERE id=?", (job_id,)
@@ -155,8 +181,47 @@ class PreviewBuildService:
         if row[0] != owner:
             raise BuildError("job_owner_mismatch", 403)
         job = json.loads(row[1])
-        owned_dataset(self.processing, job["dataset_id"], owner)
+        if interaction:
+            owned_dataset(self.processing, job["dataset_id"], owner)
+            with self.lock:
+                live = self.live.get(job_id)
+                if live and not live["cancel"].is_set():
+                    if time.monotonic() - live["last_interaction"] >= self.idle_seconds:
+                        job.update(state="expired", code="review_expired")
+                        self.save(job)
+                        live["cancel"].set()
+                    else:
+                        live["last_interaction"] = time.monotonic()
+                elif job["state"] in {"building", "ready", "selected", "scanned"}:
+                    job.update(state="expired", code="review_expired")
+                    self.save(job)
         return job
+
+    @contextmanager
+    def release_on_exit(self, job_id):
+        # Outermost context: never join a worker while holding the service lock.
+        try:
+            yield
+        finally:
+            with self.lock:
+                live = self.live.get(job_id)
+                if live:
+                    job = self.load(job_id, live["owner"], interaction=False)
+                    if job["state"] in {
+                        "packaged",
+                        "hosted",
+                        "signed_candidate",
+                        "cancelled",
+                        "withdrawn",
+                        "retired",
+                        "failed",
+                        "expired",
+                    }:
+                        live["cancel"].set()
+                    else:
+                        live = None
+            if live:
+                live["thread"].join()
 
     def latest(self, dataset_id, owner):
         owned_dataset(self.processing, dataset_id, owner)
@@ -195,8 +260,9 @@ class PreviewBuildService:
         if expected.get(path.suffix.lower()) != declaration.format:
             raise BuildError("unsupported_format", 422)
         with self.lock:
-            if self.live:
-                raise BuildError("job_already_running")
+            for existing_id, live in self.live.items():
+                if live["scope"] == (owner, record.id):
+                    raise BuildError("job_already_running", job_id=existing_id)
             job = dict(
                 id=str(uuid4()),
                 owner=owner,
@@ -225,29 +291,45 @@ class PreviewBuildService:
                 created_at=stamp(),
             )
             self.save(job)
-            self.start(job)
+            try:
+                self.start(job)
+            except Exception as exc:
+                self.live.pop(job["id"], None)
+                job.update(state="failed", code="build_start_failed")
+                self.save(job)
+                raise BuildError("build_start_failed", job_id=job["id"]) from exc
         return self.status(job["id"], owner)
 
     def start(self, job):
-        if self.live:
-            raise BuildError("job_already_running")
         record = owned_dataset(self.processing, job["dataset_id"], job["owner"])
         path, version = source_identity(record, self.upload_root)
         if version != job["source_version"]:
             raise BuildError("source_changed")
         cancel = threading.Event()
-        live = {"cancel": cancel, "builder": None, "package": None}
+        live = {
+            "cancel": cancel,
+            "builder": None,
+            "package": None,
+            "owner": job["owner"],
+            "scope": (job["owner"], job["dataset_id"]),
+            "last_interaction": time.monotonic(),
+        }
         self.live[job["id"]] = live
 
         def progress(value):
             with self.lock:
-                current = self.load(job["id"], job["owner"])
+                current = self.load(job["id"], job["owner"], interaction=False)
                 current["progress"] = value
                 self.save(current)
 
+        build_slot = ExitStack()
+
         def review(tree, result):
+            # The 2a process has exited. Keep only this scope's review index;
+            # release the installation-wide build slot for the next dataset.
+            build_slot.close()
             with self.lock:
-                current = self.load(job["id"], job["owner"])
+                current = self.load(job["id"], job["owner"], interaction=False)
                 if cancel.is_set():
                     return
                 live["builder"] = CommitmentPreviewBuilder(tree, current["descriptors"])
@@ -255,23 +337,52 @@ class PreviewBuildService:
                 if current["state"] == "building":
                     current["state"] = "selected" if current["indices"] else "ready"
                 self.save(current)
-            # Holding the 2a context retains its process-wide flock and cleanup.
             cancel.wait()
+
+        def expire_idle():
+            # Covers build and review; background progress never renews the lease.
+            while not cancel.is_set():
+                with self.lock:
+                    remaining = self.idle_seconds - (
+                        time.monotonic() - live["last_interaction"]
+                    )
+                    if remaining <= 0:
+                        current = self.load(job["id"], job["owner"], interaction=False)
+                        current.update(state="expired", code="review_expired")
+                        self.save(current)
+                        cancel.set()
+                        break
+                cancel.wait(remaining)
 
         def run():
             try:
+                threading.Thread(target=expire_idle, daemon=True).start()
+                while not cancel.is_set():
+                    try:
+                        build_slot.enter_context(private_job(self.root / "worker"))
+                        break
+                    except CommitmentValidationError as exc:
+                        if exc.code != "job_already_running":
+                            raise
+                        cancel.wait(0.05)
+                if cancel.is_set():
+                    return
                 run_commitment_job(
                     [path],
                     ParsingDeclaration(**job["parsing"]),
                     job["descriptors"],
-                    self.root / "worker",
+                    self.root
+                    / "worker"
+                    / hashlib.sha256(
+                        canonical_json_bytes(list(live["scope"]))
+                    ).hexdigest(),
                     cancel=cancel,
                     progress=progress,
                     local_review=review,
                 )
             except Exception as exc:
                 with self.lock:
-                    current = self.load(job["id"], job["owner"])
+                    current = self.load(job["id"], job["owner"], interaction=False)
                     if not cancel.is_set():
                         current.update(
                             state="failed",
@@ -281,6 +392,8 @@ class PreviewBuildService:
                         )
                         self.save(current)
             finally:
+                build_slot.close()
+                cancel.set()
                 with self.lock:
                     self.live.pop(job["id"], None)
 
@@ -291,11 +404,6 @@ class PreviewBuildService:
     def status(self, job_id, owner):
         with self.lock:
             job = self.load(job_id, owner)
-            if (
-                job["state"] not in {"cancelled", "failed", "retired", "withdrawn"}
-                and job_id not in self.live
-            ):
-                self.start(job)
             live = self.live.get(job_id)
             signing = {"fingerprint": None, "code": None}
             if job.get("receipts"):
@@ -310,7 +418,12 @@ class PreviewBuildService:
                 "state": job["state"],
                 "code": job["code"],
                 "progress": job["progress"],
-                "review_ready": bool(live and live["builder"]),
+                "review_ready": bool(
+                    job["state"] in {"ready", "selected", "scanned"}
+                    and live
+                    and not live["cancel"].is_set()
+                    and live["builder"]
+                ),
                 "columns": [d[0] for d in job["descriptors"]],
                 "selection": {
                     "leaf_indices": job["indices"],
@@ -333,7 +446,11 @@ class PreviewBuildService:
                 "outcome": AWAITING if job["prepared"] else None,
             }
 
-    def active(self, job):
+    def check_source(self, job):
+        if job["state"] == "expired":
+            raise BuildError("review_expired")
+        if job["state"] in {"cancelled", "failed", "retired", "withdrawn"}:
+            raise BuildError("job_inactive")
         record = owned_dataset(self.processing, job["dataset_id"], job["owner"])
         _, version = source_identity(record, self.upload_root)
         if version != job["source_version"]:
@@ -342,25 +459,21 @@ class PreviewBuildService:
             if job["id"] in self.live:
                 self.live[job["id"]]["cancel"].set()
             raise BuildError("source_changed")
+
+    def active(self, job):
+        self.check_source(job)
         live = self.live.get(job["id"])
-        if not live or not live["builder"]:
+        if not live or live["cancel"].is_set() or not live["builder"]:
             raise BuildError("review_recovering")
-        if job["state"] in {"cancelled", "failed", "retired", "withdrawn"}:
-            raise BuildError("job_inactive")
         return live
 
     def cancel(self, job_id, owner):
-        with self.lock:
+        with self.release_on_exit(job_id), self.lock:
             job = self.load(job_id, owner)
             if job["publication"]:
                 raise BuildError("withdraw_required")
             job.update(state="cancelled", policy=None)
             self.save(job)
-            live = self.live.get(job_id)
-            if live:
-                live["cancel"].set()
-        if live:
-            live["thread"].join(timeout=5)
         return self.status(job_id, owner)
 
     def row(self, builder, index):
@@ -534,14 +647,15 @@ class PreviewBuildService:
         )
 
     def package(self, job_id, owner, destination):
-        with self.lock:
+        with self.release_on_exit(job_id), self.lock:
             job = self.load(job_id, owner)
-            live = self.active(job)
+            self.check_source(job)
             if job["publication"] and job["publication"]["destination"] != destination:
                 raise BuildError("replace_preview_required")
             if job["publication"]:
                 self.download(job_id, owner)
                 return self.status(job_id, owner)
+            live = self.active(job)
             if not live["package"]:
                 raise BuildError("rescan_required")
             store = self.store(job, destination)
@@ -549,6 +663,7 @@ class PreviewBuildService:
             relative = store.path(result["disclosure_version"], result["sample_hash"])
             job.update(
                 state="packaged",
+                proofs=[live["builder"].tree.proof(index) for index in job["indices"]],
                 publication={
                     **result,
                     "destination": destination,
@@ -557,6 +672,7 @@ class PreviewBuildService:
                 },
             )
             self.save(job)
+            live["cancel"].set()
             return self.status(job_id, owner)
 
     def download(self, job_id, owner):
@@ -575,7 +691,7 @@ class PreviewBuildService:
     def origin_check(self, job_id, owner, url):
         with self.lock:
             job = self.load(job_id, owner)
-            self.active(job)
+            self.check_source(job)
             pub = job["publication"]
             if not pub or job["candidate"]:
                 raise BuildError("package_required")
@@ -673,9 +789,9 @@ class PreviewBuildService:
         from app.services.preview_content_policy import scan_attestation_digest
         from app.services.dataset_merkle_service import encode_base64url
 
-        with self.lock:
+        with self.release_on_exit(job_id), self.lock:
             job = self.load(job_id, owner)
-            live = self.active(job)
+            self.check_source(job)
             if (
                 not consent.metadata_accuracy_confirmed
                 or not consent.public_preview_permission
@@ -737,10 +853,27 @@ class PreviewBuildService:
                     "metadata_accuracy_confirmed": True,
                 }
             )
+            if "proofs" not in job:
+                # Pre-R2 packages already contain the immutable selected proofs.
+                # Recover only their metadata; never rebuild a private row index.
+                envelope = json.loads(self.download(job_id, owner))
+                job["proofs"] = [
+                    {
+                        key: entry[key]
+                        for key in (
+                            "base_row_digest",
+                            "duplicate_ordinal",
+                            "leaf_index",
+                            "tree_size",
+                            "siblings",
+                        )
+                    }
+                    for entry in envelope["entries"]
+                ]
             proofs = [
                 dict(
                     proof_id=pid,
-                    **live["builder"].tree.proof(index),
+                    **proof,
                     preview_package_url=job["origin"],
                     package_media_type=MEDIA_TYPE,
                     package_profile="aim-preview-package-v2",
@@ -750,7 +883,7 @@ class PreviewBuildService:
                     signature_algorithm="ed25519",
                     signature=dummy,
                 )
-                for index, pid in zip(job["indices"], job["proof_ids"])
+                for proof, pid in zip(job["proofs"], job["proof_ids"])
             ]
             c["proofs"] = proofs
             proofs = [signer.sign_proof(c, p) for p in proofs]
@@ -834,9 +967,9 @@ class PreviewBuildService:
 
     def submit(self, job_id, owner):
         # Intentionally has no transport or submit_preview_request call.
-        with self.lock:
+        with self.release_on_exit(job_id), self.lock:
             job = self.load(job_id, owner)
-            self.active(job)
+            self.check_source(job)
             if not job["candidate"]:
                 raise BuildError("signed_candidate_required")
             record = owned_dataset(self.processing, job["dataset_id"], owner)
@@ -853,7 +986,7 @@ class PreviewBuildService:
         from app.services.preview_lifecycle import withdrawal_candidate
         from app.services.preview_signing_service import construct_request
 
-        with self.lock:
+        with self.release_on_exit(job_id), self.lock:
             job = self.load(job_id, owner)
             pub = job["publication"]
             if not pub:
@@ -930,7 +1063,7 @@ class PreviewBuildService:
         # Its package/commitment evidence is a new revision, never an in-place edit.
         with self.lock:
             old = self.load(job_id, owner)
-            self.active(old)
+            self.check_source(old)
             if not old["candidate"] or old["state"] != "signed_candidate":
                 raise BuildError("signed_candidate_required")
             if (

@@ -133,7 +133,8 @@ def test_caps_no_rows_and_cancel(setup):
         r = client.post(base + "/package", json=body)
         assert r.status_code == 422 and "/tmp/secret" not in r.text
     assert client.post(base + "/cancel", json={}).json()["state"] == "cancelled"
-    assert not list((service.root / "worker").glob("job-*"))
+    assert not list((service.root / "worker").rglob("job-*"))
+    assert id not in service.live
     assert client.get(base + "/rows").status_code == 409
 
 
@@ -160,38 +161,173 @@ def test_missing_ownership_and_declarations(setup):
     )
 
 
-def test_restart_rebuilds_same_index(setup):
+def test_reload_reattaches_and_restart_expires(setup):
     client, service, app, record = setup
     id = create(client)
     base = "/marketplace/preview-builds/" + id
-    before = client.get(base + "/rows").json()
     live = service.live[id]
+    directory = live["builder"].tree.directory
+    assert client.get(base).json()["review_ready"]
+    assert (
+        client.get("/marketplace/preview-builds?dataset_id=dataset").json()["job_id"]
+        == id
+    )
+    assert service.live[id] is live
     live["cancel"].set()
     live["thread"].join(5)
     replacement = PreviewBuildService(
         service.root, service.processing, service.upload_root
     )
     app.dependency_overrides[get_build_service] = lambda: replacement
-    try:
-        for _ in range(200):
-            response = client.get(base)
-            if response.json()["review_ready"]:
-                break
-            time.sleep(0.05)
-        assert client.get(base + "/rows").json() == before
+    for url in [base, "/marketplace/preview-builds?dataset_id=dataset"]:
+        response = client.get(url)
+        assert response.status_code == 200
+        assert response.json()["state"] == "expired"
+        assert response.json()["code"] == "review_expired"
+        assert not response.json()["review_ready"]
+    assert client.get(base + "/rows").json()["detail"] == "review_expired"
+    assert not replacement.live and not directory.exists()
+    assert "blue" not in (service.root / "jobs.sqlite").read_bytes().decode(
+        errors="ignore"
+    )
+
+
+def test_duplicate_and_independent_owner_dataset_sessions(setup):
+    client, service, app, record = setup
+    id = create(client)
+    body = {
+        "dataset_id": "dataset",
+        "parsing": {"format": "ndjson", "encoding": "utf-8"},
+        "schema_descriptors": [["color", "string", False, {}]],
+    }
+    duplicate = client.post("/marketplace/preview-builds", json=body)
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == {"code": "job_already_running", "job_id": id}
+    assert client.get("/marketplace/preview-builds/" + id).json()["review_ready"]
+    assert (
+        client.get("/marketplace/preview-builds?dataset_id=dataset").json()["job_id"]
+        == id
+    )
+    records = {"dataset": record}
+    service.processing.get_dataset = records.get
+    for owner, dataset in [(OWNER, "second"), (OTHER, "other")]:
+        records[dataset] = SimpleNamespace(
+            id=dataset,
+            upload_path=record.upload_path,
+            metadata={"preview_owner_id": owner},
+        )
+        app.dependency_overrides[get_current_user] = lambda owner=owner: (
+            AuthenticatedUser(
+                user_id=owner, key_id="authenticated-test", scopes=["write"]
+            )
+        )
+        if owner == OTHER:
+            for url, code in [
+                ("/marketplace/preview-builds/" + id, "job_owner_mismatch"),
+                (
+                    "/marketplace/preview-builds?dataset_id=dataset",
+                    "dataset_owner_unverified",
+                ),
+            ]:
+                denied = client.get(url)
+                assert denied.status_code == 403 and denied.json()["detail"] == code
+                assert id not in denied.text
+            denied = client.post("/marketplace/preview-builds", json=body)
+            assert (
+                denied.status_code == 403
+                and denied.json()["detail"] == "dataset_owner_unverified"
+            )
         assert (
-            client.get("/marketplace/preview-builds?dataset_id=dataset").json()[
+            client.get("/marketplace/preview-builds?dataset_id=" + dataset).json()
+            is None
+        )
+        new = client.post(
+            "/marketplace/preview-builds", json={**body, "dataset_id": dataset}
+        )
+        assert new.status_code == 200, new.text
+        new_id = new.json()["job_id"]
+        for _ in range(200):
+            status = client.get("/marketplace/preview-builds/" + new_id).json()
+            if status["review_ready"]:
+                break
+            assert status["state"] != "failed", status
+            time.sleep(0.05)
+        assert status["review_ready"]
+        assert (
+            client.get("/marketplace/preview-builds?dataset_id=" + dataset).json()[
                 "job_id"
             ]
-            == id
+            == new_id
         )
-        assert "blue" not in (service.root / "jobs.sqlite").read_bytes().decode(
-            errors="ignore"
-        )
-    finally:
-        for live in list(replacement.live.values()):
-            live["cancel"].set()
-            live["thread"].join(5)
+    assert len(service.live) == 3
+    assert len({live["builder"].tree.directory for live in service.live.values()}) == 3
+
+
+@pytest.mark.parametrize("failure", ["start", "thread"])
+def test_failed_start_never_leaves_building_row(setup, monkeypatch, failure):
+    import json
+
+    client, service, app, record = setup
+
+    def fail(*args):
+        raise RuntimeError("private diagnostic")
+
+    if failure == "start":
+        monkeypatch.setattr(service, "start", fail)
+    else:
+        import threading
+
+        original_start = threading.Thread.start
+
+        def fail_worker(thread):
+            if (
+                getattr(thread._target, "__qualname__", "")
+                == "PreviewBuildService.start.<locals>.run"
+            ):
+                fail()
+            return original_start(thread)
+
+        monkeypatch.setattr(threading.Thread, "start", fail_worker)
+    response = client.post(
+        "/marketplace/preview-builds",
+        json={
+            "dataset_id": "dataset",
+            "parsing": {"format": "ndjson", "encoding": "utf-8"},
+            "schema_descriptors": [["color", "string", False, {}]],
+        },
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "build_start_failed"
+    with service.db() as db:
+        jobs = [json.loads(r[0]) for r in db.execute("SELECT payload FROM jobs")]
+    assert len(jobs) == 1 and jobs[0]["state"] == "failed"
+    assert jobs[0]["code"] == "build_start_failed"
+    assert response.json()["detail"]["job_id"] == jobs[0]["id"]
+    assert not service.live
+    assert (
+        client.get("/marketplace/preview-builds?dataset_id=dataset").json()["state"]
+        == "failed"
+    )
+
+
+def test_idle_expiry_cleans_index_without_polling(setup):
+    client, service, app, record = setup
+    service.idle_seconds = 0.5
+    id = create(client)
+    live = service.live[id]
+    directory = live["builder"].tree.directory
+    # A real owner interaction renews the lease; no background heartbeat does.
+    time.sleep(0.3)
+    assert client.get("/marketplace/preview-builds/" + id + "/rows").status_code == 200
+    time.sleep(0.3)
+    assert id in service.live
+    live["thread"].join(3)
+    assert not live["thread"].is_alive()
+    assert id not in service.live and not directory.exists()
+    status = client.get("/marketplace/preview-builds/" + id).json()
+    assert status["state"] == "expired" and status["code"] == "review_expired"
+    assert not status["review_ready"]
+    create(client)
 
 
 def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
@@ -266,6 +402,9 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
     packaged = client.post(base + "/package", json={"destination": "export"})
     assert packaged.status_code == 200, packaged.text
     pub = packaged.json()["publication"]
+    assert not packaged.json()["review_ready"]
+    assert id not in service.live
+    assert not list((service.root / "worker").rglob("job-*"))
     download = client.get(base + "/package")
     assert download.status_code == 200 and "row" in download.json()["entries"][0]
     from email.message import Message
@@ -303,11 +442,25 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
         ).status_code
         == 200
     )
+
+    def reopen_legacy_review():
+        # Exercise terminal cleanup even for a session retained by pre-R2 code.
+        with service.lock:
+            service.start(service.load(id, OWNER))
+        for _ in range(200):
+            with service.lock:
+                if service.live.get(id, {}).get("builder"):
+                    return
+            time.sleep(0.05)
+        pytest.fail("legacy review did not open")
+
+    reopen_legacy_review()
     signed = client.post(
         base + "/candidate", json={**consent, "metadata_accuracy_confirmed": True}
     )
     assert signed.status_code == 200, signed.text
     assert signed.json()["candidate"]["kind"] == "fixture_candidate"
+    assert id not in service.live and not signed.json()["review_ready"]
 
     def outbound(*args, **kwargs):
         pytest.fail("outbound call during submit")
@@ -316,6 +469,7 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
 
     monkeypatch.setattr(httpx.AsyncClient, "post", outbound)
     monkeypatch.setattr("socket.socket.connect", outbound)
+    reopen_legacy_review()
     response = client.post(base + "/submit", json={})
     assert response.status_code == 200, response.text
     assert (
@@ -323,6 +477,7 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
         == "Prepared locally; marketplace preview submission awaits backend support"
     )
     assert "blue" not in response.text and "green" not in response.text
+    assert id not in service.live and not response.json()["review_ready"]
     assert (
         client.post(base + "/submit", json={}).json()["candidate"]
         == signed.json()["candidate"]
@@ -358,6 +513,9 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
         ).status_code
         == 200
     )
+    legacy = service.load(refreshed.json()["job_id"], OWNER)
+    legacy.pop("proofs")
+    service.save(legacy)
     candidate = client.post(
         newer + "/candidate", json={**consent, "metadata_accuracy_confirmed": True}
     )
@@ -368,8 +526,12 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
     binding = json.loads(service.journal.read(tuple(saved["journal_key"]))["candidate"])
     assert binding["supersedes"] == pub["disclosure_version"]
     assert binding["sample_hash"] == pub["sample_hash"]
+    reopen_legacy_review()
     assert client.post(base + "/withdraw", json={}).json()["state"] == "retired"
     assert client.get(base + "/package").status_code == 409
+    assert client.post(base + "/submit", json={}).json()["detail"] == "job_inactive"
+    assert not service.live
+    assert not list((service.root / "worker").rglob("job-*"))
 
 
 def test_approval_digest_is_owner_scoped_local_and_idempotent(setup):
@@ -461,3 +623,55 @@ def test_sealed_scan_unavailable_never_exports(setup, monkeypatch):
         client.post(base + "/package", json={"destination": "export"}).json()["detail"]
         == "rescan_required"
     )
+
+
+@pytest.mark.parametrize("action", ["cancel", "idle"])
+def test_queued_build_is_live_cancellable_and_bounded(setup, action):
+    from app.services.dataset_merkle_service import private_job
+
+    client, service, app, record = setup
+    service.idle_seconds = 0.2
+    with private_job(service.root / "worker"):
+        response = client.post(
+            "/marketplace/preview-builds",
+            json={
+                "dataset_id": "dataset",
+                "parsing": {"format": "ndjson", "encoding": "utf-8"},
+                "schema_descriptors": [["color", "string", False, {}]],
+            },
+        )
+        assert response.status_code == 200, response.text
+        id = response.json()["job_id"]
+        assert response.json()["state"] == "building" and id in service.live
+        live = service.live[id]
+        if action == "cancel":
+            response = client.post(
+                "/marketplace/preview-builds/" + id + "/cancel", json={}
+            )
+            assert (
+                response.status_code == 200 and response.json()["state"] == "cancelled"
+            )
+        live["thread"].join(3)
+        assert id not in service.live
+    assert not list((service.root / "worker").rglob("job-*"))
+    if action == "idle":
+        status = client.get("/marketplace/preview-builds/" + id).json()
+        assert status["state"] == "expired" and status["code"] == "review_expired"
+
+
+def test_idle_timeout_configuration(setup, monkeypatch, tmp_path):
+    client, service, app, record = setup
+    assert service.idle_seconds == 1800
+    monkeypatch.setenv("PREVIEW_REVIEW_IDLE_SECONDS", "75")
+    assert (
+        PreviewBuildService(
+            tmp_path.resolve() / "configured", service.processing, service.upload_root
+        ).idle_seconds
+        == 75
+    )
+    for value in ["0", "-1", "nan", "inf"]:
+        monkeypatch.setenv("PREVIEW_REVIEW_IDLE_SECONDS", value)
+        with pytest.raises(ValueError, match="invalid_review_idle_timeout"):
+            PreviewBuildService(
+                tmp_path.resolve() / "invalid", service.processing, service.upload_root
+            )

@@ -194,9 +194,8 @@ affected runs have no branch-only failure. No test was skipped to obtain parity.
 - Missing declarations use a compact JSON editor; a richer schema declaration UI
   is not included. There is no arbitrary source/export path picker.
 - The normal entrypoint already enforces one uvicorn worker. Cross-process job
-  dispatch is not implemented. On restart the private index rebuilds; an
-  unexported scanned package requires rescan, while exported packages recover
-  through the publication journal.
+  dispatch is not implemented. R2 changes restart recovery to explicit review expiry; exported packages
+  recover through the publication journal without rebuilding an index.
 - Seller removal of externally copied packages cannot be automatic; retirement
   stays pending until GET/OPTIONS prove absence. Historical downloaded copies are
   outside this local retirement mechanism.
@@ -207,3 +206,35 @@ affected runs have no branch-only failure. No test was skipped to obtain parity.
 
 Operational instructions were added to the existing
 [preview-publication runbook](../runbooks/preview-publication.md).
+
+
+## R2 fold
+
+D1 (DeepSeek F1, MEDIUM mandate) implements the supplied ruling: independent
+(owner, dataset) review sessions, default 30-minute configurable owner-idle expiry,
+terminal-action cleanup, failed-start durability and explicit expired recovery.
+Heavy computation remains serialized; completed reviews no longer occupy that
+installation build slot. Selected proof metadata is saved at packaging so signing
+and origin review continue after the private row index is deleted. The frontend
+keeps those stages available without a live index and offers a new build after
+expiry. No merge or release is part of this fold.
+
+The complete [session lifecycle table and configuration](../runbooks/preview-publication.md#seller-ui-and-local-job-api-chunk-2d)
+are authoritative for states, HTTP codes, lease renewal and cleanup. The final
+per-finding commits and verification receipts are recorded below after validation.
+
+| State/action | HTTP / stable code | Session and private row index |
+|---|---|---|
+| `building` (queued or computing) | 200 / null | Live; bounded idle lease plus existing 2a worker budgets |
+| `ready`, `selected`, `scanned` | 200 / null | Live; same idle lease |
+| Same owner/dataset second create | 409 / `detail: {code: job_already_running, job_id: <existing>}` | Existing session unchanged; no new job row |
+| Another owner requests this dataset/job | 403 / `dataset_owner_unverified` or `job_owner_mismatch` | No foreign job id/content or lease renewal |
+| Another owned dataset create/list/status | 200 / normal result (list may be null) | Independent session; computation may queue |
+| Synchronous start failure | 409 / `detail: {code: build_start_failed, job_id: <failed>}` | Durable `failed` row, no live session; never stranded `building` |
+| Worker failure | 200 status / `build_failed` or stable 2a code | `failed`; released and index deleted |
+| Idle expiry or reload without a live review | 200 status / `review_expired` | `expired`; no automatic rebuild; row operations return 409 / `review_expired` |
+| Reload while live | 200 / existing state | Reattaches the same owner session/index |
+| Package written | 200 / `packaged` | Released; index deleted before action returns |
+| Candidate prepared / submit | 200 / `signed_candidate` (submit adds local outcome) | Released; metadata/proofs suffice, no index rebuild |
+| Cancel | 200 / `cancelled`; published job: 409 / `withdraw_required` | Cancelled build/review released and index deleted before return |
+| Withdraw | `withdrawn` / `external_retirement_pending`, then `retired` / null | Released and index deleted, including pending external retirement |

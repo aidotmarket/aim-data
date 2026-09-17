@@ -49,7 +49,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
   }, [datasetId]);
 
   useEffect(() => {
-    if (!job || job.review_ready || ['cancelled', 'failed', 'retired', 'withdrawn'].includes(job.state)) return;
+    if (!job || job.state !== 'building') return;
     let active = true;
     const timer = window.setInterval(() => {
       previewBuildApi.status(job.job_id).then(value => { if (active) setJob(value); })
@@ -75,6 +75,9 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
       const message = e instanceof Error ? e.message : 'preview_operation_failed';
       setError(message);
       if (message === 'parsing_declaration_required') setDeclarationsNeeded(true);
+      if (message === 'review_expired' || message === 'job_already_running') {
+        try { setJob(await previewBuildApi.latest(datasetId)); } catch { /* Keep the original error visible. */ }
+      }
     } finally { setBusy(false); }
   };
   const prepare = () => run(async () => {
@@ -96,7 +99,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
   const budget = previewBudget(selected, job?.columns.length || 0, sizes);
   const metadataChanged = !!job?.candidate && !!approvedMetadataDigest && job.approved_metadata_digest !== approvedMetadataDigest;
   const fixed = !!job?.publication || !!job?.candidate;
-  const active = !!job && !['cancelled','failed','retired','withdrawn'].includes(job.state);
+  const active = !!job && !['cancelled','failed','expired','retired','withdrawn'].includes(job.state);
   const selectionChanged = JSON.stringify(selected) !== JSON.stringify(job?.selection.leaf_indices) || JSON.stringify(columns) !== JSON.stringify(job?.selection.display_columns);
   const readyConsent = rights !== '' && permission && restricted;
 
@@ -122,7 +125,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
     </div>}
     {job && <>
       <p>Source version: <code>{job.source_version.slice(0,12)}</code></p>
-      <p role="status" aria-live="polite">{job.progress.phase}: {job.progress.records} records · {job.progress.canonical_bytes} canonical bytes{!job.review_ready && active ? ' · Building or recovering local index' : ''}</p>
+      <p role="status" aria-live="polite">{job.progress.phase}: {job.progress.records} records · {job.progress.canonical_bytes} canonical bytes{job.state === 'building' ? ' · Building or recovering local index' : ''}</p>
       {job.code && <p role="alert">{job.code}</p>}
       {job.review_ready && active && <>
         <h4 className="font-medium">Select complete records</h4>
@@ -153,6 +156,8 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
             const value = await previewBuildApi.selection(job.job_id,selected,columns); setJob(value); setPermission(false); setRestricted(false); setAccuracy(false);
           })}>Save selection</Button>
         </div>
+      </>}
+      {active && (job.review_ready || !!job.publication) && <>
         <fieldset disabled={busy} className="space-y-3">
           <legend className="font-medium">Rights and local policy review</legend>
           <label className="block">Rights basis <select aria-label="Rights basis" value={rights} onChange={e => { setRights(e.target.value as typeof rights); setPermission(false); setAccuracy(false); }}>
