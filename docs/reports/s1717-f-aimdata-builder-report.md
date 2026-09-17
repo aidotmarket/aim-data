@@ -209,4 +209,3 @@ tests/test_beta_readiness.py::TestBetaReadiness::test_upload_traversal_filename
 ## Delivery
 
 Implementation commits: `db1e44a` (tests), `5fb41fe` (seller documentation). This report is committed separately. No PR was created. All marketplace HTTP responses in the new coverage are mocked; this is backend regression evidence, not live marketplace delivery proof.
-
