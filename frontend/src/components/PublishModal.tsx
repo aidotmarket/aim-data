@@ -656,7 +656,14 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
       body: JSON.stringify(payload),
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : JSON.stringify(result.detail ?? result.error ?? "Publish failed"));
+    if (!response.ok) {
+      const detail = result.detail;
+      const message = typeof detail === "string" ? detail
+        : detail && typeof detail.code === "string" && typeof detail.detail === "string"
+          ? `${detail.code}: ${detail.detail}`
+          : JSON.stringify(detail ?? result.error ?? "Publish failed");
+      throw new Error(message);
+    }
     return result;
   };
   const publish = async () => {

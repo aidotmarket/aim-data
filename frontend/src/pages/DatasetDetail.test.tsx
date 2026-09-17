@@ -141,6 +141,7 @@ describe("seller listing preparation", () => {
     renderPreparation(dataset());
 
     expect(screen.getByTestId("data-verification-flow")).toHaveTextContent("ds-1");
+    expect(screen.getByRole("heading", { name: "Optional: add a verified shape label" })).toBeInTheDocument();
 
     const continueButton = await screen.findByRole("button", { name: "Continue to metadata" });
     await waitFor(() => expect(continueButton).toBeEnabled());
@@ -425,7 +426,7 @@ describe("directory publish control", () => {
   });
 
   it("renders the receiver's named upgrade refusal", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ detail: "agent_upgrade_required: upgrade AIM Data to 1.24.0" }) }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ detail: { code: "agent_upgrade_required", minimum_version: "1.24.0", detail: "upgrade AIM Data to 1.24.0" } }) }));
     render(<DirectoryPublishControl {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("agent_upgrade_required: upgrade AIM Data to 1.24.0");
