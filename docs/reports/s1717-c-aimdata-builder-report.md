@@ -6,6 +6,64 @@ Base remains `adb97f0497223525d4247fa4bb200076fa5fa969`.
 Authority: fetched runbooks `origin/main` at `bd703814803642f5a8e364767caecc89ef472083`, `specs/BQ-MULTI-FILE-DATASETS-S1717-GATE2.md` **§3a, Chunk C wire contract**. Receiver source: `ai-market-backend@305248064d836f9caaa4118f34aab4889aa21fae`. Read chunk B source at `9624a037d8345893cff5e9738a19cda38c6680e9` with `git show`; no merge of B. Continued in the existing branch-owning worktree; no new branch, rebase, history rewrite, PR or deployment.
 
 
+## R2 fold
+
+Caller-authorized Gate 3 fold on `9bbe77e2e086d2896ade4411109efc7577413f80`: DeepSeek APPROVE_WITH_MANDATES (2 MEDIUM, 1 LOW, 2 NIT), GLM APPROVE_WITH_NITS (2 LOW, 1 NIT), CC APPROVE_WITH_NITS (2 NIT). Work continued in the clean existing branch-owning worktree at `/private/var/tmp/koskadeux/minimal-bridge-worktrees/498574af95a3-ac8271`; the supplied starting checkout was detached at the same SHA. No new branch, rebase, history rewrite, PR or deployment.
+
+### Adopted findings
+
+- **DeepSeek M-1 / GLM LOW-2:** Added a `DatasetDetail.test.tsx` integration case rendering `ListingPreparation` and its real directory publish control with only `metadata.directory.sample_member_count = 2` as the sample-count source. It checks the displayed count, the initially checked sample-sharing control, and the emitted disclosure request's `sample_decision = "member_files"`. The verification panel retains the same DOM node and identical markup through publication, and its optional heading stays present (AC6). Mutating the count source to `metadata.row_count`, or the control default to false, independently fails this test; both mutations were restored.
+- **DeepSeek M-2:** `alembic/env.py` imports `PublishedManifest`. A fresh-interpreter test imports the environment with migration execution mocked and asserts `published_manifests` enters `SQLModel.metadata.tables`; prior test imports cannot mask the omission. A table-scoped autogenerate comparison against the actual 026-created table returns no differences. This is not a claim of whole-install autogenerate parity.
+- **CC NIT-1:** Folded `registration_to_published_index` into unreleased 026 and deleted 027 under the caller's confirmation that no install has run it. Migration tests verify the mapping column/default, legacy rows, upgrade/downgrade and the single 026 head.
+- **CC NIT-2:** `sample_upload_timeout_s` defaults to **930 seconds**, above receiver `SAMPLE_UPLOAD_TIMEOUT_S = 900`, allowing the receiver's named 408 to win the race. This is a **sender-local knob living in the chunk-A settings seam (`app/config.py`) by necessity**, with the existing environment alias retained; it does not change the receiver pin.
+- **GLM LOW-1:** Persist `accepted_sample_indices` after each successful sample response, reload it from local publish progress on pending retries, and reset it if the receiver assigns a different version. Old progress defaults to an empty set. The signed HTTP two-sample test interrupts sample 2, verifies sample 1's acknowledgement in the database, retries through the publish route, and asserts sample request indices `[0, 1, 1]`.
+- **DeepSeek L-1:** The member-chunk clamp now names the receiver's `PUBLISH_MEMBER_CHUNK` pin of 1,000.
+
+### Not adopted
+
+DeepSeek N-1 (packet citation) and GLM NIT (packet head line) remain the caller's packet responsibilities. DeepSeek N-2 (duplicate `_local_publish_snapshot` evaluation) remains advisory and unchanged; this fold makes no related refactor.
+
+### R2 operating supplement
+
+Re-read the seller-publish journey runbook and Gate 2 specification from the runbooks repository. This supplement supersedes R1's migration-027 and 900-second instructions: fresh installs apply through **026**; no 027 exists in this unreleased branch. Keep the sender timeout above the receiver's 900-second budget. Successful per-sample acknowledgements now survive a pending retry; a lost acknowledgement may still replay that same sample. All route flags remain default-off. Real-install AC7, live receiver/store integration and enabled release remain separate gates.
+
+### R2 validation
+
+Implementation commits: `b0e9d16` (migration), `ac8426a` (sender retry/timeout), `68725a4` (UI regression). Validation covers implementation head `68725a4fb11bc87042614735ef0e359522f41976`; only this report follows it.
+
+Focused backend modules: **66 passed**, 5.70 s. Frontend: **75 passed in 10 files**, 1.57 s. Production build passed in 2.98 s (existing bundle-size warning); `tsc --noEmit`, `alembic heads` (single `026_bq_published_manifests_s1717` head) and `git diff --check` passed. Wrong-key and false-default UI mutations were each caught; source was restored and the full frontend suite rerun.
+
+Fresh full suites used default-off flags, `PYTHONHASHSEED=0`, the same Python environment and separate serial directories.
+
+| Run | Passed | Failed | Errors | Skipped | Total | Duration |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base `adb97f0` | 2,986 | 56 | 38 | 34 | 3,114 | 154.92 s |
+| Candidate `68725a4` | 3,047 | 56 | 38 | 34 | 3,175 | 152.21 s |
+
+**No new failing cases; no resolved cases.** All 94 failure/error identities match exactly by JUnit `classname::name`; candidate adds 61 passing tests over base. The full suite remains non-green.
+
+Commands (full suites from the corresponding checkout; frontend commands from `frontend/`):
+
+```sh
+rtk proxy env PYTHONHASHSEED=0 AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-r2-base-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-r2-base.xml
+rtk proxy env PYTHONHASHSEED=0 AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-r2-final-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-r2-final.xml
+rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q tests/test_member_upload_client.py tests/test_dataset_publish_signed_proxy.py tests/test_alembic_025_026.py --tb=short --junitxml=/tmp/s1717-c-r2-focused.xml
+rtk proxy env NODE_OPTIONS=--no-experimental-webstorage npm test -- --run
+rtk proxy npm run build
+rtk proxy ./node_modules/.bin/tsc --noEmit
+rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m alembic heads
+rtk git diff --check
+```
+
+Evidence: `/tmp/s1717-c-r2-{base,final,focused}.{log,xml}`, `/tmp/s1717-c-r2-comparison.json`, `/tmp/s1717-c-r2-{frontend,frontend-final,build,tsc}.log`, `/tmp/s1717-c-r2-mutation-{wrong-key,false-default}.log`.
+
+JUnit SHA-256:
+
+- `base`: `d3ee0236f85e488e3f2b131c707704515773c0235a52cdb3a64757f7378c0264`.
+- `final`: `fa3d5cc5cca837a7f4758170a569a3624613dbcecadde8ddb3708bf6252ea144`.
+- `focused`: `2f5d8fe9751c01f23d585b1f51cef517ab9c9be4b7a6c3d6af650513786be80f`.
+
+
 ## R1 fold
 
 Caller-authorized Gate 3 fold of DeepSeek's REQUEST_CHANGES on `4b09f4dfebc3daac2e7303a0720339b5266dfc82`. Existing branch and worktree retained; no rebase, history rewrite, new branch, PR or deployment. Implementation commits: `f80d02b` (sender and regression coverage), `726b138` (UI), `a0f63da` (regression-fixture cleanup). Validation below applies to the complete implementation at `a0f63da`.
