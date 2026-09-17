@@ -612,4 +612,3 @@ Ignored nodes: comments, script, style
      41|   expect(screen.getByText('https://hostile.example')).toBeInTheDocumen…
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
-
