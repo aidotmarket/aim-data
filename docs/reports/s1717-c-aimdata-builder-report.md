@@ -1,86 +1,58 @@
-# S1717 chunk C — AIM Data sender report
+# S1717 chunk C — AIM Data sender reconciliation report
 
 Branch: `build/bq-multi-file-datasets-s1717-c`.
 Base: `adb97f0497223525d4247fa4bb200076fa5fa969` (chunk A, merged PR #66).
-Code candidate: `7b1be6fbaede4dc1869d1b5ee7ae8c32f3a492ef`; this report is committed afterward.
+Continuation start: `84037ebca7865f516226f2d287224c7f695ad798`.
+Reconciled code: `82564c1` (this report is committed afterward).
+Receiver authority: ai-market-backend `7002ab34d5d6a75b6515b314a523df4418ce3c65`, on the same named branch.
 
-**Sender implementation is pushed; cross-repository interoperability is not yet established.** Gate 2 specifies the publish fields, member endpoint and seven-field tuple, but not the complete member envelope or sample-upload HTTP contract. The concrete choices below require reconciliation with the separate receiver dispatch before this can be called an accepted chunk C. No receiver branch was inspected, no PR created, no production flag enabled, and no secrets or provider settings were accessed.
+**The sender now implements the pinned receiver's members, samples, signatures and activation contract.** All receiver references below are line numbers at that exact commit, read with `git -C /Users/max/Projects/ai-market/ai-market-backend show <sha>:<path>`. Its source and detached worktree were not modified. This is sender contract verification with real HTTP serialization and Ed25519 signatures against a mocked transport, not a live two-repository integration or enabled release.
 
-## Authority and scope
+## Scope and operating notes
 
-Read Gate 1 and Gate 2 using `git show origin/main:specs/BQ-MULTI-FILE-DATASETS-S1717-GATE{1,2}.md` in `/Users/max/Projects/ai-market/runbooks`; observed authority ref `2cafd9c020205e32b4ebae1d4ee853f644504189`. Applied Gate 2 §4.3 AIM-side scope, §3 wire, §6 policy, §7 evidence, and Gate 1 D0/D3/D4/D5/D7. Read chunk A models, manifest builder, directory router branches, config and builder report, plus both existing publish paths before implementation.
+Continued in the existing branch-owning worktree `/private/var/tmp/koskadeux/minimal-bridge-worktrees/498574af95a3-ac8271`, verified clean at the requested head. The supplied working directory was detached at that same head. No branch creation, rebase, history rewrite, PR, deployment, feature activation, secrets access or provider changes.
 
-The initial worktree was clean and detached at the exact base. Created the requested branch there. No processing, scanner, fulfillment, backend, configuration, or released migration file was changed. DatasetDetail changes are confined to the publish control/import and adjacent optional verification heading, plus its test file. Chunk B's member table and processing areas remain untouched.
+Consulted `/Users/max/Projects/ai-market/runbooks/aim-data-seller-publish-journey.md`. These branch-specific operating notes supplement its legacy metadata-only publish description: selected original sample bytes use the install-signed local sample route below. Local publishing remains gated; ordinary S3 publishing and its signed bytes remain unchanged. The prior implementation authority remains Gate 1/2 in the runbooks repo, as recorded in the pre-continuation report at `84037eb`.
 
-## Changes
+On interruption or `sample_store_unavailable`, show the receiver error and leave local progress pending. Retry the existing publish operation after the underlying condition clears. It returns the same version's current status and resumes frozen member uploads from the last acknowledged offset. Each request gets a fresh action JWT/jti. A lost chunk ACK replays the exact frozen envelope; a lost final-sample ACK is recovered from the repeated publish response without resending samples to an already active version. Do not mark pending, quarantined or superseded versions published. No remote status polling route is introduced; the existing AIM Data `publish_status` only reports locally persisted progress.
 
-| File | Change |
+## Reconciled receiver contract
+
+| Concern | Exact contract and pinned backend source |
 | --- | --- |
-| `app/routers/marketplace_publish.py` | Load stored members in index order; derive manifest/scalars with chunk A; paid-set and sample preflight before crypto/registration/signing; emit local version and top-level app version; preserve S3 wire defaults; record retained manifest and listing id together; retry missing version id; resume acknowledged offsets; surface pending status and receiver errors; accept gated `member_files` disclosure. |
-| `app/services/marketplace_push_service.py` | Signed member-upload orchestration using an injected publish signer/transport; at most configured PUBLISH_MEMBER_CHUNK and never above 1,000; advance checkpoint only after ACK. |
-| `app/services/sample_upload_client.py` | Validate all selected samples before upload; enforce file/count/total limits; read only selected original files, reject missing/changed bytes by member name, hash-check before egress. |
-| `app/models/published_manifest.py` | Composite `(listing_version_id, manifest_hash)` primary key; frozen root and exact seven-field member JSON; independent of live-member edits and dataset deletion. |
-| `alembic/versions/026_bq_published_manifests_s1717.py` | Create retained snapshot table and dataset lookup index; chain from 025. No released revision edited. |
-| `frontend/src/components/PublishModal.tsx` | Directory publish control with file-sample decision/opt-out, disclosure retry, pending status, named upgrade errors; standalone modal also refuses to call pending/quarantined versions published. |
-| `frontend/src/pages/DatasetDetail.tsx` | Use directory publish control within existing metadata/disclosure approval area; optional verified-shape heading; no verification request added to publish. |
-| `frontend/src/pages/DatasetDetail.test.tsx` | Directory `member_files`, pending/resume and upgrade-error assertions. |
-| `tests/test_dataset_publish_signed_proxy.py` | S3 byte goldens, local wire, pre-sign refusals, missing version retries, signature/retention round trip and migrated-record republish. |
-| `tests/test_member_upload_client.py` | Chunk boundaries and failure resume, frozen retention/root independence, pending status, selected bytes, sample bounds and changed bytes, worst-case path size, flag-off refusal. |
-| `tests/test_alembic_025_026.py` | Update head expectation and exercise 026 on an AC7-shaped synthetic install without modifying legacy records. |
+| Publish fields | Top-level `VZPublishPayload.agent_version`; version `source_kind="aim_data_local"`, `members_total`, `members_upload_id`. `app/schemas/vz_publish.py:133–172`; local creation/binding `app/services/vz_publish_service.py:1159–1209`. Initial local response carries `versions[].version_id` and `pending_members`; result schema `app/schemas/vz_publish.py:256–270`. |
+| Member envelope | POST `/api/v1/vz/versions/{version_id}/members`, exactly `{version_id, members_upload_id, members}`. Body UUID must match path UUID. `app/routers/vz_publish.py:282–308`; `app/schemas/vz_publish.py:313–325`. |
+| Member rows/bounds | Exactly index, relative_path, size_bytes, sha256, detected_type, role, is_sample; extra fields forbidden. `detected_type` is PROCESSABLE_TYPES plus unsupported; canonical path <=1,024 UTF-8 bytes. `app/schemas/vz_publish.py:281–310`. Sender uses <=configured PUBLISH_MEMBER_CHUNK and <=1,000 rows; existing worst-case path test includes both UUIDs and stays below the receiver's 8 MiB default body cap (`app/core/config.py:82–88`). Receiver enforces bytes at `app/routers/vz_publish.py:289–300` and configured chunk count at `app/schemas/vz_publish.py:319–325`. |
+| Member authentication | Bearer EdDSA install-action JWT, action `publish_version_members`, `metadata_hash` of the complete JSON envelope. `app/routers/vz_publish.py:258–305`. Signature/install/identity/jti/action/hash validation: `app/services/vz_publish_service.py:339–490`. |
+| Canonical hash | Backend `_jcs_serialize` / `compute_metadata_hash` at `app/services/vz_publish_service.py:68–86` exactly match sender `marketplace_action_signer.canonical_json_bytes` / `canonical_payload_hash`: `json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")`, then SHA-256 hex. Tests independently mirror these options and recompute member and sample JWT `metadata_hash`; non-ASCII member paths exercise UTF-8 behavior. Key insertion order does not affect the sorted-key hash. |
+| Sample request | POST `/api/v1/vz/versions/{version_id}/samples/{index}?members_upload_id=<uuid>`, raw original bytes, `Content-Type: application/octet-stream`, exact `Content-Length`; no JSON/base64 sample body. Action `publish_sample_member`; signed metadata exactly `{version_id: str, members_upload_id: str, index: int, size_bytes: int, sha256: str}`. Receiver derives size/hash from the frozen member: `app/api/v1/endpoints/vz_samples.py:20–39`. |
+| Sample streaming | Sender validates selected member limits, freezes one sample into a spooled temporary file, verifies byte count/SHA-256 before any egress, then streams that verified snapshot in <=64 KiB chunks. Memory spool threshold is 1 MiB; temporary storage closes after each request. Receiver streams, bounds and hashes raw bytes at `app/api/v1/endpoints/vz_samples.py:72–90`. Non-sample original files are not read. |
+| Activation | `finalize_local_version` waits for all members, validates the manifest and transfer limits, then waits for every selected sample's active asset/size/hash: `app/services/vz_publish_service.py:1249–1286`. Without samples, the final member response can activate. With samples, the final sample response is `{version_id, status, index}`: `app/api/v1/endpoints/vz_samples.py:103–109`. Sender consumes these statuses and stops further uploads on active/quarantined/superseded, including on repeat publish. |
+| Idempotency | Exact frozen chunks are acknowledged even after activation; conflicting members are refused. `app/services/vz_publish_service.py:1350–1377`. Samples are replayable while pending; terminal versions return 409, so sender uses repeat publish to recover a lost final ACK. `app/api/v1/endpoints/vz_samples.py:38–40,69–71`. |
+| Worked receiver examples | Real signed member HTTP/bounds and sample HTTP/tampering examples: `tests/test_vz_publish_local_route.py:472–550`. Also read `docs/reports/s1717-c-backend-builder-report.md`; its inherited joint acceptance limits are not claimed closed by this sender change. |
 
-Commits are deliberately separated: storage/migration; sender/client; frontend; provenance and full sender tests; standalone modal status correction; report.
+### Named receiver refusals
 
-## Migration evidence
+Sender passes through the HTTP status and `detail` unchanged and does not advance unacknowledged work. The following are tested through real httpx request serialization with a mock receiver:
 
-Before editing:
+| HTTP | Detail | Pinned receiver source |
+| --- | --- | --- |
+| 400 | `<relative_path>: SAMPLE_MAX_FILE_BYTES: N` | `app/api/v1/endpoints/vz_samples.py:43–44` |
+| 400 | `SAMPLE_MAX_FILES: N; SAMPLE_MAX_TOTAL_BYTES: N` | `app/api/v1/endpoints/vz_samples.py:45–46` |
+| 409 | `SAMPLE_SELLER_QUOTA_BYTES: N` | `app/api/v1/endpoints/vz_samples.py:57–58` |
+| 429 | `SAMPLE_UPLOAD_RATE: N` | `app/api/v1/endpoints/vz_samples.py:47–49` |
+| 409 | `version is no longer pending_members` | `app/api/v1/endpoints/vz_samples.py:39–40,70–71` |
+| 413 / 400 | `sample size mismatch` (overlong / short) | `app/api/v1/endpoints/vz_samples.py:78–84` |
+| 409 | `sample hash mismatch` | `app/api/v1/endpoints/vz_samples.py:89–90,103–104` |
+| 503 | `sample_store_unavailable` | `app/api/v1/endpoints/vz_samples.py:101–102` |
 
-```text
-rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m alembic heads
-025_bq_multi_file_datasets_s1717 (head)
-```
+Preflight uses the same named file/count/total limits before signing/registration; sender quota and rate decisions remain the receiver's responsibility. Store failure retains pending progress and permits a later explicit retry. An external status change can explain a terminal-version 409; subsequent publish obtains the actual status rather than treating 409 as success.
 
-After implementation, the same command returns exactly:
+## Wire examples
 
-```text
-026_bq_published_manifests_s1717 (head)
-```
+IDs/hashes below are placeholders; `0\n` represents two raw bytes (ASCII zero and LF). UUIDs are canonical lowercase strings. JWTs use EdDSA, existing seller `sub` and install `iss`, 300-second expiry and a fresh `jti`. All three actions use `metadata_hash`, not `payload_hash`.
 
-026 declares `down_revision = "025_bq_multi_file_datasets_s1717"`. The tests verify the composite key and that published/unpublished rows sharing a batch, with different original/storage names and an existing processed path, remain unchanged across upgrade/downgrade. This is a synthetic install fixture, **not a sanitized real-install AC7 copy**; real-install acceptance remains outstanding as it did for chunk A. Scan and delivery AC7 clauses belong to E and D.
-
-## Validation
-
-Final focused backend: **25 passed, 0 failed/errors**, 3.84 s; `test_dataset_publish_signed_proxy.py` 13, `test_member_upload_client.py` 10, `test_alembic_025_026.py` 2. Evidence: `/tmp/s1717-c-focused-final.log` and `.xml`.
-
-Final frontend: **73 passed**, 10 files, including 15 DatasetDetail tests; 1.50 s. Production build passed (2.93 s; existing large bundle warning); TypeScript `tsc --noEmit` passed. Evidence: `/tmp/s1717-c-frontend-delivery.log`, `/tmp/s1717-c-build-delivery.log`.
-
-Full flag-default-off comparison uses a new detached baseline at `/tmp/s1717-c-base`, the exact base SHA above, the same existing Python environment, separate per-run serial directories, and exact JUnit `classname::name` identities. New feature tests enable the flag explicitly and restore it.
-
-| Run | Passed | Failed | Errors | Skipped | Total | Duration |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Exact base | 2,986 | 56 | 38 | 34 | 3,114 | 156.35 s |
-| Final backend candidate `89fb6a5` (backend-identical to code head above) | 3,006 | 56 | 38 | 34 | 3,134 | 150.49 s |
-
-**New failing cases: none. Resolved base failures: none.** All 94 base failing/error identities persist; the final candidate adds 20 passing tests. Logs/JUnit: `/tmp/s1717-c-base.{log,xml}`, `/tmp/s1717-c-final.{log,xml}`. Machine-readable exact-case comparison: `/tmp/s1717-c-comparison.json`.
-
-An earlier full candidate run had 3,003 passed, 56 failed, 38 errors and 34 skipped: no new failing identities against the base. A final full rerun was started after the additional provenance/round-trip tests and status fixes; final counts above supersede that intermediate run. The suite is not green; no unrelated fixes were attempted.
-
-Commands (from the appropriate checkout; all shell commands use RTK):
-
-```sh
-rtk proxy env AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-base-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-base.xml
-rtk proxy env AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-final-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-final.xml
-rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q tests/test_dataset_publish_signed_proxy.py tests/test_member_upload_client.py tests/test_alembic_025_026.py --tb=short
-# frontend/
-rtk proxy env NODE_OPTIONS=--no-experimental-webstorage npm test -- --run
-rtk proxy npm run build
-rtk proxy ./node_modules/.bin/tsc --noEmit
-```
-
-## Emitted wire examples
-
-Placeholder ids/hashes below are illustrative. Paths and member names are synthetic. No root path is transmitted. The signer remains `publish_listing` with canonical-body `metadata_hash`, EdDSA, existing issuer/seller identity and short expiry.
-
-`POST /api/v1/vz/publish` (ordinary listing fields abbreviated):
+`POST /api/v1/vz/publish`, `Authorization: Bearer <publish_listing JWT>`, `Content-Type: application/json` (ordinary fields abbreviated):
 
 ```json
 {
@@ -97,56 +69,87 @@ Placeholder ids/hashes below are illustrative. Paths and member names are synthe
     "source_kind": "aim_data_local",
     "object_count": 2,
     "total_size_bytes": 4,
-    "manifest_hash": "<sha256-of-canonical-member-list>",
+    "manifest_hash": "<canonical-member-list-sha256>",
     "members_total": 2,
-    "members_upload_id": "<stable-upload-uuid>"
+    "members_upload_id": "<upload-uuid>"
   }]
 }
 ```
 
-`POST /api/v1/vz/versions/<version-id>/members`:
+Initial response includes `versions: [{version_id: "<version-uuid>", version_label: "<version-label>", status: "pending_members", quarantine_reason: null}]`.
+
+`POST /api/v1/vz/versions/<version-uuid>/members`, `Authorization: Bearer <publish_version_members JWT>`, `Content-Type: application/json`. JWT `metadata_hash` covers this entire envelope:
 
 ```json
 {
-  "members_upload_id": "<stable-upload-uuid>",
+  "version_id": "<version-uuid>",
+  "members_upload_id": "<upload-uuid>",
   "members": [
-    {"index": 0, "relative_path": "sample.csv", "size_bytes": 2, "sha256": "<sample-sha256>", "detected_type": "csv", "role": "data", "is_sample": true},
+    {"index": 0, "relative_path": "sample.csv", "size_bytes": 2, "sha256": "<sha256-of-zero-and-LF>", "detected_type": "csv", "role": "data", "is_sample": true},
     {"index": 1, "relative_path": "paid.csv", "size_bytes": 2, "sha256": "<paid-sha256>", "detected_type": "csv", "role": "data", "is_sample": false}
   ]
 }
 ```
 
-Provisional sample transport: `POST /api/v1/vz/versions/<version-id>/samples/0`:
+Member response: `{version_id: "<version-uuid>", version_label: "<version-label>", status: "pending_members", quarantine_reason: null}` because the selected sample is not yet stored.
 
-```json
-{"manifest_hash": "<manifest-sha256>", "content_base64": "MAo="}
+```http
+POST /api/v1/vz/versions/<version-uuid>/samples/0?members_upload_id=<upload-uuid>
+Authorization: Bearer <publish_sample_member JWT>
+Content-Type: application/octet-stream
+Content-Length: 2
+
+0
 ```
 
-Disclosure uses the existing disclosure endpoint and seller authentication with `sample_decision: "member_files"`, `approved_sample: null`, and no duplicate member list. The UI can opt out with `none`. S3 versions omit `source_kind`, `members_total`, `members_upload_id` and `agent_version`; canonical signed payload bytes remain the legacy golden.
+The sample JWT `metadata_hash` covers the following metadata, which is **not** sent as the HTTP body:
 
-## Ambiguities, choices and continuation requirements
+```json
+{"version_id":"<version-uuid>","members_upload_id":"<upload-uuid>","index":0,"size_bytes":2,"sha256":"<sha256-of-zero-and-LF>"}
+```
 
-References use line numbers from the authority read via `git show`, not shifted source-code line numbers.
+Final sample response: `{"version_id":"<version-uuid>","status":"active","index":0}`. Only then does AIM Data report `published`. `versions[0]` and the sender's `version` summary reflect the final status. Sample completion can also return quarantined, which remains quarantined.
 
-| Authority | Choice / limitation |
-| --- | --- |
-| Gate 2 §3 line 64, §4.3 line 95 | The member envelope is not specified beyond chunks of seven-field objects. Chose `{members_upload_id, members}`; the path binds the receiver version and the upload UUID binds the publish operation. No chunk number/final flag invented: member count and indices determine completion. **Receiver agreement remains unverified.** |
-| Gate 2 §4.3 lines 95–96; §3 lines 65–66 | The `vz_samples` module is named but no HTTP path, body schema or sample signing action is pinned. Chose the version/index path shown above and `{manifest_hash, content_base64}`, signed with the same publish JWT. Binary is bounded before base64 expansion. **This is a provisional implementation choice, not an approved wire fact.** A clarification was requested during the run; none was available at report time. |
-| Gate 1 D3 line 60; Gate 2 §3 lines 64–65 | Sender uploads members then selected sample bytes and only reports published on receiver `active`. This requires the receiver to keep a sample-bearing version pending after member completion until every required asset is stored, and to return final version status from sample completion. **Activation order/status contract must be reconciled; the spec's final-member activation and fail-closed sample-store clauses do not specify this handshake.** |
-| Gate 1 D0 line 50; Gate 2 §4.3 line 95 | Retain JSON member rows in one `published_manifests` row, not a second mutable child relation. Persist alongside listing id/progress before uploads; insert-only helper refuses conflicting root/member values for the same key. No FK cascade can erase a retained snapshot with live registration. |
-| Same | Missing version id retries the identical publish twice (three total attempts), then fails with a named retry message and never writes an unkeyed local publish. Transport failures during member/sample upload remain pending and resume on another publish request. A receiver-assigned replacement version id resets the offset to zero. |
-| Gate 1 D3 line 60; Gate 2 §3 line 64 | Generic local publish has no caller version label; choose `manifest-<first 32 hash characters>`. Explicit `/marketplace/versions/publish` accepts seller version labels. UUIDv5 derives the upload id from dataset/root/label/hash for stable retries; root stays local. |
-| Gate 1 D1a line 56; Gate 2 §7 line 172 | A legacy record with migrated root/member rows uses the local version route upon republish without changing its file type/path/batch. S3 provenance remains excluded, both through source metadata and object records. Legacy no-root records keep the existing route. |
-| Gate 1 D4 line 62 versus shipped chunk-A base | The spec's old inventory says `approved_rows` exists; this base has deliberately closed it (`Literal["none"]`, `legacy_sample_unavailable`). Added only gated `member_files` and preserved the existing row refusal rather than reopening S1294 row egress. |
-| Gate 1 D4 line 62; Gate 2 §6 lines 149–152 | Aim-side file/count/total bounds run before signing or upload; global seller quota belongs to the receiver, which can count both routes. No local quota history is fabricated. |
-| Gate 1 D5 line 64; Gate 2 §6 line 148 | Inject the actual `settings.app_version`, including `dev` if configured. No false `1.24.0` value or release bump: absent/unparseable/old-version refusal belongs to the receiver, and its named message is rendered unchanged. |
-| Gate 2 §4.3 line 98 versus §4.6 line 118; user merge fence | Add the optional heading adjacent to the ListingPreparation publish area. Do not modify the verification component or other processing UI shared with B; broader copy/runbook work remains F. |
-| Gate 2 §4.3 line 95, frontend dependency types outside the allowed file list | Keep directory-specific disclosure transport inside PublishModal's exported control, preserving legacy shared API/disclosure types and limiting DatasetDetail edits to the publish area. Full merged B→C journey and sample-count refresh after member edits need integration review. |
+S3 omits local-only fields and agent_version, as before. Both S3 golden tests are unchanged. Disclosure remains the existing separately authenticated `member_files`/`none` decision; no duplicate sample bytes or members are added to disclosure.
 
-Required continuation: settle the three transport/activation rows first; add a shared receiver/sender contract fixture and run a true backend-interoperability test including interrupted samples, store failure and post-restart resume. Validate the merged B/C UI journey (including up-to-date seller-selected count), real-install AC7 evidence, and receiver quarantine/upgrade cases. Do not enable the local route from this sender-only report. D and E remain separate implementations; no Gate 3/4 or full BQ completion is claimed.
+## Validation
 
-## Evidence digests
+Final focused modules: **47 passed, 0 failed/errors**, 3.98 s: `test_member_upload_client.py` 11, `test_dataset_publish_signed_proxy.py` 34, `test_alembic_025_026.py` 2. Both existing S3 byte goldens are unchanged and pass. Added coverage includes independently mirrored backend hash canonicalization, exact envelopes/headers/actions, named refusals and later retry, no-sample final-chunk activation, terminal responses, frozen stream bytes, lost chunk ACK and lost final sample ACK.
 
-- `/tmp/s1717-c-base.xml`: `30dc1184bc7eeaf13ad1c41e1bfee440b526f017b73c07836ba4ae9b219048d6`.
-- `/tmp/s1717-c-final.xml`: `b4eabd83a5ee0334f387cfc06c626aa8137619ccb1b4bcbe5bc05a3e20351317`.
-- `/tmp/s1717-c-focused-final.xml`: `13944c36a1b7449f97002dc29ec21b4eea73426fda45dbb9b0b80b8ba34717a8`.
+Frontend: **73 passed in 10 files**, 2.22 s; production build passed, 3.65 s (existing large-bundle warning); TypeScript `tsc --noEmit` passed. No frontend source changed.
+
+Fresh full flag-default-off comparison used the same existing Python environment, separate serial directories, and exact JUnit `classname::name` identities. The baseline is the existing clean detached `/tmp/s1717-c-base` at the exact base above. Candidate is `82564c1`; only documentation changes follow it.
+
+| Run | Passed | Failed | Errors | Skipped | Total | Pytest duration |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base `adb97f0` | 2,987 | 55 | 38 | 34 | 3,114 | 160.48 s |
+| Reconciled candidate `82564c1` | 3,029 | 55 | 38 | 34 | 3,156 | 158.35 s |
+
+**New failing cases: none. Resolved base failures: none.** The identical 93 failing/error identities occur in both runs. Candidate adds 42 passing tests over chunk A (22 added by this continuation). The full suite is not green; no unrelated fixes were made. These fresh results supersede the previous report's 56-failure baseline count; both current runs have 55 failures.
+
+Evidence: `/tmp/s1717-c-reconcile-{base,final,focused}.{log,xml}`, `/tmp/s1717-c-reconcile-comparison.json` (counts and complete exact-case failure sets), `/tmp/s1717-c-reconcile-frontend.log`, `/tmp/s1717-c-reconcile-build.log`. `git diff --check` passed.
+
+Commands, from the corresponding checkout (frontend commands from `frontend/`):
+
+```sh
+rtk proxy env AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-reconcile-base-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-reconcile-base.xml
+rtk proxy env AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-reconcile-final-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-reconcile-final.xml
+rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q tests/test_member_upload_client.py tests/test_dataset_publish_signed_proxy.py tests/test_alembic_025_026.py --tb=short --junitxml=/tmp/s1717-c-reconcile-focused.xml
+rtk proxy env NODE_OPTIONS=--no-experimental-webstorage npm test -- --run
+rtk proxy npm run build
+rtk proxy ./node_modules/.bin/tsc --noEmit
+```
+
+JUnit SHA-256:
+
+- `base`: `9c754c8e02fbf90c8517435da9a67f4c499f69939fea3cac19ac1a04f3e655ad`.
+- `final`: `368584871efeff43ba8c0e65dbe20dd932e1b75de43d60e4db4e0cfe4404d812`.
+- `focused`: `23f5efd831b4b7fd8739e00db8eb079122189d3e652eacb4750e541b48f2d589`.
+
+## Preserved implementation and remaining acceptance boundaries
+
+Retained original chunk C behavior: frozen `(listing_version_id, manifest_hash)` snapshots/root authority independent of live edits; paid-set preflight; stable upload UUID and local version labels; local progress persisted before uploads; missing version-id retry; directory publish UI, named errors and optional verification heading; legacy S3 and flag-off behavior. No frontend source change was needed for this reconciliation.
+
+Migration 026 remains chained to 025. The two focused migration tests still cover forward/backward behavior and legacy row preservation on a synthetic AC7-shaped install. No released migration was edited. A copied real-install AC7 fixture remains outstanding.
+
+Not run here: a live AIM Data process against the backend process/database/object store, browser acceptance of merged chunks B/C, actual shared workspace-route quota concurrency, real cloud/provider proof, independent Gate 3 review or enabled release. Chunks D/E and whole-BQ completion remain separate. These are inherited acceptance boundaries, not unresolved sender wire choices. The requested sender-to-source contract reconciliation and checks are complete.
