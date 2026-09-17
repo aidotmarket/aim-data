@@ -190,6 +190,8 @@ const PublishModal = ({ open, onOpenChange, dataset, onPublishSuccess }: Publish
       }
 
       const result = await res.json();
+      if (result.status === "pending_members") throw new Error("Pending members — upload is not complete. Retry publishing to resume.");
+      if (result.status === "quarantined" || result.status === "superseded") throw new Error(result.error || `Version ${result.status}; publication is not active.`);
       setMarketplaceUrl(result.marketplace_url || null);
       setIsPublishing(false);
       setPublishSuccess(true);
