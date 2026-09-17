@@ -24,7 +24,7 @@ from app.core.crypto import DeviceCrypto  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey  # noqa: E402
 from app.services.preview_origin_service import make_origin, capture_receipt  # noqa: E402
 from app.services.preview_package_service import PublicationStore  # noqa: E402
-from app.services.preview_signing_service import (
+from app.services.preview_signing_service import (  # noqa: E402
     PreviewSigningService,
     fingerprint,
     public_bytes,

@@ -374,7 +374,9 @@ def test_independent_ecmascript_serializer():
     }
     javascript = 'const v=JSON.parse(process.argv[1]); function j(v){if(Array.isArray(v))return "["+v.map(j).join(",")+"]";if(v&&typeof v==="object")return "{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+j(v[k])).join(",")+"}";return JSON.stringify(v)}process.stdout.write(j(v));'
     actual = subprocess.check_output(
-        ["rtk", "proxy", "node", "-e", javascript, json.dumps(value)]
+        # Execute the verifier directly (no shell); CI need not install a CLI
+        # output-filtering proxy to compare Node's exact bytes.
+        ["node", "-e", javascript, json.dumps(value)]
     )
     assert actual == canonical_json_bytes(value)
 
