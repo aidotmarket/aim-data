@@ -1,0 +1,16 @@
+{
+  "baseline_sha": "896b6157854a237e6497c0fbd6387244d845b2f4",
+  "baseline_nodes": 3131,
+  "candidate_nodes": 3147,
+  "branch_only_failures": [],
+  "missing_baseline_nodes": [],
+  "additional_skips": [],
+  "vitest": {
+    "branch_only_failures": [],
+    "missing_baseline_nodes": [],
+    "baseline_passed": 61,
+    "baseline_failed": 23,
+    "candidate_passed": 61,
+    "candidate_failed": 23
+  }
+}

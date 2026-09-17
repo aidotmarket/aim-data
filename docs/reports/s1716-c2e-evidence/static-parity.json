@@ -1,0 +1,12 @@
+{
+  "mypy_baseline_errors": 9,
+  "mypy_candidate_errors": 9,
+  "new_mypy_diagnostics": [],
+  "ruff_baseline": [
+    "app/routers/marketplace_publish.py:E402"
+  ],
+  "ruff_candidate": [
+    "app/routers/marketplace_publish.py:E402"
+  ],
+  "new_ruff_diagnostics": []
+}

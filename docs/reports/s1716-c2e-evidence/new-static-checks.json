@@ -1,0 +1,33 @@
+[
+  {
+    "argv": [
+      "ruff",
+      "check",
+      "scripts/check_preview_fixture_parity.py",
+      "scripts/build_preview_producer_evidence.py",
+      "tests/run_preview_producer_synthetic.py",
+      "tests/test_preview_producer_evidence.py",
+      "tests/test_preview_fixture_parity.py"
+    ],
+    "exit_code": 0,
+    "output": "All checks passed!\n"
+  },
+  {
+    "argv": [
+      "/private/tmp/s1716-r2-typecheck/bin/mypy",
+      "--python-executable",
+      "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+      "--explicit-package-bases",
+      "--check-untyped-defs",
+      "--follow-imports=silent",
+      "--ignore-missing-imports",
+      "scripts/check_preview_fixture_parity.py",
+      "scripts/build_preview_producer_evidence.py",
+      "tests/run_preview_producer_synthetic.py",
+      "tests/test_preview_producer_evidence.py",
+      "tests/test_preview_fixture_parity.py"
+    ],
+    "exit_code": 0,
+    "output": "Success: no issues found in 5 source files\n"
+  }
+]

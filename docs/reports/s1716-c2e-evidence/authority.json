@@ -1,0 +1,16 @@
+{
+  "backend": {
+    "sha": "cb94193a48a0adb28d73e0e244420aa324ad58d1",
+    "files": {
+      "specs/BQ-LISTING-ENRICHMENT-SELLER-TOOLS-S1294-CHUNK-T-CONTRACT-S1716.md": "e2d14836527b7a54c2b3c603ceed394dbb84b9af74faa2e3c2bf4bb5f49f4489",
+      "tests/fixtures/aim_dataset_merkle_v1.json": "f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af"
+    }
+  },
+  "runbooks": {
+    "sha": "2cafd9c020205e32b4ebae1d4ee853f644504189",
+    "files": {
+      "aim-data-release-process.md": "fd650a431f9adc4bddcc295f442d4c0ed63890b8bce1b040ed0fada6cbc3b162",
+      "aim-data-seller-publish-journey.md": "733b0750ad5cb0e9ee65e0dddbc10506d721c8b9ee3bd5236154278a309e391e"
+    }
+  }
+}

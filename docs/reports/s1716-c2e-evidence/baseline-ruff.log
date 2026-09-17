@@ -1,0 +1,10 @@
+E402 Module level import not at top of file
+   --> app/routers/marketplace_publish.py:751:1
+    |
+750 | # Seller-local preview jobs share the authenticated marketplace namespace.
+751 | from app.routers.preview_builds import router as preview_builds_router
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+752 | router.include_router(preview_builds_router)
+    |
+
+Found 1 error.

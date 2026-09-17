@@ -1,0 +1,16 @@
+tests/test_dataset_canonicalization.py:135: error: Need type annotation for "params" (hint: "params: dict[<type>, <type>] = ...")  [var-annotated]
+tests/test_dataset_canonicalization.py:155: error: Need type annotation for "fields" (hint: "fields: list[<type>] = ...")  [var-annotated]
+tests/test_dataset_canonicalization.py:566: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/test_dataset_canonicalization.py:571: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/test_dataset_canonicalization.py:745: error: List comprehension has incompatible type List[list[dict[str, int | None]]]; expected List[int | None]  [misc]
+app/routers/marketplace_publish.py:384: error: Need type annotation for "decision"  [var-annotated]
+app/routers/marketplace_publish.py:553: error: Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"  [union-attr]
+app/routers/marketplace_publish.py:554: error: Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"  [union-attr]
+tests/test_preview_build_routes.py:367: error: No overload variant of "update" of "MutableMapping" matches argument types "dict[str, str]", "None"  [call-overload]
+tests/test_preview_build_routes.py:367: note: Possible overload variants:
+tests/test_preview_build_routes.py:367: note:     def update(self, SupportsKeysAndGetItem[str, str], /) -> None
+tests/test_preview_build_routes.py:367: note:     def update(self, SupportsKeysAndGetItem[str, str], /, **kwargs: str) -> None
+tests/test_preview_build_routes.py:367: note:     def update(self, Iterable[tuple[str, str]], /) -> None
+tests/test_preview_build_routes.py:367: note:     def update(self, Iterable[tuple[str, str]], /, **kwargs: str) -> None
+tests/test_preview_build_routes.py:367: note:     def update(self, **kwargs: str) -> None
+Found 9 errors in 3 files (checked 3 source files)
