@@ -1329,6 +1329,67 @@ export function ListingPreparation({
   );
 }
 
+export function DirectoryMembers({ dataset }: { dataset: ApiDataset }) {
+  const [page, setPage] = useState(1);
+  const [role, setRole] = useState("");
+  const [status, setStatus] = useState("");
+  const [result, setResult] = useState<import("@/lib/api").DatasetMemberPage | null>(null);
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setResult(null);
+    datasetsApi.members(dataset.id, page, role, status).then(data => {
+      if (active) { setResult(data); setError(""); }
+    }).catch(err => { if (active) setError(err instanceof Error ? err.message : "Could not load members"); });
+    return () => { active = false; };
+  }, [dataset.id, page, role, status, revision]);
+  const edit = async (index: number, patch: Parameters<typeof datasetsApi.patchMember>[2]) => {
+    setSaving(true);
+    try {
+      await datasetsApi.patchMember(dataset.id, index, patch);
+      setRevision(value => value + 1);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not save member"); }
+    finally { setSaving(false); }
+  };
+  return <section className="space-y-4" aria-label="Directory members">
+    <p>{dataset.metadata?.directory?.member_count ?? result?.total ?? 0} files</p>
+    {error && <p role="alert">{error}</p>}
+    <div className="flex gap-4">
+      <label>Role <select aria-label="Filter by role" value={role} onChange={e => { setRole(e.target.value); setPage(1); }}>
+        <option value="">All roles</option>{["data", "documentation", "other"].map(r => <option key={r}>{r}</option>)}
+      </select></label>
+      <label>Status <select aria-label="Filter by status" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
+        <option value="">All statuses</option>{["current", "removed", "missing", "unsupported"].map(r => <option key={r}>{r}</option>)}
+      </select></label>
+    </div>
+    {!result && !error && <p>Loading members…</p>}
+    {result && <>
+      {!result.editable && <p>Published member choices are frozen.</p>}
+      <div className="overflow-x-auto"><table className="w-full text-left">
+        <thead><tr>{["File", "Bytes", "Type", "Role", "Sample", "Status", "Reason"].map(h => <th key={h} className="p-2">{h}</th>)}</tr></thead>
+        <tbody>{result.members.map(member => <tr key={member.index}>
+          <td className="p-2 break-all">{member.relative_path}</td><td>{member.size_bytes.toLocaleString()}</td><td>{member.detected_type}</td>
+          <td><select aria-label={`Role for ${member.relative_path}`} value={member.role} disabled={!result.editable || saving}
+            onChange={e => edit(member.index, { role: e.target.value as typeof member.role })}>
+            {["data", "documentation", "other"].map(r => <option key={r}>{r}</option>)}
+          </select></td>
+          <td><input type="checkbox" aria-label={`Sample ${member.relative_path}`} checked={member.is_sample}
+            disabled={!result.editable || saving || member.role !== "data"}
+            onChange={e => edit(member.index, { is_sample: e.target.checked })} /></td>
+          <td>{member.status}</td><td>{member.reason ?? "—"}</td>
+        </tr>)}</tbody>
+      </table></div>
+      <div className="flex items-center gap-4">
+        <Button disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
+        <span>Page {page} of {Math.max(1, Math.ceil(result.total / result.page_size))}</span>
+        <Button disabled={page * result.page_size >= result.total} onClick={() => setPage(page + 1)}>Next</Button>
+      </div>
+    </>}
+  </section>;
+}
+
 const DatasetDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -1367,6 +1428,7 @@ const DatasetDetail = () => {
       try {
         const data = await datasetsApi.get(id);
         setApiDataset(data);
+        if (data.file_type === "directory") return;
 
         // Fetch sample data and statistics in parallel
         const [sampleRes, statsRes, readinessRes] = await Promise.allSettled([
@@ -1476,6 +1538,12 @@ const DatasetDetail = () => {
       setIsDeleting(false);
     }
   };
+
+  if (apiDataset.file_type === "directory") {
+    return <main className="space-y-6 p-6"><Link to={backPath}>Back to datasets</Link>
+      <h1 className="text-2xl font-bold">{apiDataset.original_filename}</h1>
+      <DirectoryMembers dataset={apiDataset} /></main>;
+  }
 
   if (apiDataset.status !== "error" && !apiDataset.listing_id) {
     return (

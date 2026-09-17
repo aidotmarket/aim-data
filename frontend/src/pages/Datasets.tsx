@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Database,
+  Folder,
   Upload,
   Search,
   LayoutGrid,
@@ -52,6 +53,8 @@ type SortDirection = "asc" | "desc";
 
 const getFileIcon = (type: string) => {
   switch (type.toLowerCase()) {
+    case "directory":
+      return Folder;
     case "csv":
     case "tsv":
     case "xlsx":
@@ -91,14 +94,16 @@ const formatBytes = (bytes?: number): string => {
 };
 
 // Convert API dataset to local format for display
-const convertApiDataset = (apiDataset: ApiDataset): Dataset => ({
+const convertApiDataset = (apiDataset: ApiDataset): Dataset & { memberCount?: number; registered?: boolean } => ({
+  memberCount: apiDataset.metadata?.directory?.member_count,
+  registered: apiDataset.file_type === "directory" && apiDataset.status === "uploaded",
   id: apiDataset.id,
   name: apiDataset.original_filename,
   type: apiDataset.file_type as Dataset["type"],
   rows: apiDataset.metadata?.row_count || 0,
   columns: apiDataset.metadata?.column_count || 0,
-  size: formatBytes(apiDataset.metadata?.size_bytes),
-  sizeBytes: apiDataset.metadata?.size_bytes || 0,
+  size: formatBytes((apiDataset.metadata?.directory?.total_data_bytes ?? apiDataset.metadata?.size_bytes)),
+  sizeBytes: (apiDataset.metadata?.directory?.total_data_bytes ?? apiDataset.metadata?.size_bytes) || 0,
   status: apiDataset.status === 'preview_ready'
     ? 'preview_ready'
     : apiDataset.status === 'error' || apiDataset.status === 'cancelled'
@@ -126,7 +131,7 @@ const Datasets = () => {
   const { data: apiData, loading, error, refetch } = useDatasets();
 
   // Convert API datasets to local format
-  const datasets: Dataset[] = useMemo(() => {
+  const datasets: (Dataset & { memberCount?: number; registered?: boolean })[] = useMemo(() => {
     if (apiData?.datasets) {
       return apiData.datasets.map(convertApiDataset);
     }
@@ -155,7 +160,7 @@ const Datasets = () => {
   }, [uploadProcessingCount, refetch]);
 
   // Poll dataset list while any dataset has "processing" status
-  const hasProcessingDatasets = datasets.some((d) => d.status === "processing");
+  const hasProcessingDatasets = datasets.some((d) => d.status === "processing" && !d.registered);
   useEffect(() => {
     if (!hasProcessingDatasets) return;
     const interval = setInterval(() => refetch(), 5000);
@@ -362,8 +367,7 @@ const Datasets = () => {
                             {dataset.name}
                           </h3>
                           <p className="text-sm text-muted-foreground mt-1">
-                            {formatNumber(dataset.rows)} rows •{" "}
-                            {dataset.columns} columns
+                            {dataset.memberCount !== undefined ? `${formatNumber(dataset.memberCount)} files` : `${formatNumber(dataset.rows)} rows • ${dataset.columns} columns`}
                           </p>
                         </div>
                       </div>
@@ -381,7 +385,7 @@ const Datasets = () => {
                               Published
                             </Badge>
                           )}
-                          {dataset.status === "preview_ready" ? (
+                          {dataset.registered ? <Badge variant="secondary">Registered</Badge> : dataset.status === "preview_ready" ? (
                             <Badge
                               variant="secondary"
                               className="bg-haven-success/20 text-haven-success border-haven-success/30"
@@ -493,11 +497,11 @@ const Datasets = () => {
                         <TableCell className="uppercase text-xs text-muted-foreground">
                           {dataset.type}
                         </TableCell>
-                        <TableCell>{formatNumber(dataset.rows)}</TableCell>
+                        <TableCell>{dataset.memberCount !== undefined ? `${formatNumber(dataset.memberCount)} files` : formatNumber(dataset.rows)}</TableCell>
                         <TableCell>{dataset.columns}</TableCell>
                         <TableCell>{dataset.size}</TableCell>
                         <TableCell>
-                          {dataset.status === "preview_ready" ? (
+                          {dataset.registered ? <Badge variant="secondary">Registered</Badge> : dataset.status === "preview_ready" ? (
                             <Badge
                               variant="secondary"
                               className="bg-haven-success/20 text-haven-success border-haven-success/30"

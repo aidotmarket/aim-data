@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { datasetsApi, marketplaceApi, piiApi, type ApiDataset, type DatasetListingMetadata, type PIIScanResponse } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY } from "@/lib/disclosure";
-import DatasetDetail, { DisclosureSnapshotFailurePanel, ListingPreparation } from "./DatasetDetail";
+import DatasetDetail, { DisclosureSnapshotFailurePanel, ListingPreparation, DirectoryMembers } from "./DatasetDetail";
 
 import { MarketplaceProvider, useMarketplace } from "@/contexts/MarketplaceContext";
 
@@ -336,5 +336,47 @@ describe("dataset detail publication state", () => {
     expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeInTheDocument();
     expect(screen.queryByText("Published")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Marketplace" })).not.toBeInTheDocument();
+  });
+});
+
+
+describe("directory members", () => {
+  it("pages, filters and saves explicit role and sample choices", async () => {
+    const row = { dataset_id: "ds-1", index: 0, relative_path: "data.csv", size_bytes: 4,
+      sha256: "0".repeat(64), detected_type: "csv", role: "data" as const,
+      is_sample: false, status: "current" as const, reason: null };
+    const members = vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [row], total: 101, page: 1, page_size: 100, editable: true });
+    const patch = vi.spyOn(datasetsApi, "patchMember").mockResolvedValue(row);
+    render(<DirectoryMembers dataset={{ ...dataset(), file_type: "directory" }} />);
+    await screen.findByText("data.csv");
+    fireEvent.click(screen.getByLabelText("Sample data.csv"));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("ds-1", 0, { is_sample: true }));
+    await screen.findByText("data.csv");
+    fireEvent.change(screen.getByLabelText("Role for data.csv"), { target: { value: "documentation" } });
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("ds-1", 0, { role: "documentation" }));
+    await screen.findByText("data.csv");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(members).toHaveBeenCalledWith("ds-1", 2, "", ""));
+    fireEvent.change(screen.getByLabelText("Filter by role"), { target: { value: "documentation" } });
+    await waitFor(() => expect(members).toHaveBeenCalledWith("ds-1", 1, "documentation", ""));
+    fireEvent.change(screen.getByLabelText("Filter by status"), { target: { value: "removed" } });
+    await waitFor(() => expect(members).toHaveBeenCalledWith("ds-1", 1, "documentation", "removed"));
+  });
+
+  it("refuses sample selection on non-data and freezes published choices", async () => {
+    const row = { dataset_id: "ds-1", index: 0, relative_path: "README.md", size_bytes: 0,
+      sha256: "0".repeat(64), detected_type: "md", role: "documentation" as const,
+      is_sample: false, status: "unsupported" as const, reason: "unsupported_type" };
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [row], total: 1, page: 1, page_size: 100, editable: true });
+    const patch = vi.spyOn(datasetsApi, "patchMember").mockResolvedValue(row);
+    const view = render(<DirectoryMembers dataset={dataset()} />);
+    await screen.findByText("README.md");
+    expect(screen.getByLabelText("Sample README.md")).toBeDisabled();
+    expect(patch).not.toHaveBeenCalled();
+    view.unmount();
+    vi.mocked(datasetsApi.members).mockResolvedValue({ members: [row], total: 1, page: 1, page_size: 100, editable: false });
+    render(<DirectoryMembers dataset={dataset()} />);
+    await screen.findByText("Published member choices are frozen.");
+    expect(screen.getByLabelText("Role for README.md")).toBeDisabled();
   });
 });
