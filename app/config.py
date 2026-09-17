@@ -112,6 +112,26 @@ class Settings(BaseSettings):
     )
     local_auth_secret: Optional[str] = Field(default=None, validation_alias=_env_alias("local_auth_secret"))    # JWT signing key (Phase 2, not used yet)
 
+    # S1717: directory datasets (dark until the complete local route ships).
+    multi_file_datasets_enabled: bool = Field(default=False, validation_alias=_env_alias("multi_file_datasets_enabled"))
+    dataset_max_members: int = Field(default=50000, ge=1, validation_alias=_env_alias("dataset_max_members"))
+    dataset_max_bytes: int = Field(default=68719476736, ge=1, validation_alias=_env_alias("dataset_max_bytes"))
+    directory_read_max_attempts: int = Field(default=3, ge=2, validation_alias=_env_alias("directory_read_max_attempts"))
+    profile_max_members: int = Field(default=64, ge=1, validation_alias=_env_alias("profile_max_members"))
+    profile_max_member_bytes: int = Field(default=268435456, ge=1, validation_alias=_env_alias("profile_max_member_bytes"))
+    profile_max_total_bytes: int = Field(default=536870912, ge=1, validation_alias=_env_alias("profile_max_total_bytes"))
+    profile_timeout_s: int = Field(default=900, ge=1, validation_alias=_env_alias("profile_timeout_s"))
+    publish_member_chunk: int = Field(default=1000, ge=1, validation_alias=_env_alias("publish_member_chunk"))
+    scan_max_member_bytes: int = Field(default=2147483648, ge=1, validation_alias=_env_alias("scan_max_member_bytes"))
+    sample_max_files: int = Field(default=10, ge=1, validation_alias=_env_alias("sample_max_files"))
+    sample_max_total_bytes: int = Field(default=268435456, ge=1, validation_alias=_env_alias("sample_max_total_bytes"))
+    sample_max_file_bytes: int = Field(default=67108864, ge=1, validation_alias=_env_alias("sample_max_file_bytes"))
+    sample_seller_quota_bytes: int = Field(default=2147483648, ge=1, validation_alias=_env_alias("sample_seller_quota_bytes"))
+    transfer_max_member_bytes: int = Field(default=2147483648, ge=1, validation_alias=_env_alias("transfer_max_member_bytes"))
+    transfer_max_total_bytes: int = Field(default=68719476736, ge=1, validation_alias=_env_alias("transfer_max_total_bytes"))
+    transfer_session_ttl_s: int = Field(default=21600, ge=1, validation_alias=_env_alias("transfer_session_ttl_s"))
+    abandoned_order_ttl_s: int = Field(default=604800, ge=1, validation_alias=_env_alias("abandoned_order_ttl_s"))
+
     # Feature flags for connected ai.market capabilities.
     allai_enabled: bool = Field(
         default=True,

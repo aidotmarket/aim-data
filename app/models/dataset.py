@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import BigInteger
+from sqlalchemy import BigInteger, CheckConstraint, UniqueConstraint
 from sqlmodel import Field, SQLModel, Column, Text
 
 
@@ -44,6 +44,7 @@ class DatasetRecord(SQLModel, table=True):
     file_type: str = Field(max_length=32)
     file_size_bytes: int = Field(default=0, sa_column=Column(BigInteger, default=0))
     status: str = Field(default="uploaded", index=True)
+    root_path: Optional[str] = Field(default=None, nullable=True, max_length=4096)
     processed_path: Optional[str] = Field(default=None, nullable=True, max_length=1024)
     metadata_json: str = Field(default="{}", sa_column=Column(Text, default="{}"))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -62,3 +63,30 @@ class DatasetRecord(SQLModel, table=True):
 
     # BQ-D1: Marketplace listing ID (set when published to ai.market)
     listing_id: Optional[str] = Field(default=None, nullable=True, index=True, max_length=255)
+
+
+class DatasetMember(SQLModel, table=True):
+    """Live registration; published manifests are separate immutable snapshots."""
+
+    __tablename__ = "dataset_members"
+    __table_args__ = (
+        UniqueConstraint("dataset_id", "relative_path", name="uq_dataset_member_path"),
+        CheckConstraint("role IN ('data','documentation','other')", name="ck_member_role"),
+        CheckConstraint("status IN ('current','removed','missing','unsupported')", name="ck_member_status"),
+        CheckConstraint("NOT is_sample OR role = 'data'", name="ck_member_sample_role"),
+        CheckConstraint('"index" >= 0 AND size_bytes >= 0', name="ck_member_nonnegative"),
+    )
+
+    dataset_id: str = Field(foreign_key="dataset_records.id", primary_key=True, max_length=36)
+    index: int = Field(primary_key=True)
+    relative_path: str = Field(max_length=1024)
+    size_bytes: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
+    sha256: Optional[str] = Field(default=None, nullable=True, max_length=64)
+    detected_type: str = Field(max_length=32)
+    role: str = Field(default="data", max_length=16)
+    is_sample: bool = Field(default=False)
+    status: str = Field(default="current", max_length=16)
+    reason: Optional[str] = Field(default=None, nullable=True, max_length=255)
+    mtime: Optional[datetime] = Field(default=None, nullable=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
