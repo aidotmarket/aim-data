@@ -136,7 +136,7 @@ class PreviewBuildService:
             job = dict(id=str(uuid4()), owner=owner, dataset_id=record.id, source_version=version,
                        parsing=parsing, descriptors=schema.descriptors, state='building', code=None,
                        progress=dict(phase='reading', records=0, canonical_bytes=0, elapsed_seconds=0),
-                       indices=[], display_columns=[], selection_bytes=0, policy=None, publication=None,
+                       indices=[], display_columns=[], selection_bytes=0, selection_sizes={}, policy=None, publication=None,
                        origin=None, receipts=[], candidate=None, prepared=False,
                        commitment_id=str(uuid4()), disclosure_version=str(uuid4()), proof_ids=[],
                        created_at=stamp())
@@ -197,16 +197,22 @@ class PreviewBuildService:
             if job['state'] not in {'cancelled', 'failed', 'retired', 'withdrawn'} and job_id not in self.live:
                 self.start(job)
             live = self.live.get(job_id)
+            signing = {'fingerprint': None, 'code': None}
+            if job.get('receipts'):
+                try:
+                    signing['fingerprint'] = self.signer(job).signer_reference[37:]
+                except Exception:
+                    signing['code'] = 'signing_authority_unavailable'
             return {
                 'job_id': job_id, 'dataset_id': job['dataset_id'], 'source_version': job['source_version'],
                 'state': job['state'], 'code': job['code'], 'progress': job['progress'],
                 'review_ready': bool(live and live['builder']),
                 'columns': [d[0] for d in job['descriptors']],
                 'selection': {'leaf_indices': job['indices'], 'display_columns': job['display_columns'],
-                              'rows': len(job['indices']), 'fields': len(job['descriptors']), 'canonical_bytes': job['selection_bytes']},
+                              'rows': len(job['indices']), 'fields': len(job['descriptors']), 'canonical_bytes': job['selection_bytes'], 'row_sizes': job.get('selection_sizes', {})},
                 'caps': CAPS, 'commitment': job.get('commitment'), 'policy': job['policy'],
                 'publication': job['publication'], 'origin': job['origin'], 'receipts': job['receipts'],
-                'candidate': job['candidate'], 'outcome': AWAITING if job['prepared'] else None,
+                'candidate': job['candidate'], 'signing': signing, 'outcome': AWAITING if job['prepared'] else None,
             }
 
     def active(self, job):
@@ -294,14 +300,15 @@ class PreviewBuildService:
             limit('fields', len(columns))
             if indices != sorted(set(indices)) or not indices or len(columns) != len(set(columns)) or not columns or set(columns) - {d[0] for d in builder.schema.descriptors}:
                 raise BuildError('invalid_selection', 422)
-            size = 0
+            size, sizes = 0, {}
             for index in indices:
                 row = self.row(builder, index)
                 if row['code']:
                     raise BuildError(row['code'], 422)
                 size += row['canonical_bytes']
+                sizes[index] = row['canonical_bytes']
                 limit('canonical_bytes', size)
-            job.update(indices=indices, display_columns=columns, selection_bytes=size,
+            job.update(indices=indices, display_columns=columns, selection_bytes=size, selection_sizes=sizes,
                        proof_ids=[str(uuid4()) for _ in indices], state='selected', policy=None)
             self.live[job_id]['package'] = None
             self.save(job)
@@ -343,10 +350,13 @@ class PreviewBuildService:
         with self.lock:
             job = self.load(job_id, owner)
             live = self.active(job)
-            if not live['package']:
-                raise BuildError('rescan_required')
             if job['publication'] and job['publication']['destination'] != destination:
                 raise BuildError('replace_preview_required')
+            if job['publication']:
+                self.download(job_id, owner)
+                return self.status(job_id, owner)
+            if not live['package']:
+                raise BuildError('rescan_required')
             store = self.store(job)
             result = store.export(live['package'])
             relative = store.path(result['disclosure_version'], result['sample_hash'])
@@ -381,6 +391,25 @@ class PreviewBuildService:
             self.save(job)
             return self.status(job_id, owner)
 
+    def approve_metadata(self, body, owner):
+        # Human-approved browser projection digest, never a platform P1 allocation.
+        # This private, labelled fixture context cannot enter any live endpoint.
+        with self.lock:
+            record = owned_dataset(self.processing, body.dataset_id, owner)
+            _, version = source_identity(record, self.upload_root)
+            old = record.metadata.get('preview_local_approval')
+            if old and old['owner'] == owner and old['digest'] == body.approved_metadata_digest and old['references']['source_revision'] == version:
+                return {'kind': 'local_metadata_approval', 'approval_id': old['references']['summary_approval_id']}
+            references = {key: str(uuid4()) for key in ('summary_id','summary_approval_id','content_revision','listing_id')}
+            # Local listing identity remains fixture-only until T allocates its binding.
+            references.update(listing_version_id=None, source_revision=version,
+                              summary_hash=body.approved_metadata_digest, render_hash=body.approved_metadata_digest,
+                              aggregate_hash=body.approved_metadata_digest)
+            record.metadata['preview_local_approval'] = {'kind': 'local_metadata_approval', 'owner': owner,
+                                                       'digest': body.approved_metadata_digest, 'references': references}
+            self.processing._save_record(record, record.upload_path.name)
+            return {'kind': 'local_metadata_approval', 'approval_id': references['summary_approval_id']}
+
     def signer(self, job):
         from datetime import timedelta
         from app.config import settings
@@ -408,7 +437,7 @@ class PreviewBuildService:
             live = self.active(job)
             if not consent.metadata_accuracy_confirmed or not consent.public_preview_permission or not consent.restricted_content_confirmed:
                 raise BuildError('approval_required', 422)
-            if not job['rights'] or job['rights']['rights_basis_code'] != consent.rights_basis:
+            if not job.get('rights') or job['rights']['rights_basis_code'] != consent.rights_basis:
                 raise BuildError('rescan_required')
             if job['candidate']:
                 return self.status(job_id, owner)  # immutable identical retry

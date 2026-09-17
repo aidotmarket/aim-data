@@ -14,7 +14,7 @@ from app.services.preview_origin_service import OriginError
 from app.services.preview_signing_service import SigningError
 from app.services.preview_lifecycle import LifecycleError
 from app.models.preview_build_schemas import (
-    CreateBuild, Selection, Consent, PackageOptions, OriginOptions, CandidateOptions, EmptyOptions,
+    CreateBuild, Selection, Consent, PackageOptions, OriginOptions, CandidateOptions, EmptyOptions, MetadataApproval,
 )
 from app.services.dataset_canonicalization import _pairs
 
@@ -63,6 +63,10 @@ async def create(request: Request, owner=Depends(authenticated_owner), service=D
 @router.get('')
 async def latest(dataset_id: str, owner=Depends(authenticated_owner), service=Depends(get_build_service)):
     return await invoke(service.latest, dataset_id, owner)
+
+@router.post('/metadata-approval')
+async def metadata_approval(request: Request, owner=Depends(authenticated_owner), service=Depends(get_build_service)):
+    return await invoke(service.approve_metadata, await options(request, MetadataApproval), owner)
 
 @router.get('/{job_id}')
 async def status(job_id: str, owner=Depends(authenticated_owner), service=Depends(get_build_service)):

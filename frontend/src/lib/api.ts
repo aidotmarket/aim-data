@@ -1549,3 +1549,75 @@ export const importApi = {
       method: 'POST',
     }),
 };
+
+// Local preview DTOs deliberately separate row views from signed platform metadata.
+export interface PreviewParsingOptions {
+  format: 'csv' | 'tsv' | 'json-array' | 'ndjson' | 'parquet';
+  encoding?: 'utf-8'; delimiter?: string; quote?: string; escape?: string;
+  header?: boolean; locale?: 'C'; null_token?: string; source_timezone?: string;
+}
+export interface PreviewCreateOptions {
+  dataset_id: string;
+  parsing?: PreviewParsingOptions;
+  schema_descriptors?: unknown[];
+}
+export interface PreviewConsent {
+  rights_basis: 'owner' | 'licensed' | 'public_domain' | 'other_authorized';
+  public_preview_permission: boolean;
+  restricted_content_confirmed: boolean;
+}
+export interface PreviewPolicy {
+  policy: string; version: string; passed: boolean;
+  sampled_leaf_list_digest?: string; reason_codes: string[];
+}
+export interface PreviewOriginReceipt {
+  url: string; method: 'GET' | 'OPTIONS'; status: number; captured_at: string;
+  headers: Record<string, string | null>; no_set_cookie: boolean;
+}
+export interface PreviewBuildStatus {
+  job_id: string; dataset_id: string; source_version: string;
+  state: string; code: string | null; review_ready: boolean;
+  progress: { phase: string; records: number; canonical_bytes: number; elapsed_seconds: number };
+  columns: string[];
+  selection: { leaf_indices: number[]; display_columns: string[]; rows: number; fields: number; canonical_bytes: number; row_sizes?: Record<number, number> };
+  caps: { rows: number; fields: number; canonical_bytes: number };
+  commitment?: { schema_digest: string; dataset_merkle_root: string; leaf_count: number } | null;
+  policy: PreviewPolicy | null;
+  publication: { destination: 'local' | 'export'; relative_path: string; local_directory: string; package_sha256: string; byte_count: number; sample_hash: string; disclosure_version: string } | null;
+  origin: string | null; receipts: PreviewOriginReceipt[];
+  candidate: { kind: 'fixture_candidate'; request_digest: string; key_fingerprint: string; sample_hash: string; disclosure_version: string } | null;
+  outcome: string | null;
+  signing?: { fingerprint: string | null; code: string | null };
+}
+export interface LocalPreviewRow {
+  leaf_index: number; canonical_bytes: number; code: string | null; cells: Record<string, unknown> | null;
+}
+export interface LocalPreviewPage { items: LocalPreviewRow[]; total: number; next: number | null }
+const previewPath = (id: string) => `/api/marketplace/preview-builds/${encodeURIComponent(id)}`;
+const previewPost = <T>(id: string, action: string, body: unknown = {}) =>
+  apiFetch<T>(`${previewPath(id)}/${action}`, { method: 'POST', body: JSON.stringify(body) });
+export const previewBuildApi = {
+  approveMetadata: (dataset_id: string, approved_metadata_digest: string) => apiFetch<{kind: 'local_metadata_approval'; approval_id: string}>('/api/marketplace/preview-builds/metadata-approval', {method:'POST',body:JSON.stringify({dataset_id,approved_metadata_digest})}),
+  create: (body: PreviewCreateOptions) => apiFetch<PreviewBuildStatus>('/api/marketplace/preview-builds', { method: 'POST', body: JSON.stringify(body) }),
+  latest: (dataset: string) => apiFetch<PreviewBuildStatus | null>(`/api/marketplace/preview-builds?dataset_id=${encodeURIComponent(dataset)}`),
+  status: (id: string) => apiFetch<PreviewBuildStatus>(previewPath(id)),
+  rows: (id: string, start = 0) => apiFetch<LocalPreviewPage>(`${previewPath(id)}/rows?start=${start}&count=25`, { cache: 'no-store' }),
+  cancel: (id: string) => previewPost<PreviewBuildStatus>(id, 'cancel'),
+  selection: (id: string, leaf_indices: number[], display_columns: string[]) =>
+    apiFetch<PreviewBuildStatus>(`${previewPath(id)}/selection`, { method: 'PUT', body: JSON.stringify({ leaf_indices, display_columns }) }),
+  policy: (id: string, body: PreviewConsent) => previewPost<PreviewPolicy>(id, 'policy', body),
+  package: (id: string, destination: 'local' | 'export') => previewPost<PreviewBuildStatus>(id, 'package', { destination }),
+  originCheck: (id: string, url: string) => previewPost<PreviewBuildStatus>(id, 'origin-check', { url }),
+  candidate: (id: string, body: PreviewConsent & { metadata_accuracy_confirmed: boolean }) => previewPost<PreviewBuildStatus>(id, 'candidate', body),
+  submit: (id: string) => previewPost<PreviewBuildStatus>(id, 'submit'),
+  withdraw: (id: string) => previewPost<PreviewBuildStatus>(id, 'withdraw'),
+  refresh: (id: string, body: PreviewConsent & { metadata_accuracy_confirmed: boolean }) => previewPost<PreviewBuildStatus>(id, 'refresh', body),
+  download: async (id: string): Promise<Blob> => {
+    const headers: Record<string,string> = {};
+    const token = getStoredAccessToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await fetch(`${getApiUrl()}${previewPath(id)}/package`, { headers, cache: 'no-store' });
+    if (!response.ok) throw new Error('package_download_failed');
+    return response.blob();
+  },
+};

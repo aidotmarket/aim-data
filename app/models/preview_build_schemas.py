@@ -39,3 +39,7 @@ class CandidateOptions(Consent):
 
 class EmptyOptions(ClosedModel):
     pass
+
+class MetadataApproval(ClosedModel):
+    dataset_id: str = Field(min_length=1, max_length=36)
+    approved_metadata_digest: str = Field(pattern=r'^[0-9a-f]{64}$', min_length=64, max_length=64)

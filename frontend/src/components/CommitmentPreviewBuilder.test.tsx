@@ -1,0 +1,97 @@
+import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { CommitmentPreviewBuilder } from './CommitmentPreviewBuilder';
+import { previewBuildApi, type PreviewBuildStatus } from '@/lib/api';
+import { PREVIEW_PERMISSION, PREVIEW_MEMBERSHIP_DISCLAIMER, PREVIEW_ALL_FIELDS_WARNING } from '@/lib/disclosure';
+vi.mock('@/lib/api', () => ({ previewBuildApi: { latest: vi.fn(),create: vi.fn(),status: vi.fn(),rows: vi.fn(),selection:vi.fn(),cancel:vi.fn(),policy:vi.fn(),candidate:vi.fn(),submit:vi.fn(),withdraw:vi.fn() } }));
+export const fixture = (): PreviewBuildStatus => ({
+  job_id:'job',dataset_id:'ds',source_version:'a'.repeat(64),state:'ready',code:null,review_ready:true,
+  progress:{phase:'ready',records:3,canonical_bytes:120,elapsed_seconds:1},columns:['value'],
+  selection:{leaf_indices:[],display_columns:[],rows:0,fields:1,canonical_bytes:0},caps:{rows:100,fields:25,canonical_bytes:250000},
+  commitment:{schema_digest:'s'.repeat(43),dataset_merkle_root:'r'.repeat(43),leaf_count:3},policy:null,publication:null,origin:null,receipts:[],candidate:null,outcome:null,
+});
+let job: PreviewBuildStatus;
+beforeEach(() => {
+  vi.clearAllMocks();job=fixture();
+  vi.mocked(previewBuildApi.latest).mockResolvedValue(null);
+  vi.mocked(previewBuildApi.create).mockResolvedValue(job);
+  vi.mocked(previewBuildApi.status).mockImplementation(async () => job);
+  vi.mocked(previewBuildApi.rows).mockResolvedValue({items:[
+    {leaf_index:0,canonical_bytes:40,code:null,cells:{value:'<script>alert(1)</script>'}},
+    {leaf_index:1,canonical_bytes:40,code:null,cells:{value:'=SUM(1,2)'}},
+    {leaf_index:2,canonical_bytes:40,code:'url',cells:{value:'https://hostile.example'}},
+  ],total:3,next:null});
+  vi.mocked(previewBuildApi.selection).mockImplementation(async (_,indices,columns) => {
+    job={...job,state:'selected',selection:{leaf_indices:indices,display_columns:columns,rows:indices.length,fields:1,canonical_bytes:indices.length*40}};return job;
+  });
+  vi.mocked(previewBuildApi.cancel).mockImplementation(async () => ({...job,state:'cancelled',review_ready:false}));
+});
+afterEach(cleanup);
+async function begin() {
+  render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
+  await waitFor(() => expect(screen.getByRole('button',{name:'Prepare verified preview'})).toBeEnabled());
+  fireEvent.click(screen.getByRole('button',{name:'Prepare verified preview'}));
+  await screen.findByLabelText('Select leaf 0');
+}
+it('defaults to no sample and never creates a job on mount',async () => {
+  render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
+  await screen.findByRole('button',{name:'No sample'});
+  expect(previewBuildApi.create).not.toHaveBeenCalled();
+  expect(screen.getByText(PREVIEW_MEMBERSHIP_DISCLAIMER)).toBeInTheDocument();
+});
+it('renders hostile cells as inert text with no executable elements or cell links',async () => {
+  await begin();
+  expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocument();
+  expect(screen.getByText('=SUM(1,2)')).toBeInTheDocument();
+  expect(screen.getByText('https://hostile.example')).toBeInTheDocument();
+  expect(document.querySelectorAll('[data-preview-cell] script, [data-preview-cell] a, [data-preview-cell] iframe')).toHaveLength(0);
+  expect(screen.getByLabelText('Select leaf 2')).toBeDisabled();
+  expect(screen.getByText(PREVIEW_ALL_FIELDS_WARNING)).toBeInTheDocument();
+});
+it('supports keyboard selection and updates whole-record budgets without trimming',async () => {
+  await begin();
+  const row=screen.getByLabelText('Select leaf 0');row.focus();
+  expect(row).toHaveFocus();fireEvent.keyDown(row,{key:' '});
+  expect(row).toBeChecked();expect(screen.getByText(/Budget: 1\/100 rows.*40\/250000/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Save selection'}));
+  await waitFor(() => expect(previewBuildApi.selection).toHaveBeenCalledWith('job',[0],['value']));
+});
+it('requires exact rights and permission before the sealed scan',async () => {
+  await begin();fireEvent.click(screen.getByLabelText('Select leaf 0'));fireEvent.click(screen.getByRole('button',{name:'Save selection'}));
+  await waitFor(() => expect(previewBuildApi.selection).toHaveBeenCalled());
+  expect(screen.getByRole('button',{name:'Run local policy scan'})).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Rights basis'),{target:{value:'owner'}});
+  fireEvent.click(screen.getByLabelText(PREVIEW_PERMISSION));
+  fireEvent.click(screen.getByLabelText(/I confirm these selected records contain no/));
+  vi.mocked(previewBuildApi.policy).mockImplementation(async () => {
+    const policy={policy:'aim-preview-policy-v1',version:'1.0.0',passed:true,reason_codes:[]};job={...job,state:'scanned',policy};return policy;
+  });
+  fireEvent.click(screen.getByRole('button',{name:'Run local policy scan'}));
+  expect(await screen.findByText(/Passed local scan/)).toBeInTheDocument();
+});
+it('recovers an in-progress job after reload and allows cancellation',async () => {
+  job={...job,state:'building',review_ready:false,progress:{...job.progress,phase:'reading'}};
+  vi.mocked(previewBuildApi.latest).mockResolvedValue(job);
+  render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
+  await screen.findByText(/Building or recovering local index/);
+  expect(previewBuildApi.create).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'Cancel preview build'}));
+  await waitFor(() => expect(previewBuildApi.cancel).toHaveBeenCalledWith('job'));
+});
+it('announces errors, focuses the message and offers retry',async () => {
+  vi.mocked(previewBuildApi.create).mockRejectedValueOnce(new Error('parsing_declaration_required'));
+  render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
+  await waitFor(() => expect(screen.getByRole('button',{name:'Prepare verified preview'})).toBeEnabled());
+  fireEvent.click(screen.getByRole('button',{name:'Prepare verified preview'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('parsing_declaration_required');
+  expect(screen.getByRole('alert')).toHaveFocus();
+  expect(screen.getByLabelText('Missing parsing declarations')).toBeInTheDocument();
+});
+it('shows local awaiting-backend state and key fingerprint on recovery',async () => {
+  job={...job,candidate:{kind:'fixture_candidate',request_digest:'d'.repeat(64),key_fingerprint:'f'.repeat(64),sample_hash:'s'.repeat(64),disclosure_version:'v'},outcome:'Prepared locally; marketplace preview submission awaits backend support'};
+  vi.mocked(previewBuildApi.latest).mockResolvedValue(job);
+  render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
+  expect(await screen.findByText(job.outcome!)).toBeInTheDocument();
+  expect(screen.getByText('f'.repeat(64))).toBeInTheDocument();
+  expect(previewBuildApi.submit).not.toHaveBeenCalled();
+});

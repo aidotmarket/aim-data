@@ -6,7 +6,7 @@ import type {
 import type { ListingEditorValue } from "@/components/ListingEditorForm";
 
 export const AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY =
-  "When I publish, my approved title, description, tags, category, schema, and sample-row choice become public on ai.market. They may be shared with search engines, AI assistants, HuggingFace, and other AI discovery systems. If I approve sample rows, exactly the rows shown here will be public. I understand this public listing may be used by AI-training crawlers.";
+  "When I publish, my approved title, description, tags, category, schema, and sample-row choice become public on ai.market. They may be shared with search engines, AI assistants, HuggingFace, and other AI discovery systems. Preview rows require a separate local review and publication decision. I understand this public listing may be used by AI-training crawlers.";
 
 export const AIM_CHANNEL_DISCLOSURE_LICENSE = "standard_marketplace";
 export const AIM_CHANNEL_DISCLOSURE_APPROVAL_SOURCE = "aim_channel";
@@ -32,14 +32,6 @@ export interface DisclosureSnapshotPayload {
   license: string;
   approval_source: typeof AIM_CHANNEL_DISCLOSURE_APPROVAL_SOURCE;
   source_publish_operation_id: string;
-}
-
-export interface PreparedDisclosureSample {
-  sample: ApprovedSample | null;
-  truncatedRows: boolean;
-  truncatedColumns: boolean;
-  truncatedForBytes: boolean;
-  sizeBytes: number;
 }
 
 export type DisclosureSnapshotFailureStatus =
@@ -80,10 +72,6 @@ export function classifyDisclosureSnapshotFailure(error: unknown): DisclosureSna
   };
 }
 
-const MAX_SAMPLE_ROWS = 100;
-const MAX_SAMPLE_COLUMNS = 25;
-const MAX_SAMPLE_BYTES = 250 * 1024;
-
 export function buildApprovedMetadataDraft(
   form: ListingEditorValue,
   metadata: DatasetListingMetadata | null,
@@ -122,48 +110,6 @@ export function buildApprovedMetadataDraft(
   };
 }
 
-export function prepareDisclosureSample(rows: Record<string, unknown>[]): PreparedDisclosureSample {
-  const sourceRows = rows.slice(0, MAX_SAMPLE_ROWS);
-  const sourceColumns = Object.keys(sourceRows[0] || {}).slice(0, MAX_SAMPLE_COLUMNS);
-  let columns = [...sourceColumns];
-  let candidateRows = projectRows(sourceRows, columns);
-  let sample: ApprovedSample = {
-    columns,
-    row_refs: candidateRows.map((_, index) => `preview:${index}`),
-    rows: candidateRows,
-  };
-
-  let truncatedForBytes = false;
-  while (byteLength(sample) > MAX_SAMPLE_BYTES && sample.rows.length > 0) {
-    truncatedForBytes = true;
-    candidateRows = candidateRows.slice(0, -1);
-    sample = {
-      columns,
-      row_refs: candidateRows.map((_, index) => `preview:${index}`),
-      rows: candidateRows,
-    };
-  }
-
-  while (byteLength(sample) > MAX_SAMPLE_BYTES && columns.length > 0) {
-    truncatedForBytes = true;
-    columns = columns.slice(0, -1);
-    candidateRows = projectRows(candidateRows, columns);
-    sample = {
-      columns,
-      row_refs: candidateRows.map((_, index) => `preview:${index}`),
-      rows: candidateRows,
-    };
-  }
-
-  return {
-    sample: sample.columns.length > 0 && sample.rows.length > 0 ? sample : null,
-    truncatedRows: rows.length > MAX_SAMPLE_ROWS,
-    truncatedColumns: Object.keys(rows[0] || {}).length > MAX_SAMPLE_COLUMNS,
-    truncatedForBytes,
-    sizeBytes: sample.columns.length > 0 && sample.rows.length > 0 ? byteLength(sample) : 0,
-  };
-}
-
 export function buildDisclosureSnapshotPayload({
   approvedFields,
   sampleDecision,
@@ -184,7 +130,7 @@ export function buildDisclosureSnapshotPayload({
     throw new Error("No sample rows must submit approved_sample=null.");
   }
   if (sampleDecision === "approved_rows") {
-    validateApprovedSample(approvedSample);
+    throw new Error("legacy_sample_unavailable");
   }
 
   return {
@@ -192,8 +138,8 @@ export function buildDisclosureSnapshotPayload({
       ...approvedFields,
       schema: { columns: [...approvedFields.schema] },
     },
-    sample_decision: sampleDecision,
-    approved_sample: sampleDecision === "approved_rows" ? approvedSample : null,
+    sample_decision: "none",
+    approved_sample: null,
     ai_training_notification_ack: true,
     ai_training_notification_text: AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY,
     license: AIM_CHANNEL_DISCLOSURE_LICENSE,
@@ -202,30 +148,24 @@ export function buildDisclosureSnapshotPayload({
   };
 }
 
-export function validateApprovedSample(sample: ApprovedSample | null): asserts sample is ApprovedSample {
-  if (!sample) throw new Error("Approved sample rows are required.");
-  if (sample.rows.length > MAX_SAMPLE_ROWS) throw new Error("Approved sample exceeds 100 rows.");
-  if (sample.columns.length > MAX_SAMPLE_COLUMNS) throw new Error("Approved sample exceeds 25 columns.");
-  if (sample.rows.length !== sample.row_refs.length) throw new Error("Approved sample row_refs must match rows.");
-  const expected = JSON.stringify([...sample.columns].sort());
-  for (const row of sample.rows) {
-    if (JSON.stringify(Object.keys(row).sort()) !== expected) {
-      throw new Error("Every approved sample row must contain exactly the approved columns.");
-    }
-  }
-  if (byteLength(sample) > MAX_SAMPLE_BYTES) throw new Error("Approved sample exceeds 250 KB.");
+export const PREVIEW_MEMBERSHIP_DISCLAIMER = 'Seller-selected preview. Membership does not establish quality, representativeness, legality, compliance, identity or external completeness.';
+export const PREVIEW_ALL_FIELDS_WARNING = 'All fields of every selected record will be disclosed in the package, including fields hidden from display. Display columns do not redact records.';
+export const PREVIEW_PERMISSION = 'I permit these exact complete selected records to be published as a public preview.';
+export const PREVIEW_AWAITING_BACKEND = 'Prepared locally; marketplace preview submission awaits backend support';
+export const PREVIEW_CAPS = { rows: 100, fields: 25, canonical_bytes: 250000 } as const;
+
+/** React must render this return value as a text child, never HTML or Markdown. */
+export function inertPreviewText(value: unknown): string {
+  if (value === undefined) return '(missing)';
+  if (value === null) return 'null';
+  return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
-function projectRows(rows: Record<string, unknown>[], columns: string[]): Record<string, unknown>[] {
-  return rows.map((row) => {
-    const projected: Record<string, unknown> = {};
-    for (const column of columns) {
-      projected[column] = row[column] ?? null;
-    }
-    return projected;
-  });
-}
-
-function byteLength(value: unknown): number {
-  return new TextEncoder().encode(JSON.stringify(value)).length;
+export function previewBudget(indices: number[], fieldCount: number, sizes: Record<number, number>) {
+  const bytes = indices.reduce((sum, index) => sum + (sizes[index] ?? 0), 0);
+  const known = indices.every(index => sizes[index] !== undefined);
+  const code = indices.length > PREVIEW_CAPS.rows ? 'rows_limit'
+    : fieldCount > PREVIEW_CAPS.fields ? 'fields_limit'
+    : bytes > PREVIEW_CAPS.canonical_bytes ? 'canonical_bytes_limit' : null;
+  return { rows: indices.length, fields: fieldCount, canonical_bytes: bytes, known, code };
 }
