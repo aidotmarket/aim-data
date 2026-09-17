@@ -1,0 +1,86 @@
+[
+  {
+    "path": "tests/fixtures/aim_dataset_integral_decimal_v1.json",
+    "sha256": "5ee3ad8022da09a652f46e72b8ce7ba4f4bc5a53b9a2db32a4220b608da44f63",
+    "profile": "aim-dataset-merkle-v1",
+    "purpose": "Exact integer-to-decimal canonical bytes and cross-format root equality"
+  },
+  {
+    "path": "tests/fixtures/aim_dataset_merkle_v1.json",
+    "sha256": "f3e358d1e7ce7c836ce8604810675e0952201a7799b92d30858cd489906499af",
+    "profile": "aim-dataset-merkle-v1",
+    "purpose": "Unchanged backend reference object; canonical rows, root, proofs, log and checkpoint"
+  },
+  {
+    "path": "tests/fixtures/aim_dataset_merkle_v1_extended.json",
+    "sha256": "6f33e31252c267ae6b3b4a920fab723a53ccbecae9742043599efd80e3b2a7fd",
+    "profile": "aim-dataset-merkle-v1",
+    "purpose": "Ratified safe-integer and Unicode admission/rejection vectors"
+  },
+  {
+    "path": "tests/fixtures/aim_dataset_parser_v1.json",
+    "sha256": "8ee8ac6b6bdaccd943987afb0a17cbb548a88a7dc7598563a143e7d8ab415754",
+    "profile": "aim-dataset-merkle-v1",
+    "purpose": "Explicit CSV, Parquet, JSON-array and NDJSON declarations and logical-record vectors"
+  },
+  {
+    "path": "tests/fixtures/aim_dataset_serialization_conflict_s1716.json",
+    "sha256": "ec2397992cbec7a8b2c66190ae9f81c7386df912ccf36285d724d83757f6babf",
+    "profile": "aim-dataset-merkle-v1",
+    "purpose": "Historical serialization-conflict evidence retained unchanged; not an admitted-input corpus"
+  },
+  {
+    "path": "tests/fixtures/aim_preview_differential_v1.json",
+    "sha256": "a6684a718f57d841af5e591de20b1f58fa6716d0cfbeea2955b477569c729e57",
+    "profile": "aim-preview-disclosure-v1",
+    "purpose": "Independent Python and Node exact-byte/signature differential corpus"
+  },
+  {
+    "path": "tests/fixtures/aim_preview_differential_v1.sha256",
+    "sha256": "713890b9535a1459ff05e53d787e4b0fc4e173714efd1dfecadec9794534739b",
+    "profile": "aim-preview-disclosure-v1",
+    "purpose": "Original checksum pin for the independent differential corpus"
+  },
+  {
+    "path": "tests/fixtures/aim_preview_manifest_budget_v1.json",
+    "sha256": "fa10ad02a49c5c4d08967d9deb760fbb155676917baab0e08c7ec31a2d89d598",
+    "profile": "aim-listing-preview-v1",
+    "purpose": "Conservative complete manifest sizing skeleton; placeholder signatures are not approval evidence"
+  },
+  {
+    "path": "tests/fixtures/aim_preview_package_v2.json",
+    "sha256": "4397a036ccf4326edf686b68b9d0fe4beb83e73d1dbc81ea09afb3bdf95ca37a",
+    "profile": "aim-preview-package-v2",
+    "purpose": "Exact closed v2 seller-origin envelope bytes with complete selected records"
+  },
+  {
+    "path": "tests/fixtures/aim_preview_package_vectors_v1.json",
+    "sha256": "4561ecc2cd9fae5845bcd78b9e5eeae8bb3af8d13f5a9532b99bdf5ffa33787c",
+    "profile": "aim-preview-package-v2",
+    "purpose": "Ordered sample-hash preimage, reversed-order digest and sampled-leaf-list vectors"
+  },
+  {
+    "path": "tests/fixtures/aim_preview_policy_v1.json",
+    "sha256": "ff8c85862c6aa90da271a1bb6204a229266dec2b5218b7b061d187119c22008b",
+    "profile": "aim-preview-policy-v1",
+    "purpose": "Pinned local policy, detector identity, prohibited and safe synthetic content cases"
+  },
+  {
+    "path": "tests/fixtures/aim_preview_requests_v1.json",
+    "sha256": "164eced90fc11df44466b45df290c5f80e7fefc81044c9dfd45bb8a36e3cbe91",
+    "profile": "aim-preview-disclosure-v1",
+    "purpose": "Closed approve, none, withdrawal, refresh and supersession request fixtures"
+  },
+  {
+    "path": "tests/fixtures/aim_preview_signing_requests_v1.sha256",
+    "sha256": "0d00c4180436edc459c41ad7583c572eadd9c5bccc36f2b0450cef19c5411674",
+    "profile": "aim-preview-disclosure-v1",
+    "purpose": "Original checksum pins for request and F2 signing corpora"
+  },
+  {
+    "path": "tests/fixtures/aim_preview_signing_v1.json",
+    "sha256": "19674653e7fd353d5141189310b7a274be1ff48b4704e3598eef53bf34cf72d2",
+    "profile": "aim-preview-disclosure-v1",
+    "purpose": "All five F2 signing profiles, exact preimages, synthetic public keys, log and checkpoint evidence"
+  }
+]

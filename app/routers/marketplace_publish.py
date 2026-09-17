@@ -1021,3 +1021,8 @@ async def prepare_preview_disclosure(listing_id: str, request: Request, user=Dep
     except Exception:
         raise HTTPException(status_code=422, detail="preview_contract_invalid") from None
     raise HTTPException(status_code=409, detail="preview_integration_not_yet_available")
+
+
+# Seller-local preview jobs share the authenticated marketplace namespace.
+from app.routers.preview_builds import router as preview_builds_router
+router.include_router(preview_builds_router, prefix="/marketplace")

@@ -1,0 +1,32 @@
+{
+  "notice": "Full logs retained locally; committed summaries omit captured output and test secret-shaped strings.",
+  "files": {
+    "baseline-vitest.log": "a44f5e73202cbac701218439d2159e434816450511ddc277625a8549031e1896",
+    "ci-second-failed.log": "52001ae8037b87beb7393a35726e49b2bc63c312dc28ab89fca0a48d8e0b5d2c",
+    "ci-first-job.log": "0acdac0adea3df676ab30eb62c3d30848b588a9494ada7939937820c1f83de22",
+    "docker-build.log": "cf1951aa0791cd6c92311ecb10593ad78885c6d760d1b5465d3220fd60cfbd62",
+    "new-ruff.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "ci-passing-job.log": "bd3d1d0c7a1a6da0596d3a5276f1b898628339e6608e5858884aafdfafee20b1",
+    "candidate.log": "47739c131202f05cb7e985d8b34997e746d369bbc9e41da82f64d8c6ee90f6ee",
+    "baseline-mypy.log": "e5a1a7b5a95b25d2f6719128d1c271a661cebf4a429a1c8af1008d74142354aa",
+    "candidate-mypy.log": "47139fa15c0c60657b8f0802a6768a1582cbf0a0c3e2e3f58907c319a76d5eed",
+    "ci-current-job.log": "fe70894ef2cf2399ca2bfb391fc8238748fddcc0ed42f05b1196e5214e570297",
+    "baseline-mypy-final.log": "7d8e8076b8819a7060c846c58fd7ac85991d5de1eba062d20eb40829136e0c1e",
+    "candidate-build.log": "193d07217e9aa9995e4ef794418f61949aff4b81107f6a7f55a53a690b7d621f",
+    "candidate-final.log": "ab23421b750b6e54b8bad944dcbd2fbcc93d40de9c7aca6584845fe898184ff3",
+    "candidate-vitest.log": "d3d273bd174aa219b87c3ebb2e70b74b76bb3a89109ba84d6e6fb63694d1a5f6",
+    "routes.log": "6918e91c337d0ac5ec1149ad91d33e237de56adef50f6b2627857964aa43fa3c",
+    "linux-arm64-synthetic.log": "423542c601292b552cfa146aa1b5aca6aad951bb182aa250c748ef225b8da0e3",
+    "baseline-build.log": "afcdf7702e359fb83e126e4b4ac06a7b4e3cb7029513a8d39baac8e9a5fcab8f",
+    "baseline.log": "1322ffa7ffac9ccf07d45510f12ceb81c3128eb4b3e8403080ae9ad1c71a3080",
+    "candidate-mypy-final.log": "63dd335bd54aea4c5527e35c5d426d14fc241de2b4415036fb5aa7747771c0b2",
+    "linux-arm64-synthetic-final.log": "423542c601292b552cfa146aa1b5aca6aad951bb182aa250c748ef225b8da0e3",
+    "candidate-spawn.log": "cae4f38a5285eb032ec61933baf5523c8ac34226910391b79e8b0f132554b153",
+    "focused-new.log": "aaf4c1f1e339bd6960bbcca6838e516a60f25902a49c842a696f819fa17b7f3a",
+    "final-tools.log": "9765efdbd554fd5c31caffa0942f455ddbd79af6b29c61a6a1f385100ef60e4c",
+    "baseline-lint.log": "2ecbf59c15e2b2a63c0fa333c1234c819cdf3bdd1308400d4736d1ba0e2884df",
+    "candidate-lint.log": "585657e37f213930e5794962772fcdd796a817ce1c541cf89f1a79b50ec6fd81",
+    "ci-first-failed.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docker-build-final.log": "c136891afdf9ccc53f257fab8f3f767d707c0cbc5fbf4bee6c28f4704938927e"
+  }
+}

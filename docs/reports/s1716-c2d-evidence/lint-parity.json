@@ -1,0 +1,29 @@
+{
+  "baseline_count": 10,
+  "branch_count": 10,
+  "branch_only": [],
+  "baseline_diagnostics": [
+    "src/api/portalApi.ts: error Unexpected any. Specify a different type @typescript-eslint/no-explicit-any",
+    "src/components/ui/command.tsx: error An interface declaring no members is equivalent to its supertype @typescript-eslint/no-empty-object-type",
+    "src/components/ui/textarea.tsx: error An interface declaring no members is equivalent to its supertype @typescript-eslint/no-empty-object-type",
+    "src/hooks/usePortalAuth.ts: error Unexpected any. Specify a different type @typescript-eslint/no-explicit-any",
+    "src/pages/ArtifactsPage.tsx: error Empty block statement no-empty",
+    "src/pages/ArtifactsPage.tsx: error Empty block statement no-empty",
+    "src/pages/ArtifactsPage.tsx: error Empty block statement no-empty",
+    "src/pages/SqlQuery.tsx: error Unexpected any. Specify a different type @typescript-eslint/no-explicit-any",
+    "src/pages/SqlQuery.tsx: error Unexpected any. Specify a different type @typescript-eslint/no-explicit-any",
+    "tailwind.config.ts: error A `require()` style import is forbidden @typescript-eslint/no-require-imports"
+  ],
+  "branch_diagnostics": [
+    "src/api/portalApi.ts: error Unexpected any. Specify a different type @typescript-eslint/no-explicit-any",
+    "src/components/ui/command.tsx: error An interface declaring no members is equivalent to its supertype @typescript-eslint/no-empty-object-type",
+    "src/components/ui/textarea.tsx: error An interface declaring no members is equivalent to its supertype @typescript-eslint/no-empty-object-type",
+    "src/hooks/usePortalAuth.ts: error Unexpected any. Specify a different type @typescript-eslint/no-explicit-any",
+    "src/pages/ArtifactsPage.tsx: error Empty block statement no-empty",
+    "src/pages/ArtifactsPage.tsx: error Empty block statement no-empty",
+    "src/pages/ArtifactsPage.tsx: error Empty block statement no-empty",
+    "src/pages/SqlQuery.tsx: error Unexpected any. Specify a different type @typescript-eslint/no-explicit-any",
+    "src/pages/SqlQuery.tsx: error Unexpected any. Specify a different type @typescript-eslint/no-explicit-any",
+    "tailwind.config.ts: error A `require()` style import is forbidden @typescript-eslint/no-require-imports"
+  ]
+}

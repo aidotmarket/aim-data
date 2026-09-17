@@ -294,6 +294,10 @@ class PipelineService:
         Returns:
             Dict with status and per-step results.
         """
+        from app.services.directory_processing import directory_record, process_directory
+        if directory_record(dataset_id) is not None:
+            return await process_directory(dataset_id)
+
         self._init_pipeline_state(dataset_id, FULL_PIPELINE_STEPS)
         self._update_status(dataset_id, PIPELINE_RUNNING, "Full pipeline started.")
 
@@ -407,6 +411,10 @@ class PipelineService:
                 - steps: dict of step_name -> {status, started_at, finished_at, error}
                 - output_files: dict of file_type -> path (if exists)
         """
+        from app.services.directory_processing import directory_record, pipeline_status
+        if directory_record(dataset_id) is not None:
+            return pipeline_status(dataset_id)
+
         dataset_dir = self._get_dataset_dir(dataset_id)
         status_file = self._status_file(dataset_id)
 
@@ -470,6 +478,10 @@ class PipelineService:
         Args:
             dataset_id: The ID of the dataset to process.
         """
+        from app.services.directory_processing import directory_record, process_directory
+        if directory_record(dataset_id) is not None:
+            return await process_directory(dataset_id)
+
         self._init_pipeline_state(dataset_id, EXTENDED_PIPELINE_STEPS)
         self._update_status(dataset_id, PIPELINE_RUNNING, "Pipeline started.")
 

@@ -1,0 +1,35 @@
+[
+  {
+    "name": "inert-render",
+    "file": "frontend/src/components/CommitmentPreviewBuilder.tsx",
+    "mutation": "<span>{inertPreviewText(row.cells?.[column])}</span> -> <span dangerouslySetInnerHTML={{__html:inertPreviewText(row.cells?.[column])}} />",
+    "argv": [
+      "npm",
+      "test",
+      "--",
+      "--run",
+      "src/components/CommitmentPreviewBuilder.test.tsx",
+      "-t",
+      "renders hostile cells"
+    ],
+    "exit": 1,
+    "killed": true
+  },
+  {
+    "name": "dataset-owner",
+    "file": "app/services/preview_build_service.py",
+    "mutation": "if record.metadata.get(\"preview_owner_id\") != owner: -> if False:",
+    "argv": [
+      "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+      "-m",
+      "pytest",
+      "tests/test_preview_build_routes.py::test_missing_ownership_and_declarations",
+      "-p",
+      "results_plugin",
+      "-q",
+      "--tb=short"
+    ],
+    "exit": 1,
+    "killed": true
+  }
+]

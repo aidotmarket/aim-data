@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { datasetsApi, marketplaceApi, piiApi, type ApiDataset, type DatasetListingMetadata, type PIIScanResponse } from "@/lib/api";
+import { datasetsApi, marketplaceApi, previewBuildApi, piiApi, type ApiDataset, type DatasetListingMetadata, type PIIScanResponse } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY } from "@/lib/disclosure";
 import DatasetDetail, { DisclosureSnapshotFailurePanel, ListingPreparation, DirectoryMembers } from "./DatasetDetail";
@@ -113,6 +113,7 @@ function renderPreparation(apiDataset: ApiDataset, onDatasetRefresh = vi.fn()) {
 }
 
 beforeEach(() => {
+  vi.spyOn(previewBuildApi, "latest").mockResolvedValue(null);
   const storage = new Map<string, string>();
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -249,6 +250,9 @@ describe("publish completion", () => {
     expectSuccessToast();
     expect(screen.getByTestId("context-published")).toHaveTextContent("true");
     expect(refetch).toHaveBeenCalledWith("ds-1");
+    expect(datasetsApi.getDisclosureSample).not.toHaveBeenCalled();
+    expect(marketplaceApi.createDisclosureSnapshot).toHaveBeenCalledWith("listing-1", expect.objectContaining({sample_decision:"none", approved_sample:null}));
+    expect(screen.getByRole("region", {name:"Public sample"})).toBeInTheDocument();
     expect(screen.getByText("Complete")).toBeInTheDocument();
     const published = screen.getByRole("button", { name: "Published" });
     expect(published).toBeDisabled();
@@ -460,5 +464,69 @@ describe("directory publish control", () => {
     render(<DirectoryPublishControl {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("agent_upgrade_required: upgrade AIM Data to 1.24.0");
+  });
+});
+
+describe("directory profiling outcomes", () => {
+  it.each(["unsupported_type", "too_large", "parse_failed", "timeout"])("renders %s and a terminal state without a spinner", async (reason) => {
+    const row = { dataset_id: "ds-1", index: 0, relative_path: "data.bin", size_bytes: 4,
+      sha256: "0".repeat(64), detected_type: "unsupported", role: "data" as const,
+      is_sample: false, status: "current" as const, reason: null };
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [row], total: 2, page: 1, page_size: 100, editable: true });
+    const fixture = { ...dataset(), file_type: "directory", metadata: {
+      ...dataset().metadata,
+      directory_profile: { status: "completed", summary: "profiled on 1 of 2 files", profiled_bytes: 4,
+        members: { "0": { status: reason, reason: `${reason}: member could not be profiled` } } },
+    } };
+    const { container } = render(<DirectoryMembers dataset={fixture} />);
+    expect(await screen.findByText(`${reason}: member could not be profiled`)).toBeInTheDocument();
+    expect(screen.getByText("Ready to list")).toBeInTheDocument();
+    expect(screen.getByText("profiled on 1 of 2 files")).toBeInTheDocument();
+    expect(screen.getByText("4 bytes profiled")).toBeInTheDocument();
+    expect(screen.queryByText("Processing")).not.toBeInTheDocument();
+    expect(container.querySelector(".animate-spin")).toBeNull();
+  });
+
+  it("renders not profiled and the skip reason", async () => {
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [], total: 2, page: 1, page_size: 100, editable: true });
+    const fixture = { ...dataset(), file_type: "directory", metadata: {
+      ...dataset().metadata,
+      directory_profile: { status: "profiling_skipped", summary: "not profiled (0 of 2 files)",
+        reason: "No member fits PROFILE_MAX_MEMBER_BYTES=268435456", members: {} },
+    } };
+    const { container } = render(<DirectoryMembers dataset={fixture} />);
+    expect(await screen.findByText("Profiling skipped")).toBeInTheDocument();
+    expect(screen.getByText("not profiled (0 of 2 files)")).toBeInTheDocument();
+    expect(screen.getByText("No member fits PROFILE_MAX_MEMBER_BYTES=268435456")).toBeInTheDocument();
+    expect(screen.queryByText("Processing")).not.toBeInTheDocument();
+    expect(container.querySelector(".animate-spin")).toBeNull();
+  });
+});
+
+
+describe("directory profile read states", () => {
+  it.each(["not_started", "absent"])("renders neutral copy for %s", async (state) => {
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [], total: 0, page: 1, page_size: 100, editable: true });
+    const fixture = { ...dataset(), file_type: "directory", metadata: {
+      ...dataset().metadata,
+      ...(state === "absent" ? {} : { directory_profile: { status: state, members: {} } }),
+    } };
+    render(<DirectoryMembers dataset={fixture} />);
+    expect(await screen.findByText("Not profiled yet")).toBeInTheDocument();
+    expect(screen.queryByText("Ready to list")).not.toBeInTheDocument();
+    expect(screen.queryByText("Processing")).not.toBeInTheDocument();
+  });
+
+  it("renders a stale timeout without Processing", async () => {
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [], total: 0, page: 1, page_size: 100, editable: true });
+    const fixture = { ...dataset(), file_type: "directory", metadata: {
+      ...dataset().metadata,
+      directory_profile: { status: "timeout", reason: "profiling run did not complete (stale)", members: {} },
+    } };
+    render(<DirectoryMembers dataset={fixture} />);
+    expect(await screen.findByText("Profiling timed out")).toBeInTheDocument();
+    expect(screen.getByText("profiling run did not complete (stale)")).toBeInTheDocument();
+    expect(screen.queryByText("Processing")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to list")).not.toBeInTheDocument();
   });
 });

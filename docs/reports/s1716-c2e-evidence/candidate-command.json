@@ -1,0 +1,15 @@
+{
+  "cwd": "/var/tmp/koskadeux/minimal-bridge-worktrees/83b0d7884441-3fcfd4",
+  "argv": [
+    "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests",
+    "-p",
+    "results_plugin",
+    "--continue-on-collection-errors",
+    "-q",
+    "--tb=short"
+  ],
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O"
+}

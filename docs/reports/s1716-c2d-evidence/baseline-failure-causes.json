@@ -1,0 +1,97 @@
+{
+  "tests/test_beta_readiness.py": [
+    "ConnectionRefusedError: [Errno 61] Connection refused / urllib3.exceptions.NewConnectionError: HTTPConnection(host='localhost', port=80): Failed to establish a new connection: [Errno 61] Connection refused"
+  ],
+  "tests/test_aim_data_deployment.py": [
+    "AssertionError: assert ['127.0.0.1:$...RT:-8080}:80'] == ['${AIM_DATA_PORT:-8080}:80'] / At index 0 diff: '127.0.0.1:${AIM_DATA_PORT:-8080}:80' != '${AIM_DATA_PORT:-8080}:80'"
+  ],
+  "tests/test_auth_integration.py": [
+    "AssertionError: Expected 'post' to not have been called. Called 1 times. / Calls: [call('https://ai-market-backend-production.up.railway.app/api/v1/serials/generate', json={'source': 'auto_provision'}),",
+    "AssertionError: Expected post to have been awaited once. Awaited 2 times. / AssertionError: Expected post to have been awaited once. Awaited 2 times."
+  ],
+  "tests/test_batch_upload.py": [
+    "OSError: [Errno 30] Read-only file system: '/data'"
+  ],
+  "tests/test_channel_landing.py": [
+    "assert 'const channel = useChannel();' in 'import { useEffect } from \"react\";\\nimport { Toaster } from \"@/components/ui/toaster\";\\nimport { Toaster as Sonner } .../BrandProvider>\\n      </TooltipProvider>\\n    </QueryClientProvider>\\n  </ErrorBoundary>\\n);\\n\\nexport default App;\\n'"
+  ],
+  "tests/test_channel_onboarding.py": [
+    "assert '? AIM_DATA_STEPS' in '/**\\n * OnboardingWizard \u2014 First-run onboarding that branches on channel.\\n *\\n * Both channels see the same features...-4 h-4\" />}\\n            </Button>\\n          </div>\\n        </div>\\n      </DialogContent>\\n    </Dialog>\\n  );\\n}\\n'",
+    "assert 'const AIM_DATA_STEPS: StepDef[] = [' in '/**\\n * OnboardingWizard \u2014 First-run onboarding that branches on channel.\\n *\\n * Both channels see the same features...-4 h-4\" />}\\n            </Button>\\n          </div>\\n        </div>\\n      </DialogContent>\\n    </Dialog>\\n  );\\n}\\n'"
+  ],
+  "tests/test_channel_presentation_only.py": [
+    "AssertionError: C2 violation: channel_config imported in non-allowed files: ['app/routers/copilot.py']. Allowed: {'app/routers/marketplace_publish.py', 'app/prompts/channel_prompts.py', 'app/core/channel_config.py', 'app/routers/health.py', 'app/services/prompt_factory.py'} / assert not ['app/routers/copilot.py']"
+  ],
+  "tests/test_config_alias_choices.py": [
+    "AssertionError: assert False / +  where False = isinstance('AIM_DATA_OAUTH_ENABLED', AliasChoices)"
+  ],
+  "tests/test_copilot_upload.py": [
+    "AssertionError: assert 'UNPROVISIONED' == 'ATTACHMENT_FORBIDDEN' / - ATTACHMENT_FORBIDDEN",
+    "AssertionError: assert 'UNPROVISIONED' == 'ATTACHMENT_NOT_FOUND' / - ATTACHMENT_NOT_FOUND",
+    "AssertionError: assert 'UNPROVISIONED' == 'TOO_MANY_ATTACHMENTS' / - TOO_MANY_ATTACHMENTS"
+  ],
+  "tests/test_diagnostic.py": [
+    "AssertionError: assert 0.0 > 0 / +  where 0.0 = CollectorResult(name='good', data={'status': 'ok', 'items': 42}, collected_at='2026-09-17T12:09:39.362313+00:00', duration_ms=0.0, error=None).duration_ms",
+    "assert 27 >= 30"
+  ],
+  "tests/test_entitlement.py": [
+    "RuntimeError: No install token or keystore passphrase configured for entitlement signing",
+    "RuntimeError: No install token or keystore passphrase configured for entitlement signing / ValueError: Server configuration error: No install token or keystore passphrase configured for entitlement signing"
+  ],
+  "tests/test_metadata.py": [
+    "AssertionError: assert 'searchability' in {'column_count': 6, 'column_profiles': [{'distinct_count': 5, 'is_potential_id': True, 'is_unique': True, 'max_value':...': 'DATE'}, {'name': 'website', 'nullable': True, 'type': 'VARCHAR'}], 'created_at': '2026-09-17T14:09:41.928632', ...}",
+    "AttributeError: 'DuckDBService' object has no attribute 'calculate_searchability_score'"
+  ],
+  "tests/test_metering.py": [
+    "TypeError: MeteringService.report_usage() missing 1 required positional argument: 'session_id'"
+  ],
+  "tests/test_notifications_p3.py": [
+    "OSError: [Errno 30] Read-only file system: '/data'",
+    "OSError: [Errno 30] Read-only file system: '/data' / OSError: [Errno 30] Read-only file system: '/data'"
+  ],
+  "tests/test_pii_scrub.py": [
+    "OSError: [Errno 30] Read-only file system: '/data'"
+  ],
+  "tests/test_portal_acl.py": [
+    "AttributeError: 'DatasetRecord' object has no attribute 'metadata_json'"
+  ],
+  "tests/test_portal_trust_zone.py": [
+    "assert 503 in (401, 403, 422) / +  where 503 = <Response [503 Service Unavailable]>.status_code"
+  ],
+  "tests/test_raw_download.py": [
+    "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  ],
+  "tests/test_raw_file_detail.py": [
+    "AssertionError: assert 'draft' == 'listed' / - listed"
+  ],
+  "tests/test_raw_files.py": [
+    "AttributeError: module 'starlette.status' has no attribute 'HTTP_413_CONTENT_TOO_LARGE'. Did you mean: 'HTTP_413_REQUEST_ENTITY_TOO_LARGE'?"
+  ],
+  "tests/test_request_engine.py": [
+    "TypeError: can't subtract offset-naive and offset-aware datetimes",
+    "sqlalchemy.orm.exc.DetachedInstanceError: Instance <DatasetRecord at 0x705f3d7750> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)"
+  ],
+  "tests/test_s145_bugfixes.py": [
+    "AssertionError: assert 'client_max_body_size 2G' in 'server {\\n    listen 80;\\n    server_name _;\\n\\n    # Large file uploads (per-location /api/ overrides to unlimited)\\...      proxy_set_header X-Forwarded-Proto $scheme;\\n        proxy_read_timeout 86400;\\n    }\\n\\n    autoindex off;\\n}\\n'",
+    "AssertionError: assert 'proxy_read_timeout 600s' in 'server {\\n    listen 80;\\n    server_name _;\\n\\n    # Large file uploads (per-location /api/ overrides to unlimited)\\...      proxy_set_header X-Forwarded-Proto $scheme;\\n        proxy_read_timeout 86400;\\n    }\\n\\n    autoindex off;\\n}\\n'",
+    "AssertionError: assert 'proxy_send_timeout 600s' in 'server {\\n    listen 80;\\n    server_name _;\\n\\n    # Large file uploads (per-location /api/ overrides to unlimited)\\...      proxy_set_header X-Forwarded-Proto $scheme;\\n        proxy_read_timeout 86400;\\n    }\\n\\n    autoindex off;\\n}\\n'",
+    "OSError: [Errno 30] Read-only file system: '/data'",
+    "OSError: [Errno 30] Read-only file system: '/data' / OSError: [Errno 30] Read-only file system: '/data'",
+    "TypeError: object NoneType can't be used in 'await' expression"
+  ],
+  "tests/test_security_audit.py": [
+    "ModuleNotFoundError: No module named 'app.core.llm_key_crypto'"
+  ],
+  "tests/test_security_foundation.py": [
+    "AssertionError: assert {'create_arti...etadata', ...} == {'create_arti...mit_feedback'} / Extra items in the left set:"
+  ],
+  "tests/test_sql.py": [
+    "assert 403 == 400 / +  where 403 = <Response [403 Forbidden]>.status_code"
+  ],
+  "tests/test_text_processor.py": [
+    "OSError: [Errno 30] Read-only file system: '/data'"
+  ],
+  "tests/test_upload.py": [
+    "OSError: [Errno 30] Read-only file system: '/data'"
+  ]
+}

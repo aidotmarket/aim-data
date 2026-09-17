@@ -1,0 +1,13 @@
+{
+  "os": "macOS-27.0-arm64-arm-64bit",
+  "python": "3.12.12 (main, Oct  9 2025, 11:07:00) [Clang 17.0.0 (clang-1700.4.4.1)]",
+  "packages": {
+    "pytest": "7.4.4",
+    "duckdb": "1.5.3",
+    "pydantic": "2.13.4",
+    "cryptography": "48.0.0",
+    "presidio-analyzer": "2.2.33",
+    "spacy": "3.7.2",
+    "en-core-web-sm": "3.7.1"
+  }
+}

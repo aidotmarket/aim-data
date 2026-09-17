@@ -1,0 +1,33 @@
+{
+  "baseline": {
+    "passed": 44,
+    "failed": 23
+  },
+  "branch": {
+    "passed": 56,
+    "failed": 23
+  },
+  "branch_only_failures": [],
+  "replaced_legacy_tests": [
+    "disclosure payload builder approved_rows includes only displayed columns and rows with deterministic refs",
+    "disclosure payload builder serializes the exact approved-row request without changing the sample",
+    "disclosure payload builder truncates over 100 rows and over 25 columns before submit"
+  ],
+  "new_tests": [
+    "announces errors, focuses the message and offers retry",
+    "announces origin failure and keeps retry available",
+    "checks seller URL and displays GET and OPTIONS receipts",
+    "defaults to no sample and never creates a job on mount",
+    "disclosure payload builder fails caps without projecting or trimming selected records",
+    "disclosure payload builder rejects legacy row approval before any outbound request",
+    "explains external retirement for exported package",
+    "recovers an in-progress job after reload and allows cancellation",
+    "renders hostile cells as inert text with no executable elements or cell links",
+    "requires exact rights and permission before the sealed scan",
+    "reviews source, origin and fingerprint before signing, then records pending submission",
+    "sends bounded destination choice and displays the exact path",
+    "shows S3/R2 non-claim and offers only app-managed directory or export",
+    "shows local awaiting-backend state and key fingerprint on recovery",
+    "supports keyboard selection and updates whole-record budgets without trimming"
+  ]
+}

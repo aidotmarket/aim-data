@@ -324,3 +324,56 @@ Retained original chunk C behavior: frozen `(listing_version_id, manifest_hash)`
 Migration 026 remains chained to 025. The two focused migration tests still cover forward/backward behavior and legacy row preservation on a synthetic AC7-shaped install. No released migration was edited. A copied real-install AC7 fixture remains outstanding.
 
 Not run here: a live AIM Data process against the backend process/database/object store, browser acceptance of merged chunks B/C, actual shared workspace-route quota concurrency, real cloud/provider proof, independent Gate 3 review or enabled release. Chunks D/E and whole-BQ completion remain separate. These are inherited acceptance boundaries, not unresolved sender wire choices. The requested sender-to-source contract reconciliation and checks are complete.
+
+
+## Merge with main (chunk B)
+
+Merged `origin/main` at `7c1eb3bb982cc760c1338b06dd84c00c7f286370` into the existing `build/bq-multi-file-datasets-s1717-c` branch, whose approved pre-merge head was `4ccb68cd1bdd9071fd087cb8f688d9261543e476`. This is a two-parent merge; no rebase, squash or history rewrite. The existing branch-owning worktree was used. No PR metadata or deployment changes.
+
+### Conflicts and preservation
+
+Git reported exactly one conflicted file:
+
+| Conflicted file | Resolution |
+| --- | --- |
+| `frontend/src/pages/DatasetDetail.test.tsx` | Retained C's complete directory-publish-control test group, then B's complete directory-profiling-outcomes and profile-read-states groups. Restored each group's closing braces at the shared append boundary. Both parents' appended groups were checked for exact text preservation; automatically merged main imports, preview fixtures and assertions were retained. |
+
+`DatasetDetail.tsx` merged automatically: B's per-member failure reasons, neutral/unprofiled copy and terminal profiling states coexist with C's `DirectoryPublishControl`, directory sample-count source and AC6 optional verification heading. B's `directory_processing.py`, `processing_service.py`, `listing_metadata_service.py` and directory-processing tests are byte-identical to main. C's sample-upload service and three focused test modules are unchanged from its approved head. The dataset router retains both B's directory pipeline branches and C's sample-metadata refresh for any registered root. Both metadata writers retain their read/modify/write behavior: B updates `directory_profile` (and listing metadata); C updates `local_publish`; neither replacement discards the other's keys. All other main changes were retained by the merge.
+
+Consulted `aim-data-seller-publish-journey.md` and both chunk builder reports. Their release boundaries remain unchanged; this merge does not claim live publication or whole-BQ completion.
+
+### Merge validation
+
+Focused backend union: **175 passed**, 64 warnings, 18.75 seconds. Frontend: **97 passed in 12 files**, 2.40 seconds. Production build passed in 3.16 seconds (existing bundle-size warning); `tsc --noEmit` passed. `alembic heads` reports the single **026_bq_published_manifests_s1717** head. `git diff --check` and the staged equivalent passed.
+
+Full suites use fresh checkouts/state, the same Python environment, `PYTHONHASHSEED=0`, separate serial directories, and the default-off configuration. The fresh base is a detached worktree at the exact requested `7c1eb3bb982cc760c1338b06dd84c00c7f286370`; candidate is this merge tree. Results and exact failure-identity comparison follow below.
+
+Commands (from the corresponding checkout, frontend commands from `frontend/`):
+
+```sh
+rtk proxy env PYTHONHASHSEED=0 AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-merge-focused-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q tests/test_directory_processing.py tests/test_directory_registration.py tests/test_dataset_members_api.py tests/test_single_file_uploads.py tests/test_member_migration.py tests/test_batch_upload.py tests/test_pipeline.py tests/test_member_upload_client.py tests/test_dataset_publish_signed_proxy.py tests/test_alembic_025_026.py --tb=short --junitxml=/tmp/s1717-c-merge-focused.xml
+rtk proxy env PYTHONHASHSEED=0 AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-merge-base-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-merge-base.xml
+rtk proxy env PYTHONHASHSEED=0 AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-merge-final-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-merge-final.xml
+rtk proxy env NODE_OPTIONS=--no-experimental-webstorage npm test -- --run
+rtk proxy npm run build
+rtk proxy ./node_modules/.bin/tsc --noEmit
+rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m alembic heads
+rtk git diff --check
+rtk git diff --cached --check
+```
+
+Evidence: `/tmp/s1717-c-merge-{base,final,focused}.{log,xml}`, `/tmp/s1717-c-merge-{frontend,build,tsc}.log`.
+
+| Full-suite run | Passed | Failed | Errors | Skipped | Total | Seconds |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fresh base `7c1eb3bb` | 3,059 | 55 | 38 | 34 | 3,186 | 180.76 |
+| Merged candidate | 3,120 | 55 | 38 | 34 | 3,247 | 174.20 |
+
+**No new failing cases and no resolved failing cases.** All 93 failure/error identities match exactly by JUnit `classname::name`; the merged candidate adds 61 passing cases. Both full suites remain non-green. Each reported 823 warnings. Exact case sets and comparison: `/tmp/s1717-c-merge-comparison.json`.
+
+Evidence SHA-256:
+
+- `s1717-c-merge-base.xml`: `054736c098ccbb2e1f50c0eeb6c8ebbf8b5f659d83653ccaa0c2c1b80f098177`.
+- `s1717-c-merge-final.xml`: `9add6ae75bb7a6285e5806b69a269b842f641643996c5d64b140776af3f9b2cf`.
+- `s1717-c-merge-focused.xml`: `5f3d83cdc4658da80d3bcc09c37fdeff623f16b0e48775889aa4df7bedb22eb7`.
+- `s1717-c-merge-comparison.json`: `a900c7416122b8683a028fdc8433bbdf55260cdcd606a442fbb5bcca7411635f`.

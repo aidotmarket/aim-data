@@ -1,0 +1,11 @@
+{
+  "Id": "sha256:789e733e43370e75235c410dbec083b964ee8d1078283cad2302c22fd06a8eef",
+  "Architecture": "arm64",
+  "Os": "linux",
+  "Created": "2026-09-17T15:58:46.382385625Z",
+  "labels": {
+    "description": "AIM Data \u2014 Self-hosted listing management for ai.market",
+    "maintainer": "ai.market <ops@ai.market>",
+    "version": "dev-s1716-c2e"
+  }
+}

@@ -4,7 +4,7 @@ import {
   buildApprovedMetadataDraft,
   buildDisclosureSnapshotPayload,
   classifyDisclosureSnapshotFailure,
-  prepareDisclosureSample,
+  previewBudget,
 } from "./disclosure";
 import {
   DisclosureSnapshotRequestError,
@@ -137,61 +137,8 @@ describe("disclosure payload builder", () => {
     });
   });
 
-  it("approved_rows includes only displayed columns and rows with deterministic refs", () => {
-    const prepared = prepareDisclosureSample([
-      { a: 1, b: "x", hidden: "not-hidden-until-column-truncation" },
-      { a: 2, b: "y", hidden: "not-hidden-until-column-truncation" },
-    ]);
-
-    expect(prepared.sample).toEqual({
-      columns: ["a", "b", "hidden"],
-      row_refs: ["preview:0", "preview:1"],
-      rows: [
-        { a: 1, b: "x", hidden: "not-hidden-until-column-truncation" },
-        { a: 2, b: "y", hidden: "not-hidden-until-column-truncation" },
-      ],
-    });
-  });
-
-  it("serializes the exact approved-row request without changing the sample", async () => {
-    const approvedSample = prepareDisclosureSample([
-      { segment: "enterprise", spend: 125 },
-      { segment: "consumer", spend: 75 },
-    ]).sample;
-    const payload = buildDisclosureSnapshotPayload({
-      approvedFields: buildApprovedMetadataDraft(form, metadata, dataset),
-      sampleDecision: "approved_rows",
-      approvedSample,
-      confirmed: true,
-      sourcePublishOperationId: "op-2",
-    });
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
-      ok: true,
-      status: 201,
-      json: vi.fn().mockResolvedValue({ status: "complete", listing_id: "listing-1" }),
-    } as unknown as Response);
-
-    await marketplaceApi.createDisclosureSnapshot("listing-1", { dataset_id: dataset.id, ...payload });
-
-    const request = fetchMock.mock.calls[0]?.[1];
-    expect(JSON.parse(String(request?.body))).toEqual({
-      dataset_id: "ds-1",
-      approved_fields: expectedApprovedFields,
-      sample_decision: "approved_rows",
-      approved_sample: {
-        columns: ["segment", "spend"],
-        row_refs: ["preview:0", "preview:1"],
-        rows: [
-          { segment: "enterprise", spend: 125 },
-          { segment: "consumer", spend: 75 },
-        ],
-      },
-      ai_training_notification_ack: true,
-      ai_training_notification_text: AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY,
-      license: "standard_marketplace",
-      approval_source: "aim_channel",
-      source_publish_operation_id: "op-2",
-    });
+  it("rejects legacy row approval before any outbound request", () => {
+    expect(() => buildDisclosureSnapshotPayload({approvedFields:buildApprovedMetadataDraft(form, metadata, dataset),sampleDecision:"approved_rows",approvedSample:{columns:["x"],row_refs:["preview:0"],rows:[{x:"private"}]},confirmed:true,sourcePublishOperationId:"op"})).toThrow("legacy_sample_unavailable");
   });
 
   it("surfaces a deterministic 422 as a plain-English rejection", async () => {
@@ -249,15 +196,11 @@ describe("disclosure payload builder", () => {
     });
   });
 
-  it("truncates over 100 rows and over 25 columns before submit", () => {
-    const wideRow = Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`c${index}`, index]));
-    const rows = Array.from({ length: 110 }, () => wideRow);
-    const prepared = prepareDisclosureSample(rows);
-
-    expect(prepared.sample?.rows).toHaveLength(100);
-    expect(prepared.sample?.columns).toHaveLength(25);
-    expect(prepared.truncatedRows).toBe(true);
-    expect(prepared.truncatedColumns).toBe(true);
+  it("fails caps without projecting or trimming selected records", () => {
+    expect(previewBudget(Array.from({length:101},(_,i)=>i),1,{}).code).toBe("rows_limit");
+    expect(previewBudget([0],26,{0:20}).code).toBe("fields_limit");
+    expect(previewBudget([0],25,{0:250001}).code).toBe("canonical_bytes_limit");
+    expect(previewBudget([0],25,{0:250000}).code).toBeNull();
   });
 
   it("requires final confirmation before building acked payload", () => {

@@ -337,7 +337,9 @@ def test_combined_canonical_byte_boundary(tmp_path, size):
 
 
 def test_unique_cell_marker_absent_from_journal_and_errors(tmp_path, caplog):
-    marker = "unique synthetic cell marker " + uuid.uuid4().hex[:8]
+    # A random hex suffix can accidentally resemble personal data to the real
+    # detector. This marker is unique to this fixture and intentionally stable.
+    marker = "unique synthetic cell marker aabbccdd"
     schema = CanonicalSchema([["value", "string", False, {}]])
     private = tmp_path / "tree"
     private.mkdir()
