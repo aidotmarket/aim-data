@@ -233,7 +233,7 @@ class PreviewJournal:
                 CREATE TABLE IF NOT EXISTS candidates (
                   seller TEXT NOT NULL, listing TEXT NOT NULL, request_id TEXT NOT NULL,
                   kind TEXT NOT NULL, state TEXT NOT NULL, candidate BLOB NOT NULL,
-                  request BLOB, digest TEXT, receipts BLOB,
+                  request BLOB, digest TEXT, receipts BLOB, retirement_origin TEXT,
                   PRIMARY KEY(seller,listing,request_id));
                 CREATE TABLE IF NOT EXISTS transitions (
                   seller TEXT, listing TEXT, request_id TEXT, old_state TEXT, new_state TEXT);
@@ -245,6 +245,12 @@ class PreviewJournal:
                 CREATE TABLE IF NOT EXISTS fixture_allocations (
                   facts_digest TEXT PRIMARY KEY, candidate BLOB NOT NULL);
             """)
+            # Preserve existing local journals; old receipts lack exact-origin
+            # evidence and fail closed on idempotent retries.
+            if "retirement_origin" not in {
+                row[1] for row in db.execute("PRAGMA table_info(candidates)")
+            }:
+                db.execute("ALTER TABLE candidates ADD COLUMN retirement_origin TEXT")
 
     @contextmanager
     def _db(self):
@@ -349,12 +355,12 @@ class PreviewJournal:
     def read(self, key):
         with self._db() as db:
             row = db.execute(
-                "SELECT state,candidate,request,digest,receipts FROM candidates WHERE seller=? AND listing=? AND request_id=?",
+                "SELECT state,candidate,request,digest,receipts,retirement_origin FROM candidates WHERE seller=? AND listing=? AND request_id=?",
                 key,
             ).fetchone()
         if not row:
             raise LifecycleError("candidate_missing")
-        return dict(zip(("state", "candidate", "request", "digest", "receipts"), row))
+        return dict(zip(("state", "candidate", "request", "digest", "receipts", "retirement_origin"), row))
 
     def retire(
         self,
@@ -373,10 +379,6 @@ class PreviewJournal:
         b = json.loads(record["candidate"])
         if disclosure_version not in {b["disclosure_version"], b["supersedes"]}:
             raise LifecycleError("retirement_identity_mismatch")
-        if record["state"] == "retired":
-            return json.loads(record["receipts"])
-        if record["state"] != "retirement_pending":
-            self.transition(key, "retirement_pending")
         from urllib.parse import urlsplit
 
         if urlsplit(url).path.lstrip("/") != publication_store.path(
@@ -388,14 +390,22 @@ class PreviewJournal:
             and sample_hash != b["sample_hash"]
         ):
             raise LifecycleError("retirement_sample_mismatch")
+        if record["state"] == "retired":
+            if record["retirement_origin"] != origin:
+                raise LifecycleError("invalid_retirement_receipt")
+            return validate_retirement_receipts(
+                json.loads(record["receipts"]), url=url, origin=origin
+            )
+        if record["state"] != "retirement_pending":
+            self.transition(key, "retirement_pending")
         publication_store.retire(disclosure_version, sample_hash)
         receipts = validate_retirement_receipts(
             receipt_reader(), url=url, origin=origin
         )
         with self._db() as db:
             db.execute(
-                "UPDATE candidates SET receipts=? WHERE seller=? AND listing=? AND request_id=?",
-                (canonical_json_bytes(receipts), *key),
+                "UPDATE candidates SET receipts=?,retirement_origin=? WHERE seller=? AND listing=? AND request_id=?",
+                (canonical_json_bytes(receipts), origin, *key),
             )
             self._transition(db, key, "retired")
         return receipts

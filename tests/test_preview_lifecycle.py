@@ -124,7 +124,8 @@ def test_rights_are_local():
         capture_rights("synthetic rights", "owner", False)
 
 
-def test_retirement_pending_recovery(tmp_path):
+@pytest.mark.parametrize("allow_origin", [BROWSER, "*"])
+def test_retirement_pending_recovery(tmp_path, allow_origin):
     j = PreviewJournal(tmp_path / "journal.sqlite")
     r = request_fixture()
     b = r["binding"]
@@ -146,10 +147,26 @@ def test_retirement_pending_recovery(tmp_path):
         capture(status=410, retired=True),
         capture(method="OPTIONS", status=204, retired=True),
     ]
+    for receipt in receipts:
+        receipt["headers"]["access-control-allow-origin"] = allow_origin
     assert j.retire(key, receipt_reader=lambda: receipts, **kwargs) == receipts
     assert j.read(key)["state"] == "retired"
     assert j.retire(key, receipt_reader=lambda: [], **kwargs) == receipts
     store.retire.assert_called_with(b["disclosure_version"], b["sample_hash"])
+    calls = store.retire.call_count
+    for change in (
+        {"url": URL + "/wrong"},
+        {"url": URL.replace("https://", "http://")},
+        {"url": URL.replace("seller.example", "other.example")},
+        {"url": URL + "?retry=1"},
+        {"url": URL + "#wrong"},
+        {"origin": "https://other.example"},
+        {"sample_hash": "0" * 64},
+    ):
+        with pytest.raises(LifecycleError, match="retirement_url_mismatch|invalid_retirement_receipt|retirement_sample_mismatch"):
+            j.retire(key, receipt_reader=lambda: pytest.fail("retry must use stored evidence"), **(kwargs | change))
+    assert store.retire.call_count == calls
+    assert j.read(key)["state"] == "retired"
     receipts[0]["body"] = "marker"
     with pytest.raises(LifecycleError):
         validate_retirement_receipts(receipts, url=URL, origin=BROWSER)
@@ -223,3 +240,19 @@ def test_2b_origin_retirement_removes_package_and_saved_copy_cannot_restore(
     with pytest.raises(PackageError, match="immutable_publication"):
         store.export(package)
     assert journal.read(key)["state"] == "retired"
+
+
+def test_existing_journal_migrates_without_inventing_retirement_origin(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.sqlite"
+    journal = PreviewJournal(path)
+    request = request_fixture()
+    key = ready(journal, LocalCandidate.validate(request["binding"]))
+    journal.freeze(key, request)
+    before = journal.read(key)
+    with sqlite3.connect(path) as db:
+        db.execute("ALTER TABLE candidates DROP COLUMN retirement_origin")
+    reopened = PreviewJournal(path)
+    assert reopened.read(key) == before
+    assert reopened.read(key)["retirement_origin"] is None
