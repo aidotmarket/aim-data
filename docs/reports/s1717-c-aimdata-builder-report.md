@@ -5,6 +5,64 @@ Base remains `adb97f0497223525d4247fa4bb200076fa5fa969`.
 
 Authority: fetched runbooks `origin/main` at `bd703814803642f5a8e364767caecc89ef472083`, `specs/BQ-MULTI-FILE-DATASETS-S1717-GATE2.md` **§3a, Chunk C wire contract**. Receiver source: `ai-market-backend@305248064d836f9caaa4118f34aab4889aa21fae`. Read chunk B source at `9624a037d8345893cff5e9738a19cda38c6680e9` with `git show`; no merge of B. Continued in the existing branch-owning worktree; no new branch, rebase, history rewrite, PR or deployment.
 
+
+## R1 fold
+
+Caller-authorized Gate 3 fold of DeepSeek's REQUEST_CHANGES on `4b09f4dfebc3daac2e7303a0720339b5266dfc82`. Existing branch and worktree retained; no rebase, history rewrite, new branch, PR or deployment. Implementation commits: `f80d02b` (sender and regression coverage), `726b138` (UI), `a0f63da` (regression-fixture cleanup). Validation below applies to the complete implementation at `a0f63da`.
+
+### Adopted findings
+
+- **F-01:** A fresh published manifest enumerates the non-removed members in registration-index order, with `index == position` and `members_total == len(members) == max(index) + 1`. Registration indices remain unchanged. `published_manifests.members` retains the dense seven-field published rows, whose frozen relative paths/root resolve source files by published index for delivery/verification. The separate `registration_to_published_index` JSON column retains the source mapping in the same snapshot transaction, survives dataset deletion, and is reused on pending retries. Profile projection looks up the registration index and emits the published index. New migration **027 → 026** adds this column without editing 025/026; existing rows get `{}` and use identity mapping on resume. The regression removes registration member 1, keeps member 2 as the sample, asserts indices `[0,1]`, count 2/sample count 1, retained mapping `{"0":0,"2":1}`, and signed `/samples/1` carrying original `2.csv` bytes. **§3a/D0 will state "published indices are dense in registration order".** This report records that caller decision; the runbooks repository is not edited by this AIM Data fold.
+- **F-02:** `sample_upload_timeout_s` defaults to 900 seconds, with `AIM_DATA_SAMPLE_UPLOAD_TIMEOUT_S` via the standard alias helper. Sample HTTP clients use that budget; member requests retain 30 seconds. The signed HTTP regression configures 1,200 seconds and asserts every sample request timeout component meets it; the default and environment alias are tested.
+- **F-03:** The alert unwraps the receiver's `detail.code` and `detail.detail`; the UI fixture now includes the exact object shape with `minimum_version`.
+- **F-04:** `DatasetDetail.test.tsx` asserts the heading **Optional: add a verified shape label** by heading role.
+- **F-05:** Directory records already refreshed metadata on member patches. The guard now covers any registered local root, including the single-file path; toggling `is_sample` verifies `metadata.directory.sample_member_count` updates both ways for directory and CSV records.
+- **F-08:** Local snapshot, retention, progress, disclosure persistence and status access use guarded metadata parsing. Deleted datasets return named HTTP 409 `dataset_removed_during_publish`; invalid metadata or missing progress return named 409s. The mid-upload deletion regression exercises the actual signed request/checkpoint path. Pending progress remains visible, but `can_publish` becomes true only after keystore/keypair/platform-key checks; a missing-passphrase regression verifies false.
+- **F-10:** Confirmed the existing fixture is byte-for-byte `json.dumps(sorted(list), separators=(",", ":")) + "\n"`, SHA-256 `5d6c91d85e77762277a79c03d31f442e21fc69de350f0d65588b77857faea089`. No fixture change.
+
+### Findings not adopted / scoped dispositions
+
+- **F-06:** No broader S3 rewrite. The caller's cheap exception was feasible: computed the fixture's canonical signed-payload bytes once using `_build_publish_payload` at exact base `97da3f096787b6010ce914803fdd30978a9d5bfd`, direct channel, and pinned SHA-256 **`7a9ca30f3ff128453ca0d2cabc1deeda74be071de04ebb21acf86037e9ff087e`** in the existing full-payload golden. The test fixes the channel to direct and still compares both flag/version settings against those bytes.
+- **F-07:** Not adopted. The 026 arm still uses a synthesized AC7-shaped table. Chunk A's copied real-install evidence must accompany the joint package; no real-install migration acceptance is claimed. The new 027 test independently verifies upgrade/downgrade preservation of retained rows and the linear migration head.
+- **F-09:** Recorded, no unrelated file removal: `tests/test_alembic_025_026.py` was needed to validate the new D0 retention migration and legacy-row preservation; `tests/fixtures/multi_file_datasets/processable_types.json` was needed for §3a's byte-identical sender/receiver type vocabulary. These are the two implementation/support files outside §4.3's literal list (apart from the required builder report). This authorized fold also necessarily touches `app/config.py` for F-02, `app/routers/datasets.py` for F-05, and adds migration 027 for F-01's durable mapping.
+
+### R1 operating supplement
+
+Re-read `runbooks/aim-data-seller-publish-journey.md` and current Gate 2 §4.3 from the runbooks repository's `origin/main`. Before running this candidate against an existing install, apply the migration chain through 027. The new column is local bookkeeping; the wire member schema remains exactly seven fields. Local-route flags remain default-off. Sample timeout can be overridden with `AIM_DATA_SAMPLE_UPLOAD_TIMEOUT_S`; do not lower it below the receiver budget. Deleted-source or malformed-progress refusals are not successful publication. Existing pending uploads resume their retained snapshot without rewriting its signed identity. Live receiver/store integration, real-install AC7 and enabled release remain separate acceptance gates.
+
+### R1 validation
+
+Focused modules (`test_member_upload_client.py`, `test_dataset_publish_signed_proxy.py`, `test_alembic_025_026.py`): **65 passed**, 4.54 s. Frontend: **74 passed in 10 files**, 2.26 s; production build passed in 3.31 s (existing bundle-size warning); `tsc --noEmit` and `git diff --check` passed.
+
+Fresh full suites, default-off flags, `PYTHONHASHSEED=0`, identical Python environment and separate serial directories:
+
+| Run | Passed | Failed | Errors | Skipped | Total | Duration |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base `adb97f0` (`base2`) | 2,987 | 55 | 38 | 34 | 3,114 | 155.58 s |
+| Base `adb97f0` repeat (`base3`) | 2,986 | 56 | 38 | 34 | 3,114 | 149.58 s |
+| Candidate `a0f63da` (`final2`) | 3,046 | 56 | 38 | 34 | 3,174 | 152.03 s |
+
+**No new failing cases; no resolved cases.** The final baseline repeat (`base3`) and candidate (`final2`) have identical sets of all **94 failure/error identities**, compared by JUnit `classname::name`. Candidate adds **60 passing tests** over base. The suite remains non-green.
+
+The first complete baseline (`base2`) passed the previously documented variable result `tests.test_sql::test_query_execution_blocked`, while candidate returned 403 versus expected 400. A fresh SQL-module run at unchanged base reproduced that exact failure (17 passed / 1 failed, 4.03 s, `/tmp/s1717-c-r1-base-sql2.{log,xml}`); the candidate SQL module also reproduced it. The final full baseline repeat then reproduced it too. SQL router/service/test files are unchanged. All runs are retained; no result is silently discarded.
+
+JUnit SHA-256: base3 `500383115190ef602e5a530d2fb8c3de5f3b45c89636d0685070eeaad0baaea1`; base2 `041c631f499f52e9dc0ac3988b977fb830782719e55fbcb3bc78359656225378`; final2 `1a901d78942958c6861768de51947eef8692d8098422106ae42b0770f0ca29bb`; focused `2531663a1dad285f0663210f3fdb0e576f0908fb62ebe13c7e8935a305ac1397`.
+
+
+Commands use the existing `/Users/max/Projects/ai-market/aim-data/.venv/bin/python`; full suites run from their respective checkouts, frontend commands from `frontend/`:
+
+```sh
+rtk proxy env PYTHONHASHSEED=0 AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-r1-base3-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-r1-base3.xml
+rtk proxy env PYTHONHASHSEED=0 AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-r1-final2-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-r1-final2.xml
+rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q tests/test_member_upload_client.py tests/test_dataset_publish_signed_proxy.py tests/test_alembic_025_026.py --tb=short --junitxml=/tmp/s1717-c-r1-focused.xml
+rtk proxy env NODE_OPTIONS=--no-experimental-webstorage npm test -- --run
+rtk proxy npm run build
+rtk proxy ./node_modules/.bin/tsc --noEmit
+```
+
+Evidence: `/tmp/s1717-c-r1-{base,base2,base3,final,final2,focused}.{log,xml}`, `/tmp/s1717-c-r1-comparison.json`, `/tmp/s1717-c-r1-{frontend,build,tsc}.log`. The first baseline was interrupted after 306 s without progress in the unchanged portal SSO tests; it is not used as complete-suite evidence. The first candidate run exposed two downstream list failures caused by the new malformed-metadata test leaving corrupt rows in the shared test database. Commit `a0f63da` restores those fixture rows; the fresh final2 run covers that correction. Original logs remain available.
+
+
 ## Changes against §3a
 
 1. **Carrier addition / Publish payload (§3a):** local versions now emit signed `sample_members_total`, counted from the frozen manifest's `is_sample` members. The emitter requires it for local versions, refuses it on S3, and checks `members_total - sample_members_total >= 1`. The existing stricter data-only paid-set check still runs before registration or signing. Both S3 byte goldens pass unchanged, including explicitly null new defaults. A real signed HTTP mock verifies the count is in the hashed payload. The receiver's HTTP 400 `at least one non-sample data member is required` passes through verbatim and is rendered in the frontend alert (backend and UI tests).
