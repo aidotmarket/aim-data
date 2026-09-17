@@ -823,6 +823,13 @@ async def get_dataset_status(
         "error": record.error if status_val == DatasetStatus.ERROR.value else None,
     }
 
+    if settings.multi_file_datasets_enabled and record.file_type == "directory":
+        profile = record.metadata["directory_profile"]
+        result["directory_profile"] = profile
+        if profile["status"] == "timeout":
+            result.update(status="timeout", error=profile["reason"])
+        return result
+
     # Show queue position for datasets waiting to be processed
     from app.services.processing_queue import get_processing_queue
     pq_inst = get_processing_queue()

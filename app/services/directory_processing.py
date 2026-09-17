@@ -37,13 +37,42 @@ def directory_record(dataset_id):
     return None
 
 
+PROFILE_STALE_GRACE_S = 5
+
+
+def profile_on_read(record):
+    profile = json.loads(record.metadata_json or "{}").get("directory_profile", {
+        "status": "not_started", "reason": "Profiling has not started", "members": {},
+    })
+    if profile.get("status") != "running":
+        return profile
+    started = profile.get("started_at")
+    started = datetime.fromisoformat(started) if started else record.updated_at
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    if (datetime.now(timezone.utc) - started).total_seconds() <= settings.profile_timeout_s + PROFILE_STALE_GRACE_S:
+        return profile
+    reason = "profiling run did not complete (stale)"
+    profile.update(status="timeout", reason=reason, summary=reason)
+    with get_session_context() as session:
+        members = session.exec(select(DatasetMember).where(
+            DatasetMember.dataset_id == record.id, DatasetMember.role == "data",
+            DatasetMember.status != "removed",
+        )).all()
+        for member in members:
+            outcome = profile.setdefault("members", {}).setdefault(str(member.index), {
+                "status": "pending", "relative_path": member.relative_path,
+            })
+            if outcome["status"] in ("pending", "running"):
+                outcome.update(status="timeout", reason=reason)
+    return profile
+
+
 def profile_snapshot(dataset_id):
     record = directory_record(dataset_id)
     if record is None:
         raise ValueError("Directory dataset unavailable")
-    return json.loads(record.metadata_json).get("directory_profile", {
-        "status": "not_started", "reason": "Profiling has not started", "members": {},
-    })
+    return profile_on_read(record)
 
 
 def pipeline_status(dataset_id):
@@ -182,7 +211,7 @@ async def _process(dataset_id):
     # Local cache identity only; never a manifest or a published commitment.
     source_key = hashlib.sha256(json.dumps({
         "root": record.root_path,
-        "members": [[m[k] for k in ("index", "relative_path", "sha256", "size_bytes", "role", "status")] for m in values],
+        "members": [[m[k] for k in ("index", "relative_path", "sha256", "size_bytes", "role", "status", "detected_type")] for m in values],
         "policy": [settings.profile_max_members, settings.profile_max_member_bytes,
                    settings.profile_max_total_bytes, settings.profile_timeout_s,
                    settings.profile_docs_context_bytes],
@@ -191,7 +220,7 @@ async def _process(dataset_id):
     if previous.get("source_key") == source_key and previous.get("status") in ("completed", "profiling_skipped"):
         return pipeline_status(dataset_id)
     data = [member for member in values if member["role"] == "data"]
-    profile = {"status": "running", "source_key": source_key, "reason": None, "profiled_members": 0,
+    profile = {"status": "running", "started_at": datetime.now(timezone.utc).isoformat(), "source_key": source_key, "reason": None, "profiled_members": 0,
                "total_data_members": len(data), "profiled_bytes": 0, "read_bytes": 0,
                "members": {}, "schema_count": 0}
     _save(dataset_id, profile)
@@ -214,7 +243,7 @@ async def _process(dataset_id):
             elif member["size_bytes"] > settings.profile_max_member_bytes:
                 reason = f"too_large: PROFILE_MAX_MEMBER_BYTES={settings.profile_max_member_bytes}"
             elif attempted >= settings.profile_max_members:
-                outcome.update(status="too_large", reason=f"member limit {settings.profile_max_members} reached")
+                outcome.update(status="too_large", reason=f"too_large: PROFILE_MAX_MEMBERS={settings.profile_max_members}")
                 continue
             elif profile["read_bytes"] + member["size_bytes"] > settings.profile_max_total_bytes:
                 reason = f"too_large: PROFILE_MAX_TOTAL_BYTES={settings.profile_max_total_bytes}"
@@ -243,11 +272,10 @@ async def _process(dataset_id):
             except Exception:
                 outcome.update(status="parse_failed", reason="parse_failed: Member extraction failed")
         # Documentation is inert UTF-8 quoted context, bounded across the set.
-        # It shares the byte budget, with a separate PROFILE_MAX_MEMBERS cap.
+        # Data and documentation share both byte and read-attempt budgets.
         docs_left = min(settings.profile_docs_context_bytes, settings.profile_max_total_bytes - profile["read_bytes"])
-        docs_attempted = 0
         for member in values:
-            if docs_attempted >= settings.profile_max_members:
+            if attempted >= settings.profile_max_members:
                 break
             if member["role"] != "documentation" or docs_left <= 0 or time.monotonic() >= deadline:
                 continue
@@ -256,7 +284,7 @@ async def _process(dataset_id):
             limit = min(docs_left, member["size_bytes"])
             if not limit:
                 continue
-            docs_attempted += 1
+            attempted += 1
             try:
                 text = await _isolated("documentation", (record.model_dump(), member, limit), deadline)
                 documentation.append({"relative_path": member["relative_path"], "quoted_text": text})

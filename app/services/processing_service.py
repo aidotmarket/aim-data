@@ -158,6 +158,12 @@ def _db_to_record(db_row) -> DatasetRecord:
     except (json.JSONDecodeError, TypeError):
         meta = {}
 
+    if settings.multi_file_datasets_enabled and rec.file_type == "directory":
+        from app.services.directory_processing import profile_on_read
+        meta["directory_profile"] = profile_on_read(db_row)
+        if meta["directory_profile"]["status"] == "timeout":
+            rec.status = DatasetStatus.PREVIEW_READY
+
     # Extract document_content from metadata if present
     rec.document_content = meta.pop("document_content", None)
     rec.metadata = meta
@@ -202,7 +208,7 @@ def _record_to_db(rec: DatasetRecord, storage_filename: str):
         metadata["error"] = rec.error
 
     file_size = rec.file_size_bytes or 0
-    if not file_size and rec.upload_path:
+    if rec.file_type != "directory" and not file_size and rec.upload_path:
         try:
             file_size = os.path.getsize(rec.upload_path)
             _log.debug("_record_to_db: file_size_bytes was 0, resolved %d from disk for %s", file_size, rec.id)
@@ -277,7 +283,7 @@ class ProcessingService:
                     existing.metadata_json = json.dumps(metadata, default=str)
                     existing.updated_at = datetime.now(timezone.utc)
 
-                    if rec.upload_path:
+                    if rec.file_type != "directory" and rec.upload_path:
                         try:
                             existing.file_size_bytes = os.path.getsize(rec.upload_path)
                         except OSError:

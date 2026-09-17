@@ -82,7 +82,7 @@ def test_member_limit(directory, stub, count, expected):
     assert result['summary'] == f'profiled on {expected} of {count} files'
     if count == 65:
         assert result['members']['64']['status'] == 'too_large'
-        assert result['members']['64']['reason'] == 'member limit 64 reached'
+        assert result['members']['64']['reason'] == 'too_large: PROFILE_MAX_MEMBERS=64'
     assert len([op for op, _ in stub[0] if op == 'pii']) == 1
     assert stub[1].call_count == 1
 
@@ -395,8 +395,8 @@ def test_documentation_member_cap_counts_failed_reads(directory, stub, monkeypat
         return result
     monkeypatch.setattr(dp, '_isolated', fail)
     metadata = run(directory(5, roles=['data'] + ['documentation'] * 4))
-    assert len([op for op, _ in stub[0] if op == 'documentation']) == 2
-    assert metadata['directory_profile']['read_bytes'] == 12
+    assert len([op for op, _ in stub[0] if op == 'documentation']) == 1
+    assert metadata['directory_profile']['read_bytes'] == 8
 
 
 def test_documentation_context_budget_and_cache(directory, stub, monkeypatch):
@@ -415,3 +415,97 @@ def test_documentation_context_config_alias(monkeypatch):
     from app.config import Settings
     monkeypatch.setenv('AIM_DATA_PROFILE_DOCS_CONTEXT_BYTES', '17')
     assert Settings(_env_file=None).profile_docs_context_bytes == 17
+
+
+@pytest.mark.parametrize('age,expected', [(901, 'running'), (906, 'timeout')])
+def test_persisted_running_profile_read_timeout(directory, monkeypatch, age, expected):
+    from datetime import datetime, timedelta, timezone
+    from app.routers import datasets
+    from app.services.processing_service import get_processing_service
+    dataset_id = directory(2)
+    monkeypatch.setattr(settings, 'profile_timeout_s', 900)
+    with get_session_context() as session:
+        row = session.get(DatasetRecord, dataset_id)
+        row.status = 'extracting'
+        row.metadata_json = json.dumps({'directory_profile': {
+            'status': 'running', 'started_at': (datetime.now(timezone.utc) - timedelta(seconds=age)).isoformat(),
+            'members': {'0': {'status': 'profiled'}}}})
+        session.add(row); session.commit()
+    app = FastAPI(); app.include_router(datasets.router, prefix='/datasets')
+    app.dependency_overrides[datasets.get_current_user] = lambda: SimpleNamespace(user_id='seller')
+    with TestClient(app) as client:
+        pipeline = client.get(f'/datasets/{dataset_id}/pipeline-status')
+        status = client.get(f'/datasets/{dataset_id}/status')
+    assert pipeline.status_code == status.status_code == 200
+    card = get_processing_service().get_dataset(dataset_id)
+    for profile in (pipeline.json()['directory_profile'], status.json()['directory_profile'], card.metadata['directory_profile']):
+        assert profile['status'] == expected
+        if expected == 'timeout':
+            assert profile['reason'] == 'profiling run did not complete (stale)'
+            assert profile['members']['1']['status'] == 'timeout'
+            assert profile['members']['1']['reason'] == profile['reason']
+            assert profile['members']['0']['status'] == 'profiled'
+    if expected == 'timeout':
+        assert status.json()['status'] == 'timeout'
+        assert pipeline.json()['status'] == 'failed'
+        assert card.status.value == 'preview_ready'
+
+
+def test_detected_type_invalidates_cache(directory, stub):
+    dataset_id = directory()
+    before = run(dataset_id)['directory_profile']
+    with get_session_context() as session:
+        member = session.get(DatasetMember, (dataset_id, 0))
+        member.detected_type = 'unsupported'
+        session.add(member); session.commit()
+    after = run(dataset_id)['directory_profile']
+    assert before['source_key'] != after['source_key']
+    assert after['members']['0']['status'] == 'unsupported_type'
+    assert stub[1].call_count == 2
+
+
+def test_data_exhausts_shared_documentation_slots(directory, stub, monkeypatch):
+    monkeypatch.setattr(settings, 'profile_max_members', 2)
+    run(directory(3, roles=['data', 'data', 'documentation']))
+    assert len([op for op, _ in stub[0] if op == 'member']) == 2
+    assert not [op for op, _ in stub[0] if op == 'documentation']
+
+
+def test_listing_metadata_preserves_registered_directory_bytes(directory, stub, tmp_path, monkeypatch):
+    from app.routers import datasets
+    from app.services import directory_registration as reg, import_service
+    from app.services.processing_service import get_processing_service
+    monkeypatch.setattr(settings, 'upload_directory', str(tmp_path))
+    monkeypatch.setattr(import_service, 'IMPORT_ROOT', tmp_path.resolve())
+    root = tmp_path / 'uploaded-set'; root.mkdir()
+    (root / 'a.csv').write_bytes(b'x\n1\n')
+    (root / 'b.csv').write_bytes(b'x\n2\n3\n')
+    with get_session_context() as session:
+        row = reg.register_directory(session, root)
+        dataset_id = row.id
+        session.commit()
+    try:
+        run(dataset_id)
+        processing = get_processing_service()
+        assert processing.get_dataset(dataset_id).upload_path == root
+        def size():
+            with get_session_context() as session:
+                members = session.exec(select(DatasetMember).where(DatasetMember.dataset_id == dataset_id)).all()
+                expected = sum(member.size_bytes for member in members)
+                actual = session.get(DatasetRecord, dataset_id).file_size_bytes
+                assert expected == 10
+                assert actual == expected
+        size()
+        app = FastAPI(); app.include_router(datasets.router, prefix='/datasets')
+        # Isolate billing; exercise the real route, listing cache and record save.
+        route = next(r for r in app.routes if getattr(r, 'path', '') == '/datasets/{dataset_id}/listing-metadata' and 'POST' in r.methods)
+        meter = next(d.call for d in route.dependant.dependencies if d.name == '_meter')
+        app.dependency_overrides[meter] = lambda: None
+        with TestClient(app) as client:
+            response = client.post(f'/datasets/{dataset_id}/listing-metadata')
+        assert response.status_code == 200, response.text
+        size()
+    finally:
+        with get_session_context() as session:
+            session.exec(delete(DatasetMember).where(DatasetMember.dataset_id == dataset_id))
+            session.delete(session.get(DatasetRecord, dataset_id)); session.commit()
