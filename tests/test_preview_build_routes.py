@@ -18,7 +18,7 @@ def setup(tmp_path):
     source = root / 'source.ndjson'
     source.write_text('{"color":"blue"}\n{"color":"green"}\n')
     record = SimpleNamespace(id='dataset', upload_path=source, metadata={'preview_owner_id': OWNER})
-    processing = SimpleNamespace(get_dataset=lambda id: record if id == 'dataset' else None)
+    processing = SimpleNamespace(get_dataset=lambda id: record if id == 'dataset' else None, _save_record=lambda *args: None)
     service = PreviewBuildService(root / 'jobs', processing, root)
     app = FastAPI()
     app.include_router(router, prefix='/marketplace')
@@ -131,6 +131,7 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
     p1.update({k:'a'*64 for k in ('summary_hash','render_hash','aggregate_hash','source_revision')},listing_version_id=None)
     record.metadata['preview_local_approval']={'owner':OWNER,'references':p1,'digest':'b'*64}
     id=create(client);base='/marketplace/preview-builds/'+id
+    p1['source_revision']=client.get(base).json()['source_version']
     assert client.put(base+'/selection',json={'leaf_indices':[0],'display_columns':['color']}).status_code==200
     consent={'rights_basis':'owner','public_preview_permission':True,'restricted_content_confirmed':True}
     scanned=client.post(base+'/policy',json=consent)

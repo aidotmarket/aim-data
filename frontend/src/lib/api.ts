@@ -1587,6 +1587,8 @@ export interface PreviewBuildStatus {
   origin: string | null; receipts: PreviewOriginReceipt[];
   candidate: { kind: 'fixture_candidate'; request_digest: string; key_fingerprint: string; sample_hash: string; disclosure_version: string } | null;
   outcome: string | null;
+  approved_metadata_digest?: string | null;
+  prior_job_id?: string | null;
   signing?: { fingerprint: string | null; code: string | null };
 }
 export interface LocalPreviewRow {

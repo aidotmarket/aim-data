@@ -85,6 +85,7 @@ import {
   sellerSetupRequiredDescription,
   sellerSetupToastAction,
 } from "@/lib/sellerOnboarding";
+import { PreviewOriginReview } from "@/components/PreviewOriginReview";
 import { CommitmentPreviewBuilder } from "@/components/CommitmentPreviewBuilder";
 import {
   filenameToTitle,
@@ -1147,7 +1148,8 @@ export function ListingPreparation({
             />
 
             <CommitmentPreviewBuilder datasetId={dataset.id} metadataApproved={metadataApproved}
-              approvedMetadataDigest={previewMetadataDigest} onStatus={setPreviewStatus} />
+              approvedMetadataDigest={previewMetadataDigest} onStatus={setPreviewStatus}
+              originReview={(job, onChange) => <PreviewOriginReview job={job} onChange={onChange} />} />
 
             <div className="rounded-md border p-3 text-sm">
               <h3 className="font-medium">Disclosure summary</h3>

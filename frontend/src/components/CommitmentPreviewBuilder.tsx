@@ -94,6 +94,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
     setPermission(false); setRestricted(false); setAccuracy(false);
   };
   const budget = previewBudget(selected, job?.columns.length || 0, sizes);
+  const metadataChanged = !!job?.candidate && !!approvedMetadataDigest && job.approved_metadata_digest !== approvedMetadataDigest;
   const fixed = !!job?.publication || !!job?.candidate;
   const active = !!job && !['cancelled','failed','retired','withdrawn'].includes(job.state);
   const selectionChanged = JSON.stringify(selected) !== JSON.stringify(job?.selection.leaf_indices) || JSON.stringify(columns) !== JSON.stringify(job?.selection.display_columns);
@@ -178,14 +179,25 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
           })}>Prepare signed preview</Button>
         </div>}
       </>}
+      {metadataChanged && <p role="alert">Metadata changed. Withdraw and replace the preview with fresh consent.</p>}
       {job.candidate && <div className="space-y-2">
         <p>Registered key fingerprint: <code>{job.candidate.key_fingerprint}</code></p>
         <p>Local candidate digest: <code>{job.candidate.request_digest.slice(0,12)}</code></p>
         <p>Local candidate only; no public marketplace sample is active.</p>
-        {!job.outcome && active && <Button type="button" disabled={busy} onClick={() => run(async () => { setJob(await previewBuildApi.submit(job.job_id)); })}>Finish local preparation</Button>}
+        {!job.outcome && active && <Button type="button" disabled={busy || metadataChanged || !metadataApproved} onClick={() => run(async () => { setJob(await previewBuildApi.submit(job.job_id)); })}>Finish local preparation</Button>}
       </div>}
-      {job.outcome && <p role="status">{job.outcome}</p>}
-      {job.publication && <Button type="button" variant="outline" disabled={busy || job.state === 'retired'} onClick={() => run(async () => { setJob(await previewBuildApi.withdraw(job.job_id)); })}>Withdraw preview</Button>}
+      {job.outcome && !metadataChanged && <p role="status">{job.outcome}</p>}
+      {job.candidate && active && <Button type="button" variant="outline" disabled={busy || metadataChanged || !readyConsent || !accuracy} onClick={() => run(async () => {
+        const value = await previewBuildApi.refresh(job.job_id,{...consent,metadata_accuracy_confirmed:accuracy});
+        setJob(value); setSelected(value.selection.leaf_indices); setColumns(value.selection.display_columns); setSizes(value.selection.row_sizes || {}); setStart(0);
+        setPermission(false); setRestricted(false); setAccuracy(false);
+      })}>Refresh attestation</Button>}
+      {job.prior_job_id && <p>Prior hosting retirement remains separate. <Button type="button" variant="outline" disabled={busy} onClick={() => run(async () => {
+        await previewBuildApi.withdraw(job.prior_job_id!);
+      })}>Retire previous package</Button></p>}
+      {job.state === 'withdrawn' && <p role="status">Local package retired. Remove the external object at {job.origin || job.publication?.relative_path}, then retry withdrawal to verify GET/OPTIONS retirement receipts.</p>}
+      {job.publication && <Button type="button" variant="outline" disabled={busy || job.state === 'retired'} onClick={() => run(async () => { try { await previewBuildApi.withdraw(job.job_id); } finally { setJob(await previewBuildApi.status(job.job_id)); } })}>Withdraw preview</Button>}
+      {job.state === 'retired' && <Button type="button" disabled={busy || !metadataApproved} onClick={prepare}>Replace preview</Button>}
       {job.state === 'retired' && <p role="status">Hosting retired; marketplace submission was never made. Prepare a replacement preview with fresh consent.</p>}
     </>}
   </section>;

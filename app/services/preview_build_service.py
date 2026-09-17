@@ -69,6 +69,18 @@ def source_identity(record, upload_root):
     return path, hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 
 
+def schema_has_binary(descriptors):
+    def check(tag, params):
+        if tag == 'binary':
+            return True
+        if tag == 'array':
+            return check(params['element_type']['type'], params['element_type']['type_parameters'])
+        if tag == 'object':
+            return any(check(field['type'], field['type_parameters']) for field in params['object_fields'])
+        return False
+    return any(check(field[1], field[3]) for field in descriptors)
+
+
 class PreviewBuildService:
     def __init__(self, root, processing, upload_root):
         self.root = Path(root).absolute()
@@ -169,7 +181,7 @@ class PreviewBuildService:
                 live['builder'] = CommitmentPreviewBuilder(tree, current['descriptors'])
                 current['commitment'] = result['commitment']
                 if current['state'] == 'building':
-                    current['state'] = 'ready'
+                    current['state'] = 'selected' if current['indices'] else 'ready'
                 self.save(current)
             # Holding the 2a context retains its process-wide flock and cleanup.
             cancel.wait()
@@ -212,7 +224,7 @@ class PreviewBuildService:
                               'rows': len(job['indices']), 'fields': len(job['descriptors']), 'canonical_bytes': job['selection_bytes'], 'row_sizes': job.get('selection_sizes', {})},
                 'caps': CAPS, 'commitment': job.get('commitment'), 'policy': job['policy'],
                 'publication': job['publication'], 'origin': job['origin'], 'receipts': job['receipts'],
-                'candidate': job['candidate'], 'signing': signing, 'outcome': AWAITING if job['prepared'] else None,
+                'candidate': job['candidate'], 'signing': signing, 'approved_metadata_digest': job.get('approval_digest'), 'prior_job_id': job.get('prior_job_id'), 'outcome': AWAITING if job['prepared'] else None,
             }
 
     def active(self, job):
@@ -258,7 +270,7 @@ class PreviewBuildService:
         elif size > CAPS['canonical_bytes']:
             code = 'canonical_bytes_limit'
         # Binary at any depth is ineligible even if a value is absent/null.
-        elif '"binary"' in json.dumps(builder.schema.descriptors):
+        elif schema_has_binary(builder.schema.descriptors):
             code = 'binary_selection'
         if code:
             return {'leaf_index': index, 'canonical_bytes': size, 'code': code, 'cells': None}
@@ -330,7 +342,7 @@ class PreviewBuildService:
                     job['indices'], proof_ids=job['proof_ids'], commitment_id=job['commitment_id'],
                     disclosure_version=job['disclosure_version'], scanned_at=stamp(),
                     rights_confirmed=True, public_preview_permission=True, restricted_content_confirmed=True,
-                    manifest_bytes=0, package_url='https://preview.example.invalid/' + 'x' * 2016)
+                    manifest_bytes=0, package_url='https://preview.example.invalid/package')
                 live['package'] = package
                 job.update(state='scanned', rights=rights, scan=package.scan,
                            policy={'policy': POLICY, 'version': VERSION, 'passed': True,
@@ -342,9 +354,11 @@ class PreviewBuildService:
             self.save(job)
             return self.status(job_id, owner)
 
-    def store(self, job):
-        return PublicationStore(self.root / 'publications' / job['owner'].encode().hex(),
-                                self.root / 'publication-journals' / job['owner'].encode().hex())
+    def store(self, job, destination=None):
+        mode = destination or (job.get('publication') or {}).get('destination', 'local')
+        area = 'publications' if mode == 'local' else 'exports'
+        return PublicationStore(self.root / area / job['owner'].encode().hex(),
+                                self.root / (area + '-journals') / job['owner'].encode().hex())
 
     def package(self, job_id, owner, destination):
         with self.lock:
@@ -357,7 +371,7 @@ class PreviewBuildService:
                 return self.status(job_id, owner)
             if not live['package']:
                 raise BuildError('rescan_required')
-            store = self.store(job)
+            store = self.store(job, destination)
             result = store.export(live['package'])
             relative = store.path(result['disclosure_version'], result['sample_hash'])
             job.update(state='packaged', publication={**result, 'destination': destination,
@@ -386,6 +400,9 @@ class PreviewBuildService:
             parsed = validate_url(url)
             if parsed.path.lstrip('/') != pub['relative_path']:
                 raise BuildError('origin_path_mismatch', 422)
+            from app.services.preview_package_service import expected_manifest_fixture
+            envelope = json.loads(self.download(job_id, owner))
+            limit('manifest_bytes', len(expected_manifest_fixture(envelope, job['descriptors'], url)))
             receipts = verify_hosted_package(url, origin='https://ai.market', expected_sha256=pub['package_sha256'], expected_bytes=pub['byte_count'])
             job.update(state='hosted', origin=url, receipts=receipts)
             self.save(job)
@@ -439,14 +456,18 @@ class PreviewBuildService:
                 raise BuildError('approval_required', 422)
             if not job.get('rights') or job['rights']['rights_basis_code'] != consent.rights_basis:
                 raise BuildError('rescan_required')
-            if job['candidate']:
-                return self.status(job_id, owner)  # immutable identical retry
-            if job['state'] != 'hosted' or not job['receipts']:
+            if job['state'] not in {'hosted', 'signed_candidate'} or not job['receipts']:
                 raise BuildError('origin_check_required')
             record = owned_dataset(self.processing, job['dataset_id'], owner)
             context = record.metadata.get('preview_local_approval')
             if not context or context.get('owner') != owner:
                 raise BuildError('metadata_approval_required')
+            if context['references']['source_revision'] != job['source_version']:
+                raise BuildError('metadata_approval_changed')
+            if job['candidate']:
+                if context['digest'] != job.get('approval_digest'):
+                    raise BuildError('metadata_approval_changed')
+                return self.status(job_id, owner)
             p1 = context['references']
             signer = self.signer(job)
             reference = signer.signer_reference
@@ -480,6 +501,11 @@ class PreviewBuildService:
                            approved_by=owner,approved_at=now,last_attested_by_seller_at=now,update_cadence_days=None,
                            approval_expires_at=None,supersedes=None,request_id=str(uuid4()),expected_current_disclosure_id=None,
                            signer_reference=reference,signature_algorithm='ed25519',signature_profile='aim-preview-disclosure-signature-v1')
+            if job.get('prior_binding'):
+                from app.services.preview_lifecycle import refresh_candidate
+                refreshed = refresh_candidate(job['prior_binding'], disclosure_version=job['disclosure_version'],
+                                              request_id=binding['request_id'], attested_at=now, cadence_days=None).binding()
+                binding.update(supersedes=refreshed['supersedes'], expected_current_disclosure_id=refreshed['expected_current_disclosure_id'])
             candidate = LocalCandidate.validate(binding)
             request = construct_request(candidate,c,proofs,signer=signer,approved_p1=p1)
             self.freeze(job,candidate,request)
@@ -529,27 +555,47 @@ class PreviewBuildService:
                 p1={k:old[k] for k in ('summary_id','summary_approval_id','summary_hash','render_hash','aggregate_hash','content_revision','source_revision','listing_id','listing_version_id')}
                 req=construct_request(candidate,None,[],signer=self.signer(job),approved_p1=p1)
                 self.freeze(job,candidate,req)
-            self.store(job).retire(pub['disclosure_version'],pub['sample_hash'])
             job.update(state='withdrawn',prepared=False,code='external_retirement_pending',receipts=[])
             self.save(job)  # Persist pending before GET/OPTIONS, including failed retries.
             if job_id in self.live:
                 self.live[job_id]['cancel'].set()
-            if job['origin']:
-                receipts=verify_hosted_package(job['origin'],origin='https://ai.market',expected_sha256=pub['package_sha256'],expected_bytes=pub['byte_count'],retired=True)
-                from app.services.preview_lifecycle import validate_retirement_receipts
-                validate_retirement_receipts(receipts,url=job['origin'],origin='https://ai.market')
+            def receipt_reader():
+                return verify_hosted_package(job['origin'], origin='https://ai.market',
+                                             expected_sha256=pub['package_sha256'], expected_bytes=pub['byte_count'], retired=True)
+            if job['candidate'] and job['origin']:
+                receipts = self.journal.retire(tuple(job['journal_key']), publication_store=self.store(job),
+                                              disclosure_version=pub['disclosure_version'], sample_hash=pub['sample_hash'],
+                                              url=job['origin'], origin='https://ai.market', receipt_reader=receipt_reader)
+            else:
+                self.store(job).retire(pub['disclosure_version'],pub['sample_hash'])
+                receipts = receipt_reader() if job['origin'] else []
+            if receipts:
                 job.update(state='retired',code=None,receipts=receipts)
                 self.save(job)
             return self.status(job_id,owner)
 
     def refresh(self, job_id, owner, consent):
-        # Rebuild/rescan with fresh immutable package identities. Never re-use old approval.
+        # New preparation keeps leaf/proof identity and the immutable predecessor.
+        # Its package/commitment evidence is a new revision, never an in-place edit.
         with self.lock:
-            job=self.load(job_id,owner)
-            if not consent.metadata_accuracy_confirmed or not consent.public_preview_permission or not consent.restricted_content_confirmed:
-                raise BuildError('approval_required',422)
-            if job['state'] not in {'retired','withdrawn','cancelled','failed'}:
-                raise BuildError('retire_previous_preview_first')
-            from app.models.preview_build_schemas import CreateBuild
-            body=CreateBuild(dataset_id=job['dataset_id'],parsing=job['parsing'],schema_descriptors=job['descriptors'])
-        return self.create(body,owner)
+            old = self.load(job_id, owner)
+            self.active(old)
+            if not old['candidate'] or old['state'] != 'signed_candidate':
+                raise BuildError('signed_candidate_required')
+            if not consent.metadata_accuracy_confirmed or not consent.public_preview_permission or not consent.restricted_content_confirmed or consent.rights_basis != old['rights']['rights_basis_code']:
+                raise BuildError('approval_required', 422)
+            prior = json.loads(self.journal.read(tuple(old['journal_key']))['candidate'])
+            live = self.live.get(job_id)
+            if live:
+                live['cancel'].set()
+        if live:
+            live['thread'].join(5)
+        from app.models.preview_build_schemas import CreateBuild
+        created = self.create(CreateBuild(dataset_id=old['dataset_id'], parsing=old['parsing'], schema_descriptors=old['descriptors']), owner)
+        with self.lock:
+            job = self.load(created['job_id'], owner)
+            job.update(indices=old['indices'], display_columns=old['display_columns'],
+                       selection_bytes=old['selection_bytes'], selection_sizes=old.get('selection_sizes', {}),
+                       proof_ids=old['proof_ids'], prior_binding=prior, prior_job_id=job_id)
+            self.save(job)
+            return self.status(job['id'], owner)

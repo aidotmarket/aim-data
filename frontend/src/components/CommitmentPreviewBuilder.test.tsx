@@ -4,12 +4,7 @@ import { CommitmentPreviewBuilder } from './CommitmentPreviewBuilder';
 import { previewBuildApi, type PreviewBuildStatus } from '@/lib/api';
 import { PREVIEW_PERMISSION, PREVIEW_MEMBERSHIP_DISCLAIMER, PREVIEW_ALL_FIELDS_WARNING } from '@/lib/disclosure';
 vi.mock('@/lib/api', () => ({ previewBuildApi: { latest: vi.fn(),create: vi.fn(),status: vi.fn(),rows: vi.fn(),selection:vi.fn(),cancel:vi.fn(),policy:vi.fn(),candidate:vi.fn(),submit:vi.fn(),withdraw:vi.fn() } }));
-export const fixture = (): PreviewBuildStatus => ({
-  job_id:'job',dataset_id:'ds',source_version:'a'.repeat(64),state:'ready',code:null,review_ready:true,
-  progress:{phase:'ready',records:3,canonical_bytes:120,elapsed_seconds:1},columns:['value'],
-  selection:{leaf_indices:[],display_columns:[],rows:0,fields:1,canonical_bytes:0},caps:{rows:100,fields:25,canonical_bytes:250000},
-  commitment:{schema_digest:'s'.repeat(43),dataset_merkle_root:'r'.repeat(43),leaf_count:3},policy:null,publication:null,origin:null,receipts:[],candidate:null,outcome:null,
-});
+import { fixture } from '@/test/previewFixture';
 let job: PreviewBuildStatus;
 beforeEach(() => {
   vi.clearAllMocks();job=fixture();
