@@ -30,7 +30,7 @@ Only new revision 025 changed. Revision 026, every released revision, batch_serv
 ## Files and behavior
 
 - `alembic/versions/025_bq_multi_file_datasets_s1717.py`, `app/models/dataset.py`: nullable `root_path`, live `DatasetMember` rows with composite dataset/index key, unique dataset/path, role/status/sample-role/nonnegative constraints, timestamps, and missing-source representation. Schema upgrade changes no legacy row value.
-- `app/config.py`: default-off flag and every §4.1 setting, plus the AIM transfer total/session/abandonment values, using the existing AIM_DATA/VECTORAIZ alias helper and §6 defaults.
+- `app/config.py`: default-off flag and every §4.1 setting, using the existing AIM_DATA/VECTORAIZ alias helper and §6 defaults. R1 removes the three D-owned total/session/abandonment settings.
 - `app/services/dataset_manifest.py`: seven-field D0 preimage, canonical path validation, derived counts/bytes, SHA-256; no bookkeeping/scalars in the hash.
 - `app/services/directory_registration.py`: iterative descriptor-relative scandir traversal, hidden/junk/symlink exclusions, no depth/time cutoff, streamed stable reads, whole-registration refusal, NFC/case/control/UTF-8/path-size checks, member/byte bounds, stable member identity and removed-member handling. Registration completes before database writes; caller owns commit/rollback.
 - `app/services/member_migration.py`: explicit flag-gated local backfill, exact legacy resolver-selected bytes, no sample convention, missing source without a fabricated digest, idempotent replay.
@@ -180,7 +180,58 @@ Line references below refer to the authority files read with `git show`, not thi
 | Gate 2 §4.1 line 76, D-bytes | Provide explicit member-path resolution; the existing single-artifact resolver accepts a one-member directory and refuses ambiguous multi-member selection. It never silently selects the first member or falls back to Parquet. Chunk E still owns set-resolution, retained manifests and all directory-root preimages. |
 | Gate 2 §4.1 line 76, upload/import branches | An uploaded file moves unchanged into its own dataset-ID storage directory; the directory-mode names follow that root's basename. `/imports/start` retains its legacy request schema; under the flag it registers the entire root, ignoring the legacy file-selection list. Off-path code and batch service remain unchanged. |
 | Gate 2 §4.1/§4.2 lines 76/83 | Registration leaves datasets uploaded and the UI labels them Registered. It does not dispatch the legacy single-file profiler on a directory. B owns directory profiling and its terminal processing states. |
-| Gate 2 §4.1 line 76; §6 | In addition to the explicitly enumerated fields, own the AIM transfer total/session/abandonment defaults here because A owns AIM-side policy. Store/reaper/public-rate/backend-only values remain outside aim-data. |
+| Gate 2 §4.1 line 76; §6 | R1 correction: A owns exactly the §4.1-enumerated settings, ending at transfer_max_member_bytes. Chunk D adds transfer_max_total_bytes, transfer_session_ttl_s and abandoned_order_ttl_s with TTL-ordering validation; §6 assigns their enforcement to C/D and D. |
 | Gate 2 §4.1 line 77; user dispatch | `test_alembic_025_026.py` covers 025 only. The real-install AC7 proof remains pending rather than being silently replaced by the synthetic fixture. |
 
 The S1590 directory-root amendment, set profiling, publish wire, sample serving and scanner changes remain for their assigned chunks.
+
+
+## R1 fold
+
+Review base: `b7ddcc03b3b436e018d26014ef3e6d1548e17823`. Council verdicts supplied by the caller: GLM **APPROVE_WITH_MANDATES** (1 MEDIUM, 1 LOW), DeepSeek **APPROVE_WITH_MANDATES** (2 LOW, 3 NIT), CC **APPROVE_WITH_NITS** (1 LOW, 1 NIT). Folded on the existing `build/bq-multi-file-datasets-s1717-a` branch; the bridge WIP commit `35c1990` remains in its ancestry. No branch creation, rebase, history rewrite or PR.
+
+| Finding | Disposition |
+| --- | --- |
+| DeepSeek F1 LOW | Adopted in `3180baa`: directory deletion removes dataset_members before the dataset row; rmtree is allowed only for a resolved root strictly beneath upload_directory. External registered roots are preserved. Upload DELETE and external registration DELETE regressions both return 200 and leave zero members; only the upload root disappears. |
+| DeepSeek F2 LOW | Adopted in `537b697`: one helper maps file_type to itself only within PROCESSABLE_TYPES, otherwise unsupported. Both migration and upload registration use it. A legacy out-of-domain type migrates without changing the legacy row and is accepted by build_manifest. |
+| GLM 2 LOW / DeepSeek F4 / CC LOW-1 | Adopted in `06888e4`: removed only transfer_max_total_bytes, transfer_session_ttl_s and abandoned_order_ttl_s. Kept all §4.1 fields; D owns the deferred settings and TTL-ordering validation. |
+| CC NIT-1 | Adopted in `537b697`: a present but unreadable/unstable source still aborts the entire backfill; its error now names the dataset id and path. Parameterized tests verify both error reasons, caller rollback of all member/root changes and successful retry. See AC7 below. |
+| GLM 1 MEDIUM | Not adopted as a code change: AC7 is real-install verification for the caller before Gate 4. The synthetic-copy limitation remains. The verbatim GLM criterion list is an outstanding documentation input, as noted below. |
+| DeepSeek F3 | Not adopted: the one-member upload card's dataset UUID is the directory basename, literally conforming to §4.1 original_filename = directory name. Display-copy polish belongs to F. |
+| DeepSeek F5 | Not adopted: flag-on /imports/start registers the whole root and ignores legacy files selection, as documented in the ambiguity table. Chunk F runbook/handoff note: present this whole-directory behavior in the import UI/copy; do not imply selected-file filtering. |
+
+### AC7: real-install Gate 4 verification and retry
+
+The approved sanitized real-install copy remains a caller-run prerequisite before Gate 4; synthetic tests do not satisfy it. Run backfill within a caller-owned transaction. If a present source is unreadable or cannot stabilize, expect an error identifying its dataset id and path and roll back the whole transaction. Restore readability or stop the source writer, then retry the complete backfill; do not commit partial work or skip the offending row. Missing-source rows retain their existing explicit missing representation.
+
+
+### Gate 4 checklist: verbatim source outstanding
+
+GLM's exact verification criterion list was not included in the caller's fold instructions and was not found in the available local verdict artifacts. Its location/text was requested during this run. **The verbatim checklist is not yet incorporated**; the caller must supply the original GLM 1 MEDIUM verification criteria before this documentation item can be closed. No reconstructed wording is presented as a GLM quotation. The real-install AC7 limitation and retry procedure above remain binding.
+
+### R1 validation
+
+Tested code: `06888e4` (report-only commit follows). Reused the report's ten-module command, Python virtualenv and frontend dependency tree, with fresh serial directories `/tmp/s1717-a-evidence/r1-focused-serial` and `r1-full-serial`. Logs and JUnit XML are under `/tmp/s1717-a-evidence/r1-*`.
+
+| Check | Result |
+| --- | --- |
+| Focused ten-module backend command | **133 passed**, 0 failed/errors, 27 warnings, 12.54 seconds; exit 0 |
+| Frontend npm test with NODE_OPTIONS=--no-experimental-webstorage | **70 passed**, 10 files passed; 2.20 seconds; exit 0 |
+| Frontend npm run build | Passed, 3.52 seconds; exit 0; existing large-chunk and Browserslist-age warnings |
+| Frontend tsc --noEmit | Passed without diagnostics; exit 0 |
+| Full backend suite, run once | **2900 passed, 55 failed, 38 errors, 34 skipped**; 3027 total; 762 warnings, 162.33 seconds; exit 1 |
+| Named baseline-portable.xml | **2842 passed, 55 failed, 38 errors, 34 skipped**; 2969 total |
+| New failing cases against named baseline | **None** |
+| Baseline failing cases no longer failing | **None** |
+
+The full suite remains non-green: all 93 baseline failing/error case identities persist. Comparison uses exact JUnit `classname::name` identities, treating either failure or error as failing. This run adds 58 passing cases over baseline, including the five R1 regression cases. Unlike the prior report-candidate run, `tests.test_sql::test_query_execution_blocked` passes here, matching the named baseline; the prior report's suite-state limitation remains documented above. No unrelated fix was made.
+
+Focused per-module counts: directory_registration 12; dataset_manifest 19; dataset_members_api 10; member_migration 5; alembic_025_026 1; directory_import 3; single_file_uploads 5; batch_upload 23; data_verification_resolver 6; data_verification_local_service 49. All 133 also pass in the full run.
+
+Evidence digests (SHA-256):
+
+- `baseline-portable.xml`: `6ed712467982d7f3403174a3ae605b4fb21f6c522e7648605085ec52b0193086`.
+- `r1-focused.xml`: `e6b5b99730558c95c4216e1483c59e8ebfcc06cacc9712c99535cc8167f9e64b`.
+- `r1-full.xml`: `8a39a71e2dbd20c69cfc8705d984fdd4123e9fe3abf53f873f6f19c9fe6e5b14`.
+
+Machine-readable comparison: `/tmp/s1717-a-evidence/r1-comparison.json`.
