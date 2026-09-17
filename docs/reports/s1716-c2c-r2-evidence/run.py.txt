@@ -1,0 +1,20 @@
+import json, os, subprocess, sys
+from pathlib import Path
+wd = Path(sys.argv[1])
+mode = sys.argv[2]
+out = Path('/tmp/s1716-c2c-r2')
+source = Path('/private/var/tmp/koskadeux/minimal-bridge-worktrees/b81bcd9475b9-38a004/docs/reports/s1716-c2c-evidence')
+fixture = 'affected-baseline-nodeids.json' if mode == 'baseline' else 'affected-branch-nodeids.json'
+files = sorted({k.split('::')[0] for k in json.loads((source/fixture).read_text())})
+if mode == 'four':
+    files = ['tests/test_preview_signing_service.py', 'tests/test_preview_lifecycle.py', 'tests/test_preview_disclosure_schemas.py', 'tests/test_marketplace_commitment_push.py']
+else:
+    files += ['tests/test_dataset_merkle_service.py', 'tests/test_dataset_canonicalization.py']
+env = dict(os.environ, PYTHONPATH=str(out)+':.', C2C_RESULTS=str(out/(mode+'-nodeids.json')))
+cmd = ['/Users/max/Projects/ai-market/aim-data/.venv/bin/python','-m','pytest', *files, '-p','s1716_c2c_results','--continue-on-collection-errors','-q','--tb=short']
+(out/(mode+'-command.json')).write_text(json.dumps({'cwd':str(wd),'argv':cmd,'PYTHONPATH':env['PYTHONPATH']},indent=2))
+with (out/(mode+'.log')).open('w') as log:
+    result=subprocess.run(cmd,cwd=wd,env=env,stdout=log,stderr=subprocess.STDOUT)
+print(mode, 'exit', result.returncode)
+print((out/(mode+'.log')).read_text()[-2500:])
+sys.exit(result.returncode)

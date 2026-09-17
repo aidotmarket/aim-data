@@ -1,0 +1,53 @@
+{
+  "ruff": {
+    "argv": [
+      "rtk",
+      "proxy",
+      "ruff",
+      "check",
+      "app/services/preview_lifecycle.py",
+      "app/services/marketplace_push_service.py",
+      "app/models/listing_metadata_schemas.py",
+      "tests/preview_differential_corpus.py",
+      "tests/test_preview_signing_service.py",
+      "tests/test_preview_lifecycle.py",
+      "tests/test_marketplace_commitment_push.py"
+    ],
+    "exit_code": 0,
+    "stdout": "All checks passed!\n",
+    "stderr": ""
+  },
+  "mypy": {
+    "argv": [
+      "rtk",
+      "proxy",
+      "/tmp/s1716-c2c-r2/types/bin/mypy",
+      "--python-executable",
+      "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+      "--follow-imports=silent",
+      "--ignore-missing-imports",
+      "--check-untyped-defs",
+      "app/services/preview_lifecycle.py",
+      "app/services/marketplace_push_service.py",
+      "app/models/listing_metadata_schemas.py",
+      "tests/preview_differential_corpus.py",
+      "tests/test_preview_signing_service.py",
+      "tests/test_preview_lifecycle.py",
+      "tests/test_marketplace_commitment_push.py"
+    ],
+    "exit_code": 0,
+    "stdout": "Success: no issues found in 7 source files\n",
+    "stderr": ""
+  },
+  "diff-check": {
+    "argv": [
+      "rtk",
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "stdout": "\n",
+    "stderr": ""
+  }
+}

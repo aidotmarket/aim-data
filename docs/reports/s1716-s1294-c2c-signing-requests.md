@@ -112,3 +112,74 @@ DS-F4 corrected review extent: `app/models/dataset_commitment_schemas.py` contai
 DS-F2 release dependency: Chunk 2d must stop producing the legacy `approved_rows` request before this producer change ships, with an end-to-end seller click-through proving the replacement flow; no UI implementation or release is claimed by this fold.
 
 CC-NIT-1 I.b precondition: enforce URL verb versus signed `binding.decision` agreement before live signing/submission and test approve/withdraw mismatches; both current routes remain unavailable without state change or egress.
+
+### Findings and commits
+
+| Finding | Result | Commit |
+|---|---|---|
+| G1 | Added independent Python/Node Unicode and numeric differential corpus; original fixtures unchanged | `1cea7bd3d899cd62fa6e288071699f67ab475e54` |
+| G2 | Validate object identity/path, exact receipt URL and persisted browser origin before returning a retired receipt; migrate old journals without inventing origin | `7903abe8f833d007f5aa7c42c17991905ab64a2e` |
+| G3 / DS-F3 | Real marketplace payload uses the closed four-field column projection; test captures actual mocked HTTP JSON and excludes local marker/rows | `de1fc46efef1f6eb1ac579b846349bd6de4b4c5f` |
+| DS-F4 | Corrected review extent, 339 lines | `c79e5dac256c27b4afab510a993554197ca28a3f` |
+| DS-F2 | Recorded mandatory UI release dependency; implementation remains Chunk 2d | `81f49b6a3ca022efbed4845dd80e481ddb364017` |
+| CC-NIT-1 | Recorded I.b verb/decision validation precondition; live implementation carried | `e2e79a28e76d8b436b843680f875095476db12cc` |
+
+Carried, not silently closed:
+
+- **DS-F1:** finite `valid_until` and rotated/revoked envelope golden variants, plus explicit T ratification of null-to-omitted open-ended validity. Existing omission rule and fixtures are unchanged; this is larger than a one-line fold.
+- **DS-F2 / CC-NIT-1 implementation:** UI replacement/click-through and live route/decision agreement remain the documented 2d/I.b dependencies above.
+- **CC-NIT-2:** reconcile the conservative 2b manifest fixture's field names when the real manifest lands, and test its real B-shaped limit. No fixture shape is changed here.
+- **CC-NIT-3:** expose a public duplicate-rejecting parser if the legacy `_pairs` usage spreads; no unrelated parser refactor in this fold.
+- All T ratification and real owner-bound registration/backend/browser acceptance prerequisites remain open. These local tests do not admit release or live submission.
+
+### Differential corpus
+
+New file: [aim_preview_differential_v1.json](../../tests/fixtures/aim_preview_differential_v1.json), independently pinned by [its SHA manifest](../../tests/fixtures/aim_preview_differential_v1.sha256).
+
+SHA-256: `a6684a718f57d841af5e591de20b1f58fa6716d0cfbeea2955b477569c729e57`.
+
+Eight valid vectors each contain exact `signed_bytes_hex`, `signed_bytes_sha256`, public key and Ed25519 signature under the fixed synthetic `bytes(range(32))` test key. Python regenerates and compares the complete corpus, reconstructs each preimage through the production serializer/signing projection, and verifies every signature. Node independently reconstructs with `JSON.stringify`, UTF-16 key sorting and the same explicit 2a admission guards; it compares bytes and digests and verifies every signature. Any mismatch fails the test as a blocker. No mismatch was found.
+
+Unicode disclosure/envelope vectors exercise admitted NFC field references and complete descriptors: accented BMP, Japanese, supplementary-plane names, quotes, backslash, controls (NUL, backspace, tab, newline, form feed, carriage return, U+001F) and U+2028/U+2029. The signed cadence also exercises `2^53-1`. Generic `jcs` entries isolate primitive admission and are **not** new legal wire fields or complete approved requests: they pin Unicode object-key/string handling and 0, -1, ±(2^53-1). Closed metadata object keys remain the existing vocabulary; user field names are descriptor/selection array values.
+
+Six explicit `must_reject` vectors cover ±2^53 (`unsafe_integer`), positive/negative fractional floats (`invalid_metadata`), and both top-level and nested supplementary-plane/BMP key-order conflicts (`noncanonical_key_order`). Node compares code-point order against UTF-16 order and reproduces the 2a refusal; it does not silently sort a producer-refused object into acceptance. This refusal is narrower than general RFC8785 and preserves existing 2a bytes. All seven original preview fixture/pin files remain byte-identical, recorded in [unchanged-fixtures.json](s1716-c2c-r2-evidence/unchanged-fixtures.json). The original ten F2 goldens still independently verify all five signature shapes.
+
+The independently computed preimage digests are retained in [differential.json](s1716-c2c-r2-evidence/differential.json):
+
+| Vector | Python SHA-256 | Node SHA-256 |
+|---|---|---|
+| `unicode-disclosure` | `f883a11ccb2171e1888f5706411d5488a7993bd901cfd8ec9aa162063dc2cb7b` | `f883a11ccb2171e1888f5706411d5488a7993bd901cfd8ec9aa162063dc2cb7b` |
+| `unicode-envelope` | `4781c9417585dbd3c2bb83b53a921ad7bafa726c2b2c96aa8d445e0bbd98f314` | `4781c9417585dbd3c2bb83b53a921ad7bafa726c2b2c96aa8d445e0bbd98f314` |
+| `unicode-object-keys` | `5426657a2757aa128f8b8eed3996240ebce675e02efc76f8af195fcd7ee02904` | `5426657a2757aa128f8b8eed3996240ebce675e02efc76f8af195fcd7ee02904` |
+| `supplementary-order-admitted` | `394fd237fffd944fa0427d6af9c4cdff149ab5e61fc0595fcf3c51ff1a12ee02` | `394fd237fffd944fa0427d6af9c4cdff149ab5e61fc0595fcf3c51ff1a12ee02` |
+| `integer-0` | `23d7b286bd429460b92a2a1c21b6afc34110446c5034c17363fda363aa0a7c5d` | `23d7b286bd429460b92a2a1c21b6afc34110446c5034c17363fda363aa0a7c5d` |
+| `integer--1` | `f32d4354160a457984a54414824b84c196a5ddf65d6ee6c992317a5fb7a53b0c` | `f32d4354160a457984a54414824b84c196a5ddf65d6ee6c992317a5fb7a53b0c` |
+| `integer-9007199254740991` | `16c63bddb910905c4ee8abf36273baa20dba53020dbaf265da5936013ded185d` | `16c63bddb910905c4ee8abf36273baa20dba53020dbaf265da5936013ded185d` |
+| `integer--9007199254740991` | `4fcd1f34a0ba00a639b9a6a805c6952838e7f403c126290440bc71e64d01693a` | `4fcd1f34a0ba00a639b9a6a805c6952838e7f403c126290440bc71e64d01693a` |
+
+### R2 validation
+
+Final tested code/docs tip before this evidence-only commit: `e2e79a28e76d8b436b843680f875095476db12cc`.
+
+| Run | Passed | Failed / errors | Skipped |
+|---|---:|---:|---:|
+| Four 2c suites | 87 | 0 | 0 |
+| Affected baseline at `97da3f096787b6010ce914803fdd30978a9d5bfd` | 758 | 0 | 1 |
+| Affected R2 candidate | 845 | 0 | 1 |
+
+Affected coverage repeats the prior ten baseline/four new suite set and adds `test_dataset_merkle_service.py` and `test_dataset_canonicalization.py` for G1's underlying admission/serialization boundary. **Zero missing baseline test IDs, zero branch-only failures, zero additional skips.** Per-node outcomes, exact commands/cwds, complete logs, parity comparison and the non-loopback-blocking recorder are retained under [s1716-c2c-r2-evidence](s1716-c2c-r2-evidence/parity.json), separately SHA-pinned. The prior full-suite evidence above is historical R1 evidence, not a new R2 full-suite run.
+
+Ruff and mypy 1.20.2 pass all seven changed Python modules (application and tests); mypy uses the AIM Data interpreter for installed package discovery and `--follow-imports=silent --ignore-missing-imports --check-untyped-defs`. Exact argv/results are in [static-checks.json](s1716-c2c-r2-evidence/static-checks.json). No type ignores or test skips were added. `git diff --check` passes.
+
+G2 tests retain correct retry idempotency and reject changed path, host, scheme, query, fragment, origin and sample hash without new retirement calls. Both exact-origin and wildcard-CORS receipts are tested. Existing SQLite journals add a nullable origin column without altering saved candidate/request bytes; an already-retired legacy entry with no origin fails closed and requires operator reconciliation. The local publication runbook records this behavior. G3 drives `push_to_marketplace` through `_build_payload` and the real retry method to a mocked HTTP POST, asserts the exact safe column projection and absence of the local marker in serialized outbound JSON, and confirms local values are preserved.
+
+Executed commands (all shell invocations prefixed with `rtk`):
+
+```sh
+rtk proxy python /tmp/s1716-c2c-r2/run.py /private/tmp/s1716-c2c-baseline baseline
+rtk proxy python /tmp/s1716-c2c-r2/run.py /private/var/tmp/koskadeux/minimal-bridge-worktrees/b81bcd9475b9-38a004 branch
+rtk proxy python /tmp/s1716-c2c-r2/run.py /private/var/tmp/koskadeux/minimal-bridge-worktrees/b81bcd9475b9-38a004 four
+rtk proxy node tests/preview_differential_check.cjs
+```
+
+The retained [runner source](s1716-c2c-r2-evidence/run.py.txt) expands the exact pytest arguments and offline recorder configuration; each command JSON supplies the fully expanded suite list. No merge, production request, provider write, release or new-arm submission was performed.
