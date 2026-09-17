@@ -12,8 +12,9 @@ The Ed25519 private key lives on VZ backend only.
 import hashlib
 import logging
 import re
+import json
 from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -92,6 +93,23 @@ class DisclosureSnapshotProxyRequest(BaseModel):
     license: str = Field(..., min_length=1)
     approval_source: Literal["aim_channel"]
     source_publish_operation_id: str = Field(..., min_length=1)
+
+
+async def _closed_legacy_none(request: Request):
+    """Do not let FastAPI reflect rejected historical row payloads in 422s."""
+    try:
+        raw = await request.body()
+        if len(raw) > 262144:
+            raise ValueError
+        from app.services.dataset_canonicalization import _pairs
+        from app.models.dataset_commitment_schemas import reject_content
+        data = json.loads(raw, object_pairs_hook=_pairs)
+        if data.get("sample_decision") != "none" or data.get("approved_sample") is not None:
+            raise ValueError
+        reject_content(data.get("approved_fields"))
+        return DisclosureSnapshotProxyRequest.model_validate(data)
+    except Exception:
+        raise HTTPException(status_code=422, detail="legacy_sample_unavailable") from None
 
 
 class DisclosureSnapshotProxyResponse(BaseModel):
@@ -361,7 +379,6 @@ def _persist_disclosure_decision(
     last_error: Optional[str] = None,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
-    approved_sample = None  # Historical row-bearing retries are never reconstructed.
     existing = record.metadata.get("disclosure_decision")
     created_at = existing.get("created_at") if isinstance(existing, dict) else None
     decision = {
@@ -371,17 +388,15 @@ def _persist_disclosure_decision(
         "disclosure_version": disclosure_version,
         "approved_fields_hash": _payload_hash(body.approved_fields),
         "sample_decision": body.sample_decision,
-        "approved_sample_hash": _payload_hash(approved_sample) if approved_sample else None,
-        "approved_sample_row_count": len(approved_sample["rows"]) if approved_sample else 0,
-        "approved_sample_columns": approved_sample["columns"] if approved_sample else [],
+        "approved_sample_hash": None,
+        "approved_sample_row_count": 0,
+        "approved_sample_columns": [],
         "ai_training_notification_text": body.ai_training_notification_text,
         "license": body.license,
         "created_at": created_at or now,
         "updated_at": now,
         "last_error": last_error,
     }
-    if status == "snapshot_pending" and approved_sample:
-        decision["approved_sample_replay"] = approved_sample
     if status == "snapshot_pending":
         decision["approved_payload_replay"] = body.model_dump(exclude={"dataset_id"}, exclude_none=False)
     record.metadata["disclosure_decision"] = decision
@@ -423,7 +438,7 @@ async def publish_to_marketplace(
 )
 async def create_disclosure_snapshot(
     listing_id: str,
-    body: DisclosureSnapshotProxyRequest,
+    body: Annotated[DisclosureSnapshotProxyRequest, Depends(_closed_legacy_none)],
     request: Request,
     user=Depends(get_current_user),
     processing: ProcessingService = Depends(get_processing_service),

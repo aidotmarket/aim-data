@@ -406,6 +406,7 @@ def activate_preview_install_rotation(crypto, *, evidence, install_id, seller_id
         if not pending.exists() or staged.is_symlink():
             raise ValueError
         stage = DeviceCrypto(str(staged), crypto._passphrase.decode())
+        stage._pbkdf2_iterations = crypto._pbkdf2_iterations
         keys = stage._load_keys(stage._read_keystore())
         check_evidence(evidence, install_id=install_id, seller_id=seller_id,
                        raw_key=public_bytes(keys[1]), now=now, max_age=max_age)
@@ -420,7 +421,7 @@ async def revoke_preview_install(crypto, *, install_id, access_token):
     from app.services.preview_signing_service import SigningError
     pending = crypto.keystore_path.with_suffix(".rotation-pending")
     # Revocation uncertainty must prevent any additional local signatures.
-    fd = os.open(pending, os.O_CREAT | os.O_WRONLY, 0o600)
+    fd = os.open(pending, os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
     os.close(fd)
     try:
         if not access_token:

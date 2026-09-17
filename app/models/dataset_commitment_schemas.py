@@ -2,6 +2,15 @@
 
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from typing import Annotated
+from pydantic import AfterValidator, BeforeValidator
+from app.services.dataset_merkle_service import (
+    canonical_rfc3339_utc,
+    decode_base64url,
+    canonical_json_bytes,
+)
+from uuid import UUID
+
 
 SAFE_INTEGER = (1 << 53) - 1
 
@@ -108,12 +117,6 @@ class CommitmentProgress(ClosedModel):
 
 # Chunk T wire fields; safe-integer admission is intentionally stricter than
 # Chunk 0's signed-63-bit storage range (2a controller decision).
-from typing import Annotated
-from pydantic import AfterValidator, BeforeValidator
-from app.services.dataset_merkle_service import (
-    canonical_rfc3339_utc, decode_base64url, canonical_json_bytes,
-)
-from uuid import UUID
 
 
 def uuid_text(value):
@@ -138,11 +141,26 @@ def b64_size(value, size):
 
 UUIDText = Annotated[str, BeforeValidator(uuid_text)]
 Timestamp = Annotated[str, BeforeValidator(timestamp_text)]
-Code = Annotated[str, Field(min_length=1, max_length=255, pattern=r"^[A-Za-z0-9._:-]+$")]
-Digest = Annotated[str, Field(min_length=43, max_length=43), AfterValidator(lambda v: b64_size(v, 32))]
-Signature = Annotated[str, Field(min_length=86, max_length=86), AfterValidator(lambda v: b64_size(v, 64))]
-HexDigest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$", min_length=64, max_length=64)]
-SignerReference = Annotated[str, Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{64}$", min_length=101, max_length=101)]
+Code = Annotated[
+    str, Field(min_length=1, max_length=255, pattern=r"^[A-Za-z0-9._:-]+$")
+]
+Digest = Annotated[
+    str, Field(min_length=43, max_length=43), AfterValidator(lambda v: b64_size(v, 32))
+]
+Signature = Annotated[
+    str, Field(min_length=86, max_length=86), AfterValidator(lambda v: b64_size(v, 64))
+]
+HexDigest = Annotated[
+    str, Field(pattern=r"^[0-9a-f]{64}$", min_length=64, max_length=64)
+]
+SignerReference = Annotated[
+    str,
+    Field(
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{64}$",
+        min_length=101,
+        max_length=101,
+    ),
+]
 
 
 def reject_content(value, depth=0):
@@ -152,11 +170,28 @@ def reject_content(value, depth=0):
         value = value.model_dump()
     if isinstance(value, dict):
         for key, child in value.items():
-            if not isinstance(key, str) or key.lower().startswith("raw_") or key.lower() in {
-                "row", "rows", "sample_values", "approved_sample", "approved_rows",
-                "rights_basis_text", "rights_prose", "scan_notes", "notes", "reason_text",
-                "source_path", "credentials", "token", "attachments", "content",
-            }:
+            if (
+                not isinstance(key, str)
+                or key.lower().startswith("raw_")
+                or key.lower()
+                in {
+                    "row",
+                    "rows",
+                    "sample_values",
+                    "approved_sample",
+                    "approved_rows",
+                    "rights_basis_text",
+                    "rights_prose",
+                    "scan_notes",
+                    "notes",
+                    "reason_text",
+                    "source_path",
+                    "credentials",
+                    "token",
+                    "attachments",
+                    "content",
+                }
+            ):
                 raise ValueError("content_carrier")
             reject_content(child, depth + 1)
     elif isinstance(value, (list, tuple)):
@@ -186,7 +221,9 @@ class DatasetPreviewProofContract(WireModel):
     package_profile: Literal["aim-preview-package-v1", "aim-preview-package-v2"]
     package_byte_ceiling: int = Field(gt=0, le=1048576)
     scan_policy: Literal["aim-preview-policy-v1"]
-    scan_policy_version: Annotated[str, Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")]
+    scan_policy_version: Annotated[
+        str, Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
+    ]
     scan_verdict: Literal["passed"]
     scanned_at: Timestamp
     sampled_leaf_list_digest: Digest
@@ -198,14 +235,21 @@ class DatasetPreviewProofContract(WireModel):
     @classmethod
     def origin(cls, value):
         from app.services.preview_origin_service import validate_url
+
         validate_url(value)
         return value
 
     @model_validator(mode="after")
     def positions(self):
-        if self.leaf_index >= self.tree_size or self.duplicate_ordinal >= self.tree_size:
+        if (
+            self.leaf_index >= self.tree_size
+            or self.duplicate_ordinal >= self.tree_size
+        ):
             raise ValueError("invalid_inclusion_proof")
-        if self.package_profile == "aim-preview-package-v1" and self.package_byte_ceiling > 131072:
+        if (
+            self.package_profile == "aim-preview-package-v1"
+            and self.package_byte_ceiling > 131072
+        ):
             raise ValueError("package_limit")
         return self
 
@@ -225,15 +269,23 @@ class DatasetCommitmentContract(WireModel):
     signature_algorithm: Literal["ed25519"] = "ed25519"
     seller_signature: Signature
     signed_at: Timestamp
-    proofs: list[DatasetPreviewProofContract] = Field(default_factory=list, max_length=100)
+    proofs: list[DatasetPreviewProofContract] = Field(
+        default_factory=list, max_length=100
+    )
 
     @model_validator(mode="after")
     def matching_proofs(self):
-        if len({p.proof_id for p in self.proofs}) != len(self.proofs) or any(p.tree_size != self.leaf_count for p in self.proofs):
+        if len({p.proof_id for p in self.proofs}) != len(self.proofs) or any(
+            p.tree_size != self.leaf_count for p in self.proofs
+        ):
             raise ValueError("proof_mismatch")
         if len({p.package_profile for p in self.proofs}) > 1:
             raise ValueError("mixed_profiles")
-        if self.proofs and self.proofs[0].package_profile == "aim-preview-package-v1" and len(self.proofs) > 50:
+        if (
+            self.proofs
+            and self.proofs[0].package_profile == "aim-preview-package-v1"
+            and len(self.proofs) > 50
+        ):
             raise ValueError("proof_limit")
         if len(canonical_json_bytes([p.model_dump() for p in self.proofs])) > 262144:
             raise ValueError("manifest_limit")
@@ -241,7 +293,9 @@ class DatasetCommitmentContract(WireModel):
 
 
 class TransparencyCheckpointContract(WireModel):
-    log_id: Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9._:-]+$")]
+    log_id: Annotated[
+        str, Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9._:-]+$")
+    ]
     tree_size: int = Field(ge=1, le=SAFE_INTEGER)
     root_hash: Digest
     checkpoint_at: Timestamp
