@@ -219,3 +219,82 @@ def test_directory_member_unicode_path(tmp_path, monkeypatch):
                             file_type='directory', root_path=str(tmp_path))
     member = DatasetMember(dataset_id=dataset.id, index=0, relative_path='é.csv', detected_type='csv')
     assert Path(resolver.resolve_member_path(dataset, member)).read_bytes() == b'original'
+
+
+def test_directory_golden_vectors_and_content_invariants():
+    import json, hashlib, copy
+    from app.services.dataset_manifest import build_manifest, directory_locator_bytes, directory_content_sha256
+    fixture = json.loads((Path(__file__).parent / "fixtures/multi_file_datasets/directory_verification_golden.json").read_text())
+    assert hashlib.sha256((Path(__file__).parent / "fixtures/multi_file_datasets/directory_verification_golden.json").read_bytes()).hexdigest() == "bec2796490db4734cba66aeee9b60ea7490e20fda61966910a54083b363429c9"
+    rows = fixture["members"]
+    key = bytes.fromhex(fixture["commitment_key_hex"])
+    assert build_manifest(rows)["manifest_hash"] == fixture["manifest_hash"]
+    locator = directory_locator_bytes(fixture["root_path"], fixture["manifest_hash"])
+    assert locator.hex() == fixture["locator_preimage_hex"]
+    import hmac
+    assert hmac.new(key, locator, hashlib.sha256).hexdigest() == fixture["artifact_locator_commitment"]
+    assert directory_content_sha256(rows) == fixture["content_sha256"]
+    def ids(members, root=fixture["root_path"], commitment_key=key):
+        return {m["relative_path"]: object_commitment(commitment_key,
+            b"local_directory_object\0" + os.fsencode(root),
+            "member\0" + m["relative_path"] + "\0" + m["sha256"])
+            for m in members if m["role"] == "data"}
+    assert ids(rows) == fixture["object_ids"]
+    changed = copy.deepcopy(rows)
+    changed.reverse()
+    for i, row in enumerate(changed):
+        row["index"] = i
+        if row["role"] != "data": row["sha256"] = "a" * 64
+        else: row["is_sample"] = True
+    assert directory_content_sha256(changed) == directory_content_sha256(rows)
+    assert ids(changed) == ids(rows)
+    assert build_manifest(changed)["manifest_hash"] != fixture["manifest_hash"]
+    swapped = copy.deepcopy(rows)
+    for field in ("size_bytes", "sha256"):
+        swapped[0][field], swapped[1][field] = swapped[1][field], swapped[0][field]
+    assert directory_content_sha256(swapped) != directory_content_sha256(rows)
+    assert all(ids(swapped)[m["relative_path"]] != ids(rows)[m["relative_path"]] for m in rows[:2])
+    assert set(ids(rows, commitment_key=b"d"*32).values()).isdisjoint(ids(rows).values())
+    assert set(ids(rows, root="/moved/root").values()).isdisjoint(ids(rows).values())
+    changed = copy.deepcopy(rows); changed[0]["role"] = "other"
+    assert directory_content_sha256(changed) != directory_content_sha256(rows)
+
+
+def test_retained_directory_composite_resolution_reupload_and_parity(tmp_path, monkeypatch):
+    import json
+    from sqlmodel import SQLModel
+    from app.core.database import get_engine
+    from app.models.published_manifest import PublishedManifest
+    from app.services import data_verification_local_service as local
+    from app.services.dataset_manifest import build_manifest
+    SQLModel.metadata.create_all(get_engine())
+    monkeypatch.setattr(resolver.settings, "multi_file_datasets_enabled", True)
+    rows = json.loads((Path(__file__).parent / "fixtures/multi_file_datasets/directory_verification_golden.json").read_text())["members"]
+    manifest_hash = build_manifest(rows)["manifest_hash"]
+    listing, other_listing, dataset_id, other_id, v1, v2, other_v = (str(uuid4()) for _ in range(7))
+    root1, root2 = tmp_path / "old", tmp_path / "reuploaded"
+    root1.mkdir(); root2.mkdir()
+    _dataset(listing_id=listing, dataset_id=dataset_id, filename="old")
+    _dataset(listing_id=other_listing, dataset_id=other_id, filename="other")
+    with get_session_context() as session:
+        for version, ds, root in ((v1,dataset_id,root1),(v2,dataset_id,root2),(other_v,other_id,root2)):
+            session.add(PublishedManifest(listing_version_id=version, manifest_hash=manifest_hash,
+                dataset_id=ds, root_path=str(root), members=rows))
+        live = session.get(DatasetRecord, dataset_id)
+        live.root_path = str(root2); live.file_type = "directory"
+        session.add(live); session.commit()
+    old = local.resolve_source_artifact(listing, v1, manifest_hash)
+    current = local.resolve_source_artifact(listing, v2, manifest_hash)
+    other = local.resolve_source_artifact(other_listing, other_v, manifest_hash)
+    assert old.root_path == str(root1) and current.root_path == other.root_path == str(root2)
+    assert old.resolved_object_count() == 3
+    # Same hash alone cannot establish order/scan parity; the composite is authoritative.
+    def binding(artifact): return artifact.listing_version_id, artifact.manifest_hash
+    assert binding(old) == binding(local.resolve_source_artifact(listing, v1, manifest_hash))
+    assert binding(old) != binding(current)
+    assert old.canonical_locator_bytes() != current.canonical_locator_bytes()
+    for args in [(listing, v1, "f"*64), (listing, str(uuid4()), manifest_hash), (other_listing, v1, manifest_hash)]:
+        with pytest.raises(resolver.ArtifactResolutionError): local.resolve_source_artifact(*args)
+    monkeypatch.setattr(resolver.settings, "multi_file_datasets_enabled", False)
+    with pytest.raises(resolver.ArtifactResolutionError, match="disabled"):
+        local.resolve_source_artifact(listing, v1, manifest_hash)

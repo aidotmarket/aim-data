@@ -1301,7 +1301,7 @@ async def test_two_independent_starts_use_each_responses_key(tmp_path, monkeypat
     assert selected[0] != selected[1]
 
 
-def test_d_bytes_local_probe_uses_original_member(tmp_path, monkeypatch):
+def test_directory_probe_refuses_unpublished_live_member(tmp_path, monkeypatch):
     from uuid import uuid4
     from app.models.dataset import DatasetMember
     from app.config import settings
@@ -1319,6 +1319,6 @@ def test_d_bytes_local_probe_uses_original_member(tmp_path, monkeypatch):
         session.commit(); session.refresh(dataset)
         captured = []
         monkeypatch.setattr(local_service, 'probe_object_count', lambda name, payload: captured.append((name, payload)) or 1)
-        probe, _ = local_service._probe(dataset, False)
-        assert probe.source_reachable
-        assert captured == [('data.csv', original.read_bytes())]
+        with pytest.raises(local_service.DataVerificationLocalError, match='unavailable'):
+            local_service._probe(dataset, False)
+        assert captured == []

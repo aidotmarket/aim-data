@@ -6,6 +6,7 @@ serializer, which implements python-json-sort-compact-v1 without that restrictio
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import unicodedata
 from collections.abc import Mapping
@@ -67,3 +68,20 @@ def build_manifest(members) -> dict:
         "total_data_bytes": sum(r["size_bytes"] for r in rows if r["role"] == "data"),
         "manifest_hash": hashlib.sha256(canonical_json_bytes(rows)).hexdigest(),
     }
+
+
+def directory_locator_bytes(root_path: str, manifest_hash: str) -> bytes:
+    """S1590 §1.3(a), local HMAC input only; never transmit the locator."""
+    return b"local_directory\0" + os.fsencode(os.path.realpath(root_path)) + b"\0" + manifest_hash.encode("ascii")
+
+
+def directory_content_sha256(members) -> str:
+    """S1590 §1.3(c). Caller must verify all data-member bytes before use."""
+    digest = hashlib.sha256()
+    for member in sorted((m for m in members if m["role"] == "data"), key=lambda m: m["relative_path"]):
+        path = member["relative_path"].encode("utf-8")
+        digest.update(len(path).to_bytes(8, "big"))
+        digest.update(path)
+        digest.update(member["size_bytes"].to_bytes(8, "big"))
+        digest.update(bytes.fromhex(member["sha256"]))
+    return digest.hexdigest()
