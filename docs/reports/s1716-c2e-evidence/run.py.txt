@@ -1,0 +1,13 @@
+import json, os, subprocess, sys, platform, tempfile
+from pathlib import Path
+wd=Path(sys.argv[1]); mode=sys.argv[2]; out=Path('/var/tmp/s1716-c2e-evidence')
+files=sys.argv[3:] or ['tests']
+cmd=['/Users/max/Projects/ai-market/aim-data/.venv/bin/python','-m','pytest',*files,'-p','results_plugin','--continue-on-collection-errors','-q','--tb=short']
+isolation=Path(tempfile.mkdtemp(prefix='s1716-c2e-tests-'))
+env=dict(os.environ,DATABASE_URL='sqlite:///'+str(isolation/'test.db'),VECTORAIZ_DATA_DIRECTORY=str(isolation),VECTORAIZ_UPLOAD_DIRECTORY=str(isolation/'uploads'),VECTORAIZ_PROCESSED_DIRECTORY=str(isolation/'processed'),PYTHONPATH=str(out)+':.',PREVIEW_TEST_RESULTS=str(out/(mode+'-nodeids.json')))
+(out/(mode+'-command.json')).write_text(json.dumps({'cwd':str(wd),'argv':cmd,'platform':platform.platform()},indent=2))
+with (out/(mode+'.log')).open('w') as log:
+ result=subprocess.run(cmd,cwd=wd,env=env,stdout=log,stderr=subprocess.STDOUT)
+print(mode,'exit',result.returncode)
+print((out/(mode+'.log')).read_text()[-2000:])
+sys.exit(result.returncode)

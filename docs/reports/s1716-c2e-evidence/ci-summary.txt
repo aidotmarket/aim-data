@@ -1,0 +1,4 @@
+2026-09-17T16:19:59.8843881Z 739 passed, 1 skipped, 28 warnings in 40.23s
+2026-09-17T16:20:11.9105590Z Synthetic producer bundle and row-egress checks passed; no live owner/HTTPS proof.
+2026-09-17T16:20:25.9192421Z       Tests  37 passed (37)
+2026-09-17T16:20:34.9816457Z ✓ built in 8.61s

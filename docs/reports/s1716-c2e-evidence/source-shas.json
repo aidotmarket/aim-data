@@ -1,0 +1,20 @@
+{
+  "base_sha": "896b6157854a237e6497c0fbd6387244d845b2f4",
+  "code_milestone": "5d5d4c06da1d4cb92381aab625613876f2c9f0a6",
+  "files": {
+    ".github/workflows/preview-contract-parity.yml": "00cace021827fbd69f26a1e882919d2879363a476a7d37216dfbc768c377ee4a",
+    "Dockerfile.customer": "e463c5614a8cdfabd4c44ff06d0b68a54c339eca051e398a6769a71a3aea3824",
+    "app/routers/marketplace_publish.py": "b923262114f6312ebfdc09d36380b1447d61ea048f69d7d471e9fde30534dcd5",
+    "requirements.txt": "db0a584c2d5614e03f51a680dcda94fcd5696dd12a8c4b8d37a784439a29ee13",
+    "scripts/build_preview_producer_evidence.py": "6f19ce49ab605bfe78ec7ad026fc8870475ce9a94554ba8562378c810a134cb9",
+    "scripts/check_preview_fixture_parity.py": "33a21a741aecc58eb6ecd7283ef4df7ac5c4a902174ea4fc26e469fc4b9aa5e8",
+    "tests/fixtures/preview-fixture-manifest.json": "2e4a5ac743930898c1cb5b37a08bba54e7f65f31c81fa11aa525345b6ff0f01c",
+    "tests/fixtures/preview-producer-synthetic-shas.json": "2dad4f86b0307ce7ae030751d4d4a97de52f7a4fb6d763ffb08bda34eaf330e5",
+    "tests/run_preview_producer_synthetic.py": "cd8274da19a49216d3297122c792bba5d1b737f58cc532b92d3612e6eee240c8",
+    "tests/test_dataset_canonicalization.py": "ebe5d4b981fa7aaf681cfbc912ca012eee755f1ac0cfc739f6849bf8273568f0",
+    "tests/test_preview_build_routes.py": "52fca859eb668e5bfc310ca571791f24f31bf2d126a68490059b60441c5242c8",
+    "tests/test_preview_fixture_parity.py": "7106932396da1cd246cdfab4cd9436fdf29ef9860b38f9865ec9a5e5f639dcd5",
+    "tests/test_preview_producer_evidence.py": "a90146d198cbaf5b35487b6f6e765e46d8a94859b2a63614daf8b0acaaf1c7e6"
+  },
+  "verification_configuration_sha": "36df6cce727bf46086ede31e93e44525a39cf3e7"
+}

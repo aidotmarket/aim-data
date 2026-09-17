@@ -1,0 +1,158 @@
+{
+  "conclusion": "success",
+  "headSha": "36df6cce727bf46086ede31e93e44525a39cf3e7",
+  "jobs": [
+    {
+      "completedAt": "2026-09-17T16:20:37Z",
+      "conclusion": "success",
+      "databaseId": 105285031781,
+      "name": "producer-contract",
+      "startedAt": "2026-09-17T16:17:24Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-09-17T16:17:26Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-09-17T16:17:25Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:17:27Z",
+          "conclusion": "success",
+          "name": "Run actions/checkout@v4",
+          "number": 2,
+          "startedAt": "2026-09-17T16:17:26Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:17:47Z",
+          "conclusion": "success",
+          "name": "Run actions/setup-python@v5",
+          "number": 3,
+          "startedAt": "2026-09-17T16:17:27Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:17:50Z",
+          "conclusion": "success",
+          "name": "Run actions/setup-node@v4",
+          "number": 4,
+          "startedAt": "2026-09-17T16:17:47Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:17:50Z",
+          "conclusion": "success",
+          "name": "Prepare isolated test storage",
+          "number": 5,
+          "startedAt": "2026-09-17T16:17:50Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:19:18Z",
+          "conclusion": "success",
+          "name": "Install producer and test dependencies",
+          "number": 6,
+          "startedAt": "2026-09-17T16:17:50Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:19:18Z",
+          "conclusion": "success",
+          "name": "Check pinned fixture bytes",
+          "number": 7,
+          "startedAt": "2026-09-17T16:19:18Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:19:18Z",
+          "conclusion": "success",
+          "name": "Independent Node differential verifier",
+          "number": 8,
+          "startedAt": "2026-09-17T16:19:18Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:20:01Z",
+          "conclusion": "success",
+          "name": "Focused 2a through 2e backend contracts",
+          "number": 9,
+          "startedAt": "2026-09-17T16:19:18Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:20:12Z",
+          "conclusion": "success",
+          "name": "Build synthetic producer bundle through real services",
+          "number": 10,
+          "startedAt": "2026-09-17T16:20:01Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:20:35Z",
+          "conclusion": "success",
+          "name": "Focused 2d browser contracts",
+          "number": 11,
+          "startedAt": "2026-09-17T16:20:12Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:20:35Z",
+          "conclusion": "success",
+          "name": "Retain synthetic metadata receipts",
+          "number": 12,
+          "startedAt": "2026-09-17T16:20:35Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:20:35Z",
+          "conclusion": "success",
+          "name": "Post Run actions/setup-node@v4",
+          "number": 22,
+          "startedAt": "2026-09-17T16:20:35Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:20:36Z",
+          "conclusion": "success",
+          "name": "Post Run actions/setup-python@v5",
+          "number": 23,
+          "startedAt": "2026-09-17T16:20:35Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:20:36Z",
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@v4",
+          "number": 24,
+          "startedAt": "2026-09-17T16:20:36Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-17T16:20:36Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 25,
+          "startedAt": "2026-09-17T16:20:36Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/aidotmarket/aim-data/actions/runs/35245647609/job/105285031781"
+    }
+  ],
+  "status": "completed",
+  "url": "https://github.com/aidotmarket/aim-data/actions/runs/35245647609",
+  "notice": "Passed at the final producer/workflow/fixture SHA. Following commit packages documentation and evidence only.",
+  "focused_pytest": {
+    "passed": 739,
+    "skipped": 1,
+    "skip_reason": "Existing optional isolated-pinned-import-target subprocess case; actual pinned requirements are exercised by the strict standalone synthetic run."
+  },
+  "focused_vitest": {
+    "passed": 37
+  },
+  "synthetic_reference": "exact SHA match",
+  "production_build": "passed"
+}
