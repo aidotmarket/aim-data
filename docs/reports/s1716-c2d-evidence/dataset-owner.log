@@ -1,0 +1,38 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________________ test_missing_ownership_and_declarations ____________________
+tests/test_preview_build_routes.py:148: in test_missing_ownership_and_declarations
+    assert (
+E   AssertionError: assert 422 == 403
+E    +  where 422 = <Response [422 Unprocessable Entity]>.status_code
+E    +    where <Response [422 Unprocessable Entity]> = <bound method TestClient.post of <starlette.testclient.TestClient object at 0x1711eed50>>('/marketplace/preview-builds', json={'dataset_id': 'dataset'})
+E    +      where <bound method TestClient.post of <starlette.testclient.TestClient object at 0x1711eed50>> = <starlette.testclient.TestClient object at 0x1711eed50>.post
+=============================== warnings summary ===============================
+app/config.py:100
+  /private/var/tmp/koskadeux/minimal-bridge-worktrees/25200cd439ec-9265fd/app/config.py:100: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Settings(BaseSettings):
+
+../../../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/starlette/formparsers.py:10
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/starlette/formparsers.py:10: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+../../../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/typer/completion.py:122
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/typer/completion.py:122: DeprecationWarning: 'BaseCommand' is deprecated and will be removed in Click 9.0. Use 'Command' instead.
+    cli: click.BaseCommand,
+
+../../../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/spacy/cli/_util.py:23
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/spacy/cli/_util.py:23: DeprecationWarning: Importing 'parser.split_arg_string' is deprecated, it will only be available in 'shell_completion' in Click 9.0.
+    from click.parser import split_arg_string
+
+../../../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/weasel/util/config.py:8
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/weasel/util/config.py:8: DeprecationWarning: Importing 'parser.split_arg_string' is deprecated, it will only be available in 'shell_completion' in Click 9.0.
+    from click.parser import split_arg_string
+
+tests/test_preview_build_routes.py::test_missing_ownership_and_declarations
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/httpx/_client.py:690: DeprecationWarning: The 'app' shortcut is now deprecated. Use the explicit style 'transport=WSGITransport(app=...)' instead.
+    warnings.warn(message, DeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_preview_build_routes.py::test_missing_ownership_and_declarations
+1 failed, 6 warnings in 3.65s

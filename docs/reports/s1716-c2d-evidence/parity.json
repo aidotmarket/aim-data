@@ -1,0 +1,18 @@
+{
+  "baseline": {
+    "skipped": 34,
+    "passed": 2888,
+    "failed": 134
+  },
+  "branch": {
+    "skipped": 34,
+    "passed": 2899,
+    "failed": 133
+  },
+  "branch_only_failures": [],
+  "missing_baseline_nodeids": [],
+  "additional_skips": [],
+  "baseline_failed_now_passed": [
+    "tests/test_auth_integration.py::test_valid_api_key"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "cwd": "/private/var/tmp/koskadeux/minimal-bridge-worktrees/25200cd439ec-9265fd",
+  "argv": [
+    "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_dataset_canonicalization.py",
+    "tests/test_dataset_merkle_service.py",
+    "tests/test_preview_content_policy.py",
+    "tests/test_preview_package_service.py",
+    "tests/test_preview_origin_service.py",
+    "tests/test_preview_signing_service.py",
+    "tests/test_preview_lifecycle.py",
+    "tests/test_preview_disclosure_schemas.py",
+    "tests/test_marketplace_commitment_push.py",
+    "tests/test_vz_publish_proxy.py",
+    "tests/test_dataset_publish_signed_proxy.py",
+    "tests/test_s804_disclosure_dataset_detail.py",
+    "tests/test_processing_s3_provenance.py",
+    "tests/test_batch_upload.py",
+    "tests/test_upload.py",
+    "tests/test_preview_build_routes.py",
+    "-p",
+    "results_plugin",
+    "--continue-on-collection-errors",
+    "-q",
+    "--tb=short"
+  ],
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O"
+}

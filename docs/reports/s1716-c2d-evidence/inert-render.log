@@ -1,0 +1,615 @@
+
+> vectoraiz-frontend@0.0.0 test
+> vitest run --run src/components/CommitmentPreviewBuilder.test.tsx -t renders hostile cells
+
+
+ RUN  v3.2.4 /private/var/tmp/koskadeux/minimal-bridge-worktrees/25200cd439ec-9265fd/frontend
+
+ ❯ src/components/CommitmentPreviewBuilder.test.tsx (7 tests | 1 failed | 6 skipped) 49ms
+   ↓ defaults to no sample and never creates a job on mount
+   × renders hostile cells as inert text with no executable elements or cell links 48ms
+     → Unable to find an element with the text: <script>alert(1)</script>. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<section[39m
+      [33maria-label[39m=[32m"Public sample"[39m
+      [33mclass[39m=[32m"space-y-4 rounded-md border p-4"[39m
+    [36m>[39m
+      [36m<h3[39m
+        [33mclass[39m=[32m"font-medium"[39m
+        [33mtabindex[39m=[32m"-1"[39m
+      [36m>[39m
+        [0mPublic sample[0m
+      [36m</h3>[39m
+      [36m<p>[39m
+        [0mSeller-selected preview. Membership does not establish quality, representativeness, legality, compliance, identity or external completeness.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+      [36m>[39m
+        [0mRows are reviewed on this machine. No sample is the default. A prepared preview becomes public only at your chosen publication location.[0m
+      [36m</p>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-wrap gap-2"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mNo sample[0m
+        [36m</button>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mCancel preview build[0m
+        [36m</button>[39m
+      [36m</div>[39m
+      [36m<p>[39m
+        [0mSource version: [0m
+        [36m<code>[39m
+          [0maaaaaaaaaaaa[0m
+        [36m</code>[39m
+      [36m</p>[39m
+      [36m<p[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [0mready[0m
+        [0m: [0m
+        [0m3[0m
+        [0m records · [0m
+        [0m120[0m
+        [0m canonical bytes[0m
+      [36m</p>[39m
+      [36m<h4[39m
+        [33mclass[39m=[32m"font-medium"[39m
+      [36m>[39m
+        [0mSelect complete records[0m
+      [36m</h4>[39m
+      [36m<p>[39m
+        [0mAll fields of every selected record will be disclosed in the package, including fields hidden from display. Display columns do not redact records.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [0mBudget: [0m
+        [0m0[0m
+        [0m/100 rows · [0m
+        [0m1[0m
+        [0m/25 complete-row fields · [0m
+        [0m0[0m
+        [0m/250000 canonical bytes[0m
+      [36m</p>[39m
+      [36m<fieldset[39m
+        [33mclass[39m=[32m"space-y-2"[39m
+      [36m>[39m
+        [36m<legend>[39m
+          [0mDisplay columns[0m
+        [36m</legend>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"mr-4 inline-flex items-center gap-2"[39m
+        [36m>[39m
+          [36m<input[39m
+            [33mchecked[39m=[32m""[39m
+            [33mtype[39m=[32m"checkbox"[39m
+          [36m/>[39m
+          [0mvalue[0m
+        [36m</label>[39m
+      [36m</fieldset>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"overflow-x-auto"[39m
+      [36m>[39m
+        [36m<table[39m
+          [33mclass[39m=[32m"w-full text-sm"[39m
+        [36m>[39m
+          [36m<caption[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mLocal complete rows in immutable leaf order[0m
+          [36m</caption>[39m
+          [36m<thead>[39m
+            [36m<tr>[39m
+              [36m<th[39m
+                [33mscope[39m=[32m"col"[39m
+              [36m>[39m
+                [0mSelect leaf[0m
+              [36m</th>[39m
+              [36m<th[39m
+                [33mscope[39m=[32m"col"[39m
+              [36m>[39m
+                [0mvalue[0m
+              [36m</th>[39m
+              [36m<th[39m
+                [33mscope[39m=[32m"col"[39m
+              [36m>[39m
+                [0mEligibility[0m
+              [36m</th>[39m
+            [36m</tr>[39m
+          [36m</thead>[39m
+          [36m<tbody>[39m
+            [36m<tr>[39m
+              [36m<td>[39m
+                [36m<label>[39m
+                  [36m<input[39m
+                    [33maria-label[39m=[32m"Select leaf 0"[39m
+                    [33mtype[39m=[32m"checkbox"[39m
+                  [36m/>[39m
+                  [0m [0m
+                  [0m0[0m
+                [36m</label>[39m
+              [36m</td>[39m
+              [36m<td[39m
+                [33mclass[39m=[32m"max-w-xs break-words whitespace-pre-wrap"[39m
+                [33mdata-preview-cell[39m=[32m"true"[39m
+              [36m>[39m
+                [36m<span />[39m
+              [36m</td>[39m
+              [36m<td>[39m
+                [0mEligible for local scan[0m
+              [36m</td>[39m
+            [36m</tr>[39m
+            [36m<tr>[39m
+              [36m<td>[39m
+                [36m<label>[39m
+                  [36m<input[39m
+                    [33maria-label[39m=[32m"Select leaf 1"[39m
+                    [33mtype[39m=[32m"checkbox"[39m
+                  [36m/>[39m
+                  [0m [0m
+                  [0m1[0m
+                [36m</label>[39m
+              [36m</td>[39m
+              [36m<td[39m
+                [33mclass[39m=[32m"max-w-xs break-words whitespace-pre-wrap"[39m
+                [33mdata-preview-cell[39m=[32m"true"[39m
+              [36m>[39m
+                [36m<span>[39m
+                  [0m=SUM(1,2)[0m
+                [36m</span>[39m
+              [36m</td>[39m
+              [36m<td>[39m
+                [0mEligible for local scan[0m
+              [36m</td>[39m
+            [36m</tr>[39m
+            [36m<tr>[39m
+              [36m<td>[39m
+                [36m<label>[39m
+                  [36m<input[39m
+                    [33maria-label[39m=[32m"Select leaf 2"[39m
+                    [33mdisabled[39m=[32m""[39m
+                    [33mtype[39m=[32m"checkbox"[39m
+                  [36m/>[39m
+                  [0m [0m
+                  [0m2[0m
+                [36m</label>[39m
+              [36m</td>[39m
+              [36m<td[39m
+                [33mclass[39m=[32m"max-w-xs break-words whitespace-pre-wrap"[39m
+                [33mdata-preview-cell[39m=[32m"true"[39m
+              [36m>[39m
+                [36m<span>[39m
+                  [0mhttps://hostile.example[0m
+                [36m</span>[39m
+              [36m</td>[39m
+              [36m<td>[39m
+                [0murl[0m
+              [36m</td>[39m
+            [36m</tr>[39m
+          [36m</tbody>[39m
+        [36m</table>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex gap-2"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"[39m
+          [33mdisabled[39m=[32m""[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mPrevious rows[0m
+        [36m</button>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"[39m
+          [33mdisabled[39m=[32m""[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mNext rows[0m
+        [36m</button>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20 h-10 px-4 py-2"[39m
+          [33mdisabled[39m=[32m""[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mSave selection[0m
+        [36m</button>[39m
+      [36m</div>[39m
+      [36m<fieldset[39m
+        [33mclass[39m=[32m"space-y-3"[39m
+      [36m>[39m
+        [36m<legend[39m
+          [33mclass[39m=[32m"font-medium"[39m
+        [36m>[39m
+          [0mRights and local policy review[0m
+        [36m</legend>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"block"[39m
+        [36m>[39m
+          [0mRights basis [0m
+          [36m<select[39m
+            [33maria-label[39m=[32m"Rights basis"[39m
+          [36m>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m""[39m
+            [36m>[39m
+              [0mChoose rights basis[0m
+            [36m</option>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m"owner"[39m
+            [36m>[39m
+              [0mI own the rights[0m
+            [36m</option>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m"licensed"[39m
+            [36m>[39m
+              [0mLicensed for public preview[0m
+            [36m</option>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m"public_domain"[39m
+            [36m>[39m
+              [0mPublic domain[0m
+            [36m</option>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m"other_authorized"[39m
+            [36m>[39m
+              [0mOther authorization[0m
+            [36m</option>[39m
+          [36m</select>[39m
+        [36m</label>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"flex items-start gap-2"[39m
+        [36m>[39m
+          [36m<input[39m
+            [33mtype[39m=[32m"checkbox"[39m
+          [36m/>[39m
+          [0mI permit these exact complete selected records to be published as a public preview.[0m
+        [36m</label>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"flex items-start gap-2"[39m
+        [36m>[39m
+          [36m<input[39m
+            [33mtype[39m=[32m"checkbox"[39m
+          [36m/>[39m
+          [0mI confirm these selected records contain no prohibited or third-party restricted content.[0m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20 h-10 px-4 py-2"[39m
+          [33mdisabled[39m=[32m""[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mRun local policy scan[0m
+        [36m</button>[39m
+      [36m</fieldset>[39m
+    [36m</section>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   ↓ supports keyboard selection and updates whole-record budgets without trimming
+   ↓ requires exact rights and permission before the sealed scan
+   ↓ recovers an in-progress job after reload and allows cancellation
+   ↓ announces errors, focuses the message and offers retry
+   ↓ shows local awaiting-backend state and key fingerprint on recovery
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  14:04:57
+   Duration  543ms (transform 47ms, setup 23ms, collect 90ms, tests 49ms, environment 126ms, prepare 34ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/CommitmentPreviewBuilder.test.tsx > renders hostile cells as inert text with no executable elements or cell links
+TestingLibraryElementError: Unable to find an element with the text: <script>alert(1)</script>. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<section[39m
+      [33maria-label[39m=[32m"Public sample"[39m
+      [33mclass[39m=[32m"space-y-4 rounded-md border p-4"[39m
+    [36m>[39m
+      [36m<h3[39m
+        [33mclass[39m=[32m"font-medium"[39m
+        [33mtabindex[39m=[32m"-1"[39m
+      [36m>[39m
+        [0mPublic sample[0m
+      [36m</h3>[39m
+      [36m<p>[39m
+        [0mSeller-selected preview. Membership does not establish quality, representativeness, legality, compliance, identity or external completeness.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"text-sm text-muted-foreground"[39m
+      [36m>[39m
+        [0mRows are reviewed on this machine. No sample is the default. A prepared preview becomes public only at your chosen publication location.[0m
+      [36m</p>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-wrap gap-2"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mNo sample[0m
+        [36m</button>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mCancel preview build[0m
+        [36m</button>[39m
+      [36m</div>[39m
+      [36m<p>[39m
+        [0mSource version: [0m
+        [36m<code>[39m
+          [0maaaaaaaaaaaa[0m
+        [36m</code>[39m
+      [36m</p>[39m
+      [36m<p[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [0mready[0m
+        [0m: [0m
+        [0m3[0m
+        [0m records · [0m
+        [0m120[0m
+        [0m canonical bytes[0m
+      [36m</p>[39m
+      [36m<h4[39m
+        [33mclass[39m=[32m"font-medium"[39m
+      [36m>[39m
+        [0mSelect complete records[0m
+      [36m</h4>[39m
+      [36m<p>[39m
+        [0mAll fields of every selected record will be disclosed in the package, including fields hidden from display. Display columns do not redact records.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [0mBudget: [0m
+        [0m0[0m
+        [0m/100 rows · [0m
+        [0m1[0m
+        [0m/25 complete-row fields · [0m
+        [0m0[0m
+        [0m/250000 canonical bytes[0m
+      [36m</p>[39m
+      [36m<fieldset[39m
+        [33mclass[39m=[32m"space-y-2"[39m
+      [36m>[39m
+        [36m<legend>[39m
+          [0mDisplay columns[0m
+        [36m</legend>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"mr-4 inline-flex items-center gap-2"[39m
+        [36m>[39m
+          [36m<input[39m
+            [33mchecked[39m=[32m""[39m
+            [33mtype[39m=[32m"checkbox"[39m
+          [36m/>[39m
+          [0mvalue[0m
+        [36m</label>[39m
+      [36m</fieldset>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"overflow-x-auto"[39m
+      [36m>[39m
+        [36m<table[39m
+          [33mclass[39m=[32m"w-full text-sm"[39m
+        [36m>[39m
+          [36m<caption[39m
+            [33mclass[39m=[32m"sr-only"[39m
+          [36m>[39m
+            [0mLocal complete rows in immutable leaf order[0m
+          [36m</caption>[39m
+          [36m<thead>[39m
+            [36m<tr>[39m
+              [36m<th[39m
+                [33mscope[39m=[32m"col"[39m
+              [36m>[39m
+                [0mSelect leaf[0m
+              [36m</th>[39m
+              [36m<th[39m
+                [33mscope[39m=[32m"col"[39m
+              [36m>[39m
+                [0mvalue[0m
+              [36m</th>[39m
+              [36m<th[39m
+                [33mscope[39m=[32m"col"[39m
+              [36m>[39m
+                [0mEligibility[0m
+              [36m</th>[39m
+            [36m</tr>[39m
+          [36m</thead>[39m
+          [36m<tbody>[39m
+            [36m<tr>[39m
+              [36m<td>[39m
+                [36m<label>[39m
+                  [36m<input[39m
+                    [33maria-label[39m=[32m"Select leaf 0"[39m
+                    [33mtype[39m=[32m"checkbox"[39m
+                  [36m/>[39m
+                  [0m [0m
+                  [0m0[0m
+                [36m</label>[39m
+              [36m</td>[39m
+              [36m<td[39m
+                [33mclass[39m=[32m"max-w-xs break-words whitespace-pre-wrap"[39m
+                [33mdata-preview-cell[39m=[32m"true"[39m
+              [36m>[39m
+                [36m<span />[39m
+              [36m</td>[39m
+              [36m<td>[39m
+                [0mEligible for local scan[0m
+              [36m</td>[39m
+            [36m</tr>[39m
+            [36m<tr>[39m
+              [36m<td>[39m
+                [36m<label>[39m
+                  [36m<input[39m
+                    [33maria-label[39m=[32m"Select leaf 1"[39m
+                    [33mtype[39m=[32m"checkbox"[39m
+                  [36m/>[39m
+                  [0m [0m
+                  [0m1[0m
+                [36m</label>[39m
+              [36m</td>[39m
+              [36m<td[39m
+                [33mclass[39m=[32m"max-w-xs break-words whitespace-pre-wrap"[39m
+                [33mdata-preview-cell[39m=[32m"true"[39m
+              [36m>[39m
+                [36m<span>[39m
+                  [0m=SUM(1,2)[0m
+                [36m</span>[39m
+              [36m</td>[39m
+              [36m<td>[39m
+                [0mEligible for local scan[0m
+              [36m</td>[39m
+            [36m</tr>[39m
+            [36m<tr>[39m
+              [36m<td>[39m
+                [36m<label>[39m
+                  [36m<input[39m
+                    [33maria-label[39m=[32m"Select leaf 2"[39m
+                    [33mdisabled[39m=[32m""[39m
+                    [33mtype[39m=[32m"checkbox"[39m
+                  [36m/>[39m
+                  [0m [0m
+                  [0m2[0m
+                [36m</label>[39m
+              [36m</td>[39m
+              [36m<td[39m
+                [33mclass[39m=[32m"max-w-xs break-words whitespace-pre-wrap"[39m
+                [33mdata-preview-cell[39m=[32m"true"[39m
+              [36m>[39m
+                [36m<span>[39m
+                  [0mhttps://hostile.example[0m
+                [36m</span>[39m
+              [36m</td>[39m
+              [36m<td>[39m
+                [0murl[0m
+              [36m</td>[39m
+            [36m</tr>[39m
+          [36m</tbody>[39m
+        [36m</table>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex gap-2"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"[39m
+          [33mdisabled[39m=[32m""[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mPrevious rows[0m
+        [36m</button>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"[39m
+          [33mdisabled[39m=[32m""[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mNext rows[0m
+        [36m</button>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20 h-10 px-4 py-2"[39m
+          [33mdisabled[39m=[32m""[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mSave selection[0m
+        [36m</button>[39m
+      [36m</div>[39m
+      [36m<fieldset[39m
+        [33mclass[39m=[32m"space-y-3"[39m
+      [36m>[39m
+        [36m<legend[39m
+          [33mclass[39m=[32m"font-medium"[39m
+        [36m>[39m
+          [0mRights and local policy review[0m
+        [36m</legend>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"block"[39m
+        [36m>[39m
+          [0mRights basis [0m
+          [36m<select[39m
+            [33maria-label[39m=[32m"Rights basis"[39m
+          [36m>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m""[39m
+            [36m>[39m
+              [0mChoose rights basis[0m
+            [36m</option>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m"owner"[39m
+            [36m>[39m
+              [0mI own the rights[0m
+            [36m</option>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m"licensed"[39m
+            [36m>[39m
+              [0mLicensed for public preview[0m
+            [36m</option>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m"public_domain"[39m
+            [36m>[39m
+              [0mPublic domain[0m
+            [36m</option>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m"other_authorized"[39m
+            [36m>[39m
+              [0mOther authorization[0m
+            [36m</option>[39m
+          [36m</select>[39m
+        [36m</label>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"flex items-start gap-2"[39m
+        [36m>[39m
+          [36m<input[39m
+            [33mtype[39m=[32m"checkbox"[39m
+          [36m/>[39m
+          [0mI permit these exact complete selected records to be published as a public preview.[0m
+        [36m</label>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"flex items-start gap-2"[39m
+        [36m>[39m
+          [36m<input[39m
+            [33mtype[39m=[32m"checkbox"[39m
+          [36m/>[39m
+          [0mI confirm these selected records contain no prohibited or third-party restricted content.[0m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20 h-10 px-4 py-2"[39m
+          [33mdisabled[39m=[32m""[39m
+          [33mtype[39m=[32m"button"[39m
+        [36m>[39m
+          [0mRun local policy scan[0m
+        [36m</button>[39m
+      [36m</fieldset>[39m
+    [36m</section>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ getByText node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/components/CommitmentPreviewBuilder.test.tsx:39:17
+     37| it('renders hostile cells as inert text with no executable elements or…
+     38|   await begin();
+     39|   expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocum…
+       |                 ^
+     40|   expect(screen.getByText('=SUM(1,2)')).toBeInTheDocument();
+     41|   expect(screen.getByText('https://hostile.example')).toBeInTheDocumen…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
