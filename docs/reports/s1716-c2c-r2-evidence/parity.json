@@ -1,0 +1,15 @@
+{
+  "baseline_sha": "97da3f096787b6010ce914803fdd30978a9d5bfd",
+  "candidate_sha": "e2e79a28e76d8b436b843680f875095476db12cc",
+  "baseline_counts": {
+    "passed": 758,
+    "skipped": 1
+  },
+  "candidate_counts": {
+    "passed": 845,
+    "skipped": 1
+  },
+  "missing_baseline_ids": [],
+  "branch_only_failures": [],
+  "additional_skips": []
+}

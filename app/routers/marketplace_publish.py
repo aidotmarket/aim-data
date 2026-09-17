@@ -12,8 +12,9 @@ The Ed25519 private key lives on VZ backend only.
 import hashlib
 import logging
 import re
+import json
 from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -81,22 +82,34 @@ class MarketplacePublishResponse(BaseModel):
     error: Optional[str] = None
 
 
-class DisclosureApprovedSample(BaseModel):
-    columns: list[str]
-    row_refs: list[str]
-    rows: list[dict[str, Any]]
-
-
 class DisclosureSnapshotProxyRequest(BaseModel):
+    model_config = {"extra": "forbid", "hide_input_in_errors": True}
     dataset_id: str = Field(..., min_length=1)
     approved_fields: dict[str, Any]
-    sample_decision: Literal["none", "approved_rows"]
-    approved_sample: Optional[DisclosureApprovedSample] = None
+    sample_decision: Literal["none"]
+    approved_sample: None = None
     ai_training_notification_ack: bool
     ai_training_notification_text: str = Field(..., min_length=1)
     license: str = Field(..., min_length=1)
     approval_source: Literal["aim_channel"]
     source_publish_operation_id: str = Field(..., min_length=1)
+
+
+async def _closed_legacy_none(request: Request):
+    """Do not let FastAPI reflect rejected historical row payloads in 422s."""
+    try:
+        raw = await request.body()
+        if len(raw) > 262144:
+            raise ValueError
+        from app.services.dataset_canonicalization import _pairs
+        from app.models.dataset_commitment_schemas import reject_content
+        data = json.loads(raw, object_pairs_hook=_pairs)
+        if data.get("sample_decision") != "none" or data.get("approved_sample") is not None:
+            raise ValueError
+        reject_content(data.get("approved_fields"))
+        return DisclosureSnapshotProxyRequest.model_validate(data)
+    except Exception:
+        raise HTTPException(status_code=422, detail="legacy_sample_unavailable") from None
 
 
 class DisclosureSnapshotProxyResponse(BaseModel):
@@ -366,7 +379,6 @@ def _persist_disclosure_decision(
     last_error: Optional[str] = None,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
-    approved_sample = body.approved_sample.model_dump() if body.approved_sample else None
     existing = record.metadata.get("disclosure_decision")
     created_at = existing.get("created_at") if isinstance(existing, dict) else None
     decision = {
@@ -376,17 +388,15 @@ def _persist_disclosure_decision(
         "disclosure_version": disclosure_version,
         "approved_fields_hash": _payload_hash(body.approved_fields),
         "sample_decision": body.sample_decision,
-        "approved_sample_hash": _payload_hash(approved_sample) if approved_sample else None,
-        "approved_sample_row_count": len(approved_sample["rows"]) if approved_sample else 0,
-        "approved_sample_columns": approved_sample["columns"] if approved_sample else [],
+        "approved_sample_hash": None,
+        "approved_sample_row_count": 0,
+        "approved_sample_columns": [],
         "ai_training_notification_text": body.ai_training_notification_text,
         "license": body.license,
         "created_at": created_at or now,
         "updated_at": now,
         "last_error": last_error,
     }
-    if status == "snapshot_pending" and approved_sample:
-        decision["approved_sample_replay"] = approved_sample
     if status == "snapshot_pending":
         decision["approved_payload_replay"] = body.model_dump(exclude={"dataset_id"}, exclude_none=False)
     record.metadata["disclosure_decision"] = decision
@@ -428,12 +438,14 @@ async def publish_to_marketplace(
 )
 async def create_disclosure_snapshot(
     listing_id: str,
-    body: DisclosureSnapshotProxyRequest,
+    body: Annotated[DisclosureSnapshotProxyRequest, Depends(_closed_legacy_none)],
     request: Request,
     user=Depends(get_current_user),
     processing: ProcessingService = Depends(get_processing_service),
 ):
     """Forward a seller-authorized disclosure snapshot request to ai.market."""
+    if body.sample_decision != "none" or body.approved_sample is not None:
+        raise HTTPException(status_code=422, detail="legacy_sample_unavailable")
     if not listing_id.strip():
         raise HTTPException(status_code=422, detail="listing_id is required")
 
@@ -713,3 +725,23 @@ async def publish_status(user=Depends(get_current_user)):
         return {"can_publish": False, "reason": "Device not registered with ai.market"}
 
     return {"can_publish": True, "reason": None}
+
+
+@router.post("/marketplace/listings/{listing_id}/at-a-glance/approve")
+@router.post("/marketplace/listings/{listing_id}/at-a-glance/withdraw")
+async def prepare_preview_disclosure(listing_id: str, request: Request, user=Depends(get_current_user)):
+    """Closed new contract; live submission is explicitly deferred to I.b."""
+    from app.services.preview_signing_service import request_bytes, SigningError
+    try:
+        raw = await request.body()
+        if len(raw) > 262144:
+            raise SigningError("manifest_limit")
+        import json
+        from app.services.dataset_canonicalization import _pairs
+        data = json.loads(raw, object_pairs_hook=_pairs)
+        request_bytes(data)
+        if data["binding"]["listing_id"] != listing_id:
+            raise SigningError("listing_mismatch")
+    except Exception:
+        raise HTTPException(status_code=422, detail="preview_contract_invalid") from None
+    raise HTTPException(status_code=409, detail="preview_integration_not_yet_available")

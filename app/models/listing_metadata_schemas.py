@@ -13,6 +13,7 @@ class ColumnSummary(BaseModel):
     type: str
     null_percentage: float = 0.0
     uniqueness_ratio: float = 0.0
+    # Seller-local display values; exclude explicitly at every export boundary.
     sample_values: List[str] = Field(default_factory=list)
 
 
@@ -29,3 +30,8 @@ class ListingMetadata(BaseModel):
     privacy_score: Optional[float] = Field(None, ge=0.0, le=10.0, description="0-10 scale, 10.0 = no PII detected, 0.0 = high PII risk; None = not scanned")
     data_categories: List[str] = Field(default_factory=list, description="Inferred data categories")
     generated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+
+def marketplace_column_metadata(column: ColumnSummary) -> dict:
+    """Explicit metadata projection: sample_values cannot enter the wire path."""
+    return column.model_dump(include={"name", "type", "null_percentage", "uniqueness_ratio"})

@@ -1,0 +1,21 @@
+import json, os, socket
+from pathlib import Path
+results = {}
+_connect = socket.socket.connect
+
+def offline_connect(self, address):
+    if isinstance(address, tuple) and address[0] not in ('127.0.0.1', '::1', 'localhost', '0.0.0.0'):
+        raise OSError('c2c_external_network_forbidden')
+    return _connect(self, address)
+socket.socket.connect = offline_connect
+
+def pytest_runtest_logreport(report):
+    key = report.nodeid
+    if report.when == 'call' or report.failed or report.skipped:
+        results[key] = report.outcome
+        Path(os.environ['C2C_RESULTS']).write_text(json.dumps(results, sort_keys=True, indent=2))
+
+def pytest_collectreport(report):
+    if report.failed:
+        results[report.nodeid + '::COLLECTION'] = 'failed'
+        Path(os.environ['C2C_RESULTS']).write_text(json.dumps(results, sort_keys=True, indent=2))

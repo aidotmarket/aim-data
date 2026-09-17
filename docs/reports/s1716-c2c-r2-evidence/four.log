@@ -1,0 +1,34 @@
+........................................................................ [ 82%]
+...............                                                          [100%]
+=============================== warnings summary ===============================
+app/config.py:100
+  /private/var/tmp/koskadeux/minimal-bridge-worktrees/b81bcd9475b9-38a004/app/config.py:100: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Settings(BaseSettings):
+
+../../../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/typer/completion.py:122
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/typer/completion.py:122: DeprecationWarning: 'BaseCommand' is deprecated and will be removed in Click 9.0. Use 'Command' instead.
+    cli: click.BaseCommand,
+
+../../../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/spacy/cli/_util.py:23
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/spacy/cli/_util.py:23: DeprecationWarning: Importing 'parser.split_arg_string' is deprecated, it will only be available in 'shell_completion' in Click 9.0.
+    from click.parser import split_arg_string
+
+../../../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/weasel/util/config.py:8
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/weasel/util/config.py:8: DeprecationWarning: Importing 'parser.split_arg_string' is deprecated, it will only be available in 'shell_completion' in Click 9.0.
+    from click.parser import split_arg_string
+
+../../../../../../Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/starlette/formparsers.py:10
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/starlette/formparsers.py:10: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+tests/test_marketplace_commitment_push.py::test_router_closed_and_gated
+tests/test_marketplace_commitment_push.py::test_legacy_http_rejection_never_reflects_marker
+  /Users/max/Projects/ai-market/aim-data/.venv/lib/python3.12/site-packages/httpx/_client.py:690: DeprecationWarning: The 'app' shortcut is now deprecated. Use the explicit style 'transport=WSGITransport(app=...)' instead.
+    warnings.warn(message, DeprecationWarning)
+
+tests/test_marketplace_commitment_push.py::test_column_export_has_no_local_values
+  /private/var/tmp/koskadeux/minimal-bridge-worktrees/b81bcd9475b9-38a004/app/models/listing_metadata_schemas.py:32: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    generated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+87 passed, 8 warnings in 7.58s

@@ -1,0 +1,672 @@
+[
+  {
+    "test": "tests.test_aim_data_deployment::test_aim_data_compose_uses_aim_data_image_and_env",
+    "kind": "failure",
+    "reason": "AssertionError: assert ['127.0.0.1:$...RT:-8080}:80'] == ['${AIM_DATA_PORT:-8080}:80']"
+  },
+  {
+    "test": "tests.test_auth_integration::test_valid_api_key",
+    "kind": "failure",
+    "reason": "AssertionError: Expected post to have been awaited once. Awaited 2 times."
+  },
+  {
+    "test": "tests.test_auth_integration::test_missing_api_key_header",
+    "kind": "failure",
+    "reason": "AssertionError: Expected 'post' to not have been called. Called 1 times."
+  },
+  {
+    "test": "tests.test_auth_integration::test_api_key_caching",
+    "kind": "failure",
+    "reason": "AssertionError: Expected post to have been awaited once. Awaited 2 times."
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_upload_single_file",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_upload_multiple_files",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_upload_custom_batch_id",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_upload_with_paths",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_reject_unsupported_extension",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_reject_paths_length_mismatch",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_reject_mime_mismatch",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_dataset_status_endpoint",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_batch_status_endpoint",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_preview_before_extraction",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_single_file_upload_backward_compat",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_mode_process",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_batch_upload::test_client_file_index_with_mixed_results",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_auth_login",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_upload_small_csv",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_upload_small_json",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_upload_small_csv_barcelona",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_upload_small_tsv",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_upload_medium_parquet",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_upload_medium_htm",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_upload_medium_pdf",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_sql_query",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_search",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_pii_scan",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_compliance",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_searchability",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_attestation",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_listing_metadata",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_upload_unsupported_shp_zip",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_negative_wrong_extension",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_negative_empty_file",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_negative_sql_injection",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_negative_invalid_dataset_id",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_negative_delete_invalid_id",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_batch_upload",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_delete_dataset",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_large_generated_csv_50mb",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_large_generated_csv_10mb",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_row_count_after_processing",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_batch_upload_5_plus_files",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_data_preview_endpoint",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_preview_flow_batch_upload",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_batch_status_tracking",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_health_deep",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_sql_validate_valid_query",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_sql_validate_rejects_drop",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_concurrent_upload_stress_5x",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_server_no_500_on_malformed_large_csv",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_batch_path_traversal_blocked",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_batch_null_byte_blocked",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_beta_readiness.TestBetaReadiness::test_upload_traversal_filename",
+    "kind": "error",
+    "reason": "failed on setup with \"requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=80): Max retries exceeded with url: /api/auth/setup (Caused"
+  },
+  {
+    "test": "tests.test_channel_landing::test_channel_landing_redirects_aim_data_to_datasets",
+    "kind": "failure",
+    "reason": "assert 'const channel = useChannel();' in 'import { useEffect } from \"react\";\\nimport { Toaster } from \"@/components/ui/toaster\";\\nimport { Toaster as Sonner } "
+  },
+  {
+    "test": "tests.test_channel_onboarding::test_aim_data_steps_have_three_steps",
+    "kind": "failure",
+    "reason": "assert 'const AIM_DATA_STEPS: StepDef[] = [' in '/**\\n * OnboardingWizard \u2014 First-run onboarding that branches on channel.\\n *\\n * Both channels see the same fe"
+  },
+  {
+    "test": "tests.test_channel_onboarding::test_get_steps_for_channel_aim_data_returns_aim_data_steps",
+    "kind": "failure",
+    "reason": "assert '? AIM_DATA_STEPS' in '/**\\n * OnboardingWizard \u2014 First-run onboarding that branches on channel.\\n *\\n * Both channels see the same features...-4 h-4\" />"
+  },
+  {
+    "test": "tests.test_channel_presentation_only::test_channel_only_in_allowed_files",
+    "kind": "failure",
+    "reason": "AssertionError: C2 violation: channel_config imported in non-allowed files: ['app/routers/copilot.py']. Allowed: {'app/prompts/channel_prompts.py', 'app/service"
+  },
+  {
+    "test": "tests.test_config_alias_choices::test_every_settings_field_has_primary_and_legacy_aliases",
+    "kind": "failure",
+    "reason": "AssertionError: assert False"
+  },
+  {
+    "test": "tests.test_config_alias_choices::test_every_settings_field_resolves_from_primary_and_legacy_prefixes[AIM_DATA]",
+    "kind": "failure",
+    "reason": "AssertionError: assert False"
+  },
+  {
+    "test": "tests.test_config_alias_choices::test_every_settings_field_resolves_from_primary_and_legacy_prefixes[VECTORAIZ]",
+    "kind": "failure",
+    "reason": "AssertionError: assert False"
+  },
+  {
+    "test": "tests.test_config_alias_choices::test_aim_data_prefix_wins_when_both_set",
+    "kind": "failure",
+    "reason": "AssertionError: assert False"
+  },
+  {
+    "test": "tests.test_copilot_upload.TestBrainMessageAttachments::test_too_many_attachments",
+    "kind": "failure",
+    "reason": "AssertionError: assert 'UNPROVISIONED' == 'TOO_MANY_ATTACHMENTS'"
+  },
+  {
+    "test": "tests.test_copilot_upload.TestBrainMessageAttachments::test_attachment_not_found",
+    "kind": "failure",
+    "reason": "AssertionError: assert 'UNPROVISIONED' == 'ATTACHMENT_NOT_FOUND'"
+  },
+  {
+    "test": "tests.test_copilot_upload.TestBrainMessageAttachments::test_attachment_wrong_user",
+    "kind": "failure",
+    "reason": "AssertionError: assert 'UNPROVISIONED' == 'ATTACHMENT_FORBIDDEN'"
+  },
+  {
+    "test": "tests.test_diagnostic.TestCollectorTimeout::test_successful_collector_has_no_error",
+    "kind": "failure",
+    "reason": "AssertionError: assert 0.0 > 0"
+  },
+  {
+    "test": "tests.test_diagnostic.TestIndividualCollectors::test_error_collector_returns_registry",
+    "kind": "failure",
+    "reason": "assert 27 >= 30"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementValid::test_valid_token",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementValid::test_valid_token_returns_all_fields",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementExpired::test_expired_token",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementReplay::test_replayed_token",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementReplay::test_different_nonces_ok",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementWrongHash::test_hash_mismatch_detected_downstream",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementTampered::test_tampered_signature",
+    "kind": "failure",
+    "reason": "AssertionError: Regex pattern did not match."
+  },
+  {
+    "test": "tests.test_entitlement.TestEntitlementTampered::test_missing_required_field",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_metadata::test_searchability_score",
+    "kind": "failure",
+    "reason": "AttributeError: 'DuckDBService' object has no attribute 'calculate_searchability_score'"
+  },
+  {
+    "test": "tests.test_metadata::test_enhanced_metadata",
+    "kind": "failure",
+    "reason": "AssertionError: assert 'searchability' in {'column_count': 6, 'column_profiles': [{'distinct_count': 5, 'is_potential_id': True, 'is_unique': True, 'max_value':"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_skips_when_auth_disabled",
+    "kind": "failure",
+    "reason": "TypeError: MeteringService.report_usage() missing 1 required positional argument: 'session_id'"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_successful_deduction",
+    "kind": "failure",
+    "reason": "TypeError: MeteringService.report_usage() missing 1 required positional argument: 'session_id'"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_insufficient_credits_402",
+    "kind": "failure",
+    "reason": "TypeError: MeteringService.report_usage() missing 1 required positional argument: 'session_id'"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_network_error_fails_open",
+    "kind": "failure",
+    "reason": "TypeError: MeteringService.report_usage() missing 1 required positional argument: 'session_id'"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_timeout_fails_open",
+    "kind": "failure",
+    "reason": "TypeError: MeteringService.report_usage() missing 1 required positional argument: 'session_id'"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_server_error_fails_open",
+    "kind": "failure",
+    "reason": "TypeError: MeteringService.report_usage() missing 1 required positional argument: 'session_id'"
+  },
+  {
+    "test": "tests.test_metering.TestReportUsage::test_zero_tokens_skips_network_call",
+    "kind": "failure",
+    "reason": "TypeError: MeteringService.report_usage() missing 1 required positional argument: 'session_id'"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_bad_file_continues_processing",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_notifications_created_for_successes_and_failures",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_summary_notification_correct_counts",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_summary_all_succeed",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_summary_all_fail",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestBatchUploadResilience::test_response_includes_per_file_status",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestSingleUploadNotifications::test_success_creates_notification",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestSingleUploadNotifications::test_failure_creates_error_notification",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_notifications_p3.TestSingleUploadNotifications::test_batch_id_optional",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_pii_scrub::test_scrub_endpoint_not_found",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_pii_scrub::test_scrub_endpoint_exists",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_portal_acl::test_session_invalidation_on_code_rotation",
+    "kind": "failure",
+    "reason": "AttributeError: 'DatasetRecord' object has no attribute 'metadata_json'"
+  },
+  {
+    "test": "tests.test_portal_trust_zone::test_portal_jwt_rejected_on_admin_settings",
+    "kind": "failure",
+    "reason": "assert 503 in (401, 403, 422)"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_successful_download",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_hash_mismatch",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_missing_file_id",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_expired_token",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_replayed_nonce",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_raw_download.TestRawDownload::test_file_missing_from_disk",
+    "kind": "failure",
+    "reason": "RuntimeError: No install token or keystore passphrase configured for entitlement signing"
+  },
+  {
+    "test": "tests.test_raw_file_detail.TestRawFileDetailEndpoint::test_detail_listing_status_listed",
+    "kind": "failure",
+    "reason": "AssertionError: assert 'draft' == 'listed'"
+  },
+  {
+    "test": "tests.test_raw_files.TestRawFileRegistration::test_upload_size_limit_exceeded",
+    "kind": "failure",
+    "reason": "AttributeError: module 'starlette.status' has no attribute 'HTTP_413_CONTENT_TOO_LARGE'. Did you mean: 'HTTP_413_REQUEST_ENTITY_TOO_LARGE'?"
+  },
+  {
+    "test": "tests.test_request_engine.TestAPIEndpoints::test_get_matches",
+    "kind": "failure",
+    "reason": "TypeError: can't subtract offset-naive and offset-aware datetimes"
+  },
+  {
+    "test": "tests.test_request_engine.TestAPIEndpoints::test_create_draft_rejects_non_ready_dataset",
+    "kind": "failure",
+    "reason": "sqlalchemy.orm.exc.DetachedInstanceError: Instance <DatasetRecord at 0x705d277ca0> is not bound to a Session; attribute refresh operation cannot proceed (Backgr"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestAttestationLLMError::test_attestation_returns_404_on_value_error",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestAttestationLLMError::test_attestation_returns_500_on_other_error",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestListingMetadataLLMError::test_listing_metadata_returns_500_on_other_error",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestPIIScan503::test_pii_scan_returns_503_on_os_error",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestPIIScan503::test_pii_scan_returns_503_on_import_error",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestPIIScan503::test_pii_scan_returns_500_on_generic_error",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestHTMExtension::test_htm_upload_accepted",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestLargeCSVProcessing::test_extract_tabular_retries_large_files",
+    "kind": "failure",
+    "reason": "TypeError: object NoneType can't be used in 'await' expression"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestNginxTimeout::test_nginx_conf_has_proxy_read_timeout",
+    "kind": "failure",
+    "reason": "AssertionError: assert 'proxy_read_timeout 600s' in 'server {\\n    listen 80;\\n    server_name _;\\n\\n    # Large file uploads (per-location /api/ overrides to u"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestNginxTimeout::test_nginx_conf_has_proxy_send_timeout",
+    "kind": "failure",
+    "reason": "AssertionError: assert 'proxy_send_timeout 600s' in 'server {\\n    listen 80;\\n    server_name _;\\n\\n    # Large file uploads (per-location /api/ overrides to u"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestNginxTimeout::test_nginx_conf_has_sufficient_client_max_body_size",
+    "kind": "failure",
+    "reason": "AssertionError: assert 'client_max_body_size 2G' in 'server {\\n    listen 80;\\n    server_name _;\\n\\n    # Large file uploads (per-location /api/ overrides to u"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestDeleteEndpoint::test_delete_endpoint_returns_success",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestDuplicateDetection::test_different_size_same_name_allowed",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestDuplicateDetection::test_same_size_same_name_rejected",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_s145_bugfixes.TestDuplicateDetection::test_allow_duplicate_flag_bypasses_check",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_security_audit.TestAADEncryption::test_aad_roundtrip",
+    "kind": "failure",
+    "reason": "ModuleNotFoundError: No module named 'app.core.llm_key_crypto'"
+  },
+  {
+    "test": "tests.test_security_audit.TestAADEncryption::test_aad_mismatch_fails",
+    "kind": "failure",
+    "reason": "ModuleNotFoundError: No module named 'app.core.llm_key_crypto'"
+  },
+  {
+    "test": "tests.test_security_audit.TestAADEncryption::test_aad_scope_mismatch_fails",
+    "kind": "failure",
+    "reason": "ModuleNotFoundError: No module named 'app.core.llm_key_crypto'"
+  },
+  {
+    "test": "tests.test_security_audit.TestAADEncryption::test_backward_compat_no_aad",
+    "kind": "failure",
+    "reason": "ModuleNotFoundError: No module named 'app.core.llm_key_crypto'"
+  },
+  {
+    "test": "tests.test_security_foundation.TestToolClassification::test_auto_approve_tools",
+    "kind": "failure",
+    "reason": "AssertionError: assert {'create_arti...etadata', ...} == {'create_arti...mit_feedback'}"
+  },
+  {
+    "test": "tests.test_sql::test_query_execution_blocked",
+    "kind": "failure",
+    "reason": "assert 403 == 400"
+  },
+  {
+    "test": "tests.test_text_processor::test_upload_txt_accepted",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_text_processor::test_upload_md_accepted",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_text_processor::test_upload_html_accepted",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_upload::test_upload_csv",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  },
+  {
+    "test": "tests.test_upload::test_upload_unsupported_type",
+    "kind": "failure",
+    "reason": "OSError: [Errno 30] Read-only file system: '/data'"
+  }
+]

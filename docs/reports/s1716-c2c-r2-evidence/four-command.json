@@ -1,0 +1,18 @@
+{
+  "cwd": "/private/var/tmp/koskadeux/minimal-bridge-worktrees/b81bcd9475b9-38a004",
+  "argv": [
+    "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_preview_signing_service.py",
+    "tests/test_preview_lifecycle.py",
+    "tests/test_preview_disclosure_schemas.py",
+    "tests/test_marketplace_commitment_push.py",
+    "-p",
+    "s1716_c2c_results",
+    "--continue-on-collection-errors",
+    "-q",
+    "--tb=short"
+  ],
+  "PYTHONPATH": "/tmp/s1716-c2c-r2:."
+}

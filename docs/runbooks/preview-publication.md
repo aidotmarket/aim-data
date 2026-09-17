@@ -3,7 +3,8 @@
 Authority: S1294 Chunk 2 build plan S1716 §§C/D/I. This procedure exports
 synthetic or explicitly seller-approved complete rows to the seller's own
 publication directory. It makes no marketplace request and grants no provider
-write authority. Signing and the customer UI remain Chunks 2c/2d.
+write authority. Producer-local signing/journal recovery is described in the Chunk 2c report;
+the customer UI remains Chunk 2d. Neither establishes live T integration.
 
 1. Within the live Chunk 2a private job, construct
    `CommitmentPreviewBuilder(tree, complete_schema_descriptors)`. The index must
@@ -70,6 +71,10 @@ write authority. Signing and the customer UI remain Chunks 2c/2d.
    available. For a copied object, the seller must remove it themselves. Require
    `verify_hosted_package(..., retired=True)` GET 404/410 and OPTIONS receipts
    before claiming external retirement; local removal alone is insufficient.
+   In the 2c journal, completed retries must supply the same exact URL and browser
+   origin, even for wildcard CORS receipts. Older journals are migrated without
+   inventing the missing origin; already-retired entries without it fail closed
+   and require operator reconciliation rather than a claimed retry success.
 9. Any changed source, schema, selection, policy or rights decision requires a new
    approval. Rescan, rebuild and use fresh immutable identities. After Chunk 2c
    signs complete closed proof records, `scan_attestation_digest` hashes those

@@ -1,0 +1,116 @@
+[
+  {
+    "mutation": "domain",
+    "exit_code": 1,
+    "failed_nodeids": [
+      "tests/test_preview_signing_service.py::test_golden_corpus"
+    ]
+  },
+  {
+    "mutation": "excluded-field",
+    "exit_code": 1,
+    "failed_nodeids": [
+      "tests/test_preview_signing_service.py::test_every_protected_preimage_field_mutation",
+      "tests/test_preview_signing_service.py::test_golden_corpus"
+    ]
+  },
+  {
+    "mutation": "registration-status",
+    "exit_code": 1,
+    "failed_nodeids": [
+      "tests/test_preview_signing_service.py::test_registration_fail_closed[status-revoked]",
+      "tests/test_preview_signing_service.py::test_registration_fail_closed[status-rotated]"
+    ]
+  },
+  {
+    "mutation": "registration-identity",
+    "exit_code": 1,
+    "failed_nodeids": [
+      "tests/test_preview_signing_service.py::test_registration_fail_closed[install_id-00000000-0000-4000-8000-000000000002]",
+      "tests/test_preview_signing_service.py::test_registration_fail_closed[seller_id-00000000-0000-4000-8000-000000000001]"
+    ]
+  },
+  {
+    "mutation": "registration-fingerprint",
+    "exit_code": 1,
+    "failed_nodeids": [
+      "tests/test_preview_signing_service.py::test_registration_fail_closed[fingerprint-0000000000000000000000000000000000000000000000000000000000000000]",
+      "tests/test_preview_signing_service.py::test_rotation_stays_pending_until_registered_readback"
+    ]
+  },
+  {
+    "mutation": "registration-time",
+    "exit_code": 1,
+    "failed_nodeids": [
+      "tests/test_preview_signing_service.py::test_registration_fail_closed[observed_at-value5]",
+      "tests/test_preview_signing_service.py::test_registration_fail_closed[observed_at-value6]"
+    ]
+  },
+  {
+    "mutation": "closed-request",
+    "exit_code": 1,
+    "failed_nodeids": [
+      "tests/test_preview_disclosure_schemas.py::test_invalid_binding[content_revision-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]",
+      "tests/test_preview_disclosure_schemas.py::test_invalid_binding[public_preview_permission-False]",
+      "tests/test_preview_disclosure_schemas.py::test_invalid_binding[rights_basis_code-I own all the rights]",
+      "tests/test_preview_disclosure_schemas.py::test_invalid_binding[update_cadence_days-0]",
+      "tests/test_preview_disclosure_schemas.py::test_mismatched_proof_order",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[binding-freshness_expires_at]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[binding-raw_secret]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[binding-rights_prose]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[binding-rows]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[binding-scan_notes]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[binding-signer_keys]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[binding-unknown]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[commitment-freshness_expires_at]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[commitment-raw_secret]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[commitment-rights_prose]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[commitment-rows]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[commitment-scan_notes]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[commitment-signer_keys]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[commitment-unknown]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[proof-freshness_expires_at]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[proof-raw_secret]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[proof-rights_prose]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[proof-rows]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[proof-scan_notes]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[proof-signer_keys]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[proof-unknown]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[request-freshness_expires_at]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[request-raw_secret]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[request-rights_prose]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[request-rows]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[request-scan_notes]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[request-signer_keys]",
+      "tests/test_preview_disclosure_schemas.py::test_reject_carriers[request-unknown]",
+      "tests/test_preview_disclosure_schemas.py::test_signing_normalizes_uuid_time_and_preserves_nulls"
+    ]
+  },
+  {
+    "mutation": "fixture-submit",
+    "exit_code": 1,
+    "failed_nodeids": [
+      "tests/test_preview_lifecycle.py::test_atomic_retry_and_recovery"
+    ]
+  },
+  {
+    "mutation": "stale-boundary",
+    "exit_code": 1,
+    "failed_nodeids": [
+      "tests/test_preview_lifecycle.py::test_stale_boundaries[1-7]",
+      "tests/test_preview_lifecycle.py::test_stale_boundaries[3-7]",
+      "tests/test_preview_lifecycle.py::test_stale_boundaries[4-8]",
+      "tests/test_preview_lifecycle.py::test_stale_boundaries[45-90]",
+      "tests/test_preview_lifecycle.py::test_stale_boundaries[46-90]",
+      "tests/test_preview_lifecycle.py::test_stale_boundaries[None-90]"
+    ]
+  },
+  {
+    "mutation": "retirement",
+    "exit_code": 1,
+    "failed_nodeids": [
+      "tests/test_preview_lifecycle.py::test_2b_origin_retirement_removes_package_and_saved_copy_cannot_restore",
+      "tests/test_preview_lifecycle.py::test_retirement_pending_recovery"
+    ]
+  }
+]

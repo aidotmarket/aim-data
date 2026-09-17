@@ -1,0 +1,33 @@
+from pathlib import Path
+import subprocess,json,os
+root=Path.cwd(); python='/Users/max/Projects/ai-market/aim-data/.venv/bin/python'
+out=Path('/tmp/s1716-c2c-mutations');out.mkdir(exist_ok=True)
+cases=[
+ ('domain','app/services/preview_signing_service.py','b"aim-preview-proof-signature-v1\\0"','b"aim-preview-proof-signature-v0\\0"','tests/test_preview_signing_service.py'),
+ ('excluded-field','app/services/preview_signing_service.py','c.pop("seller_signature")','c.pop("seller_signature"); c.pop("signed_at")','tests/test_preview_signing_service.py'),
+ ('registration-status','app/services/preview_signing_service.py','if e.status != "active":','if False:','tests/test_preview_signing_service.py'),
+ ('registration-identity','app/services/preview_signing_service.py','if e.install_id != install_id or e.seller_id != seller_id:','if False:','tests/test_preview_signing_service.py'),
+ ('registration-fingerprint','app/services/preview_signing_service.py','if e.fingerprint != fingerprint(raw_key):','if False:','tests/test_preview_signing_service.py'),
+ ('registration-time','app/services/preview_signing_service.py','if observed > now or now - observed >= max_age:','if False:','tests/test_preview_signing_service.py'),
+ ('closed-request','app/services/preview_signing_service.py','return serialize(PreviewDisclosureRequest, request)','return canonical_json_bytes(request)','tests/test_preview_disclosure_schemas.py'),
+ ('fixture-submit','app/services/preview_lifecycle.py','raise LifecycleError("fixture_not_submittable")','pass','tests/test_preview_lifecycle.py'),
+ ('stale-boundary','app/services/preview_lifecycle.py','"stale": now >= threshold','"stale": now > threshold','tests/test_preview_lifecycle.py'),
+ ('retirement','app/services/preview_lifecycle.py','publication_store.retire(disclosure_version, sample_hash)','pass','tests/test_preview_lifecycle.py'),
+]
+results=[]
+for name,file,old,new,suite in cases:
+ p=root/file;original=p.read_text()
+ assert old in original,(name,'mutation target missing')
+ try:
+  p.write_text(original.replace(old,new,1))
+  env=dict(os.environ,PYTHONPATH='/tmp:.',C2C_RESULTS=str(out/(name+'.json')))
+  run=subprocess.run([python,'-m','pytest',suite,'-p','s1716_c2c_results','-q','--tb=short','--show-capture=no'],env=env,capture_output=True,text=True)
+  (out/(name+'.log')).write_text(run.stdout+run.stderr)
+  nodes=json.loads((out/(name+'.json')).read_text())
+  failed=[k for k,v in nodes.items() if v=='failed']
+  results.append(dict(mutation=name,exit_code=run.returncode,failed_nodeids=failed))
+  print(name,run.returncode,len(failed),flush=True)
+ finally:
+  p.write_text(original)
+(out/'results.json').write_text(json.dumps(results,indent=2)+'\n')
+assert all(r['exit_code']!=0 and r['failed_nodeids'] for r in results)

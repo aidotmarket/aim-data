@@ -1,0 +1,26 @@
+{
+  "cwd": "/private/tmp/s1716-c2c-baseline",
+  "argv": [
+    "/Users/max/Projects/ai-market/aim-data/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_aim_market_oauth_call_inventory.py",
+    "tests/test_dataset_publish_signed_proxy.py",
+    "tests/test_device_registration.py",
+    "tests/test_marketplace_push.py",
+    "tests/test_preview_content_policy.py",
+    "tests/test_preview_origin_service.py",
+    "tests/test_preview_package_service.py",
+    "tests/test_s1681_serial_registration.py",
+    "tests/test_trust_registration_oauth.py",
+    "tests/test_vz_publish_proxy.py",
+    "tests/test_dataset_merkle_service.py",
+    "tests/test_dataset_canonicalization.py",
+    "-p",
+    "s1716_c2c_results",
+    "--continue-on-collection-errors",
+    "-q",
+    "--tb=short"
+  ],
+  "PYTHONPATH": "/tmp/s1716-c2c-r2:."
+}
