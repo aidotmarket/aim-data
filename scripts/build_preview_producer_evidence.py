@@ -18,54 +18,17 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+# Keep module import light: spawned parser workers re-import the CLI entrypoint.
+# Load scanner/signing services only in the parent operations below.
 
-from app.core.crypto import DeviceCrypto  # noqa: E402
-from app.services.dataset_canonicalization import CanonicalSchema, ParsingDeclaration  # noqa: E402
-from app.services.dataset_merkle_service import (  # noqa: E402
-    canonical_json_bytes,
-    canonical_rfc3339_utc,
-    encode_base64url,
-    run_commitment_job,
-    canonical_log_entry_bytes,
-    compute_log_leaf_hash,
-)
-from app.services.preview_content_policy import scan_attestation_digest  # noqa: E402
-from app.services.preview_package_service import (  # noqa: E402
-    CommitmentPreviewBuilder,
-    PublicationStore,
-    MEDIA_TYPE,
-    sample_hash,
-    directory_fd,
-)
-from app.services.preview_origin_service import validate_url, verify_hosted_package  # noqa: E402
-from app.services.preview_signing_service import (  # noqa: E402
-    PreviewSigningService,
-    LocalCandidate,
-    construct_request,
-    seller_attestation_digest,
-    manifest_budget,
-    request_bytes,
-    verify_request,
-    public_bytes,
-)
-from app.services.registration_service import read_preview_registration_evidence  # noqa: E402
-from app.services.preview_lifecycle import (  # noqa: E402
-    capture_rights,
-    withdrawal_candidate,
-    refresh_candidate,
-    supersession_candidate,
-    stale_at,
-    freshness,
-    PreviewJournal,
-    LifecycleError,
-    validate_retirement_receipts,
-)
 
 NOTICE = "PRODUCER-LOCAL NON-RUNTIME FIXTURE. No platform allocation, acceptance or verification."
 NAMESPACE = UUID("0684eb10-2a2b-4c2e-8181-171600000001")
 
 
 def write_json(path, value):
+    from app.services.dataset_merkle_service import canonical_json_bytes
+
     path.write_bytes(canonical_json_bytes(value) + b"\n")
     path.chmod(0o600)
 
@@ -116,6 +79,17 @@ def manifest(output, *, state):
 
 
 def lifecycle_evidence(output, request, signer, p1):
+    from app.services.preview_lifecycle import LifecycleError
+    from app.services.preview_lifecycle import PreviewJournal
+    from app.services.dataset_merkle_service import canonical_rfc3339_utc
+    from app.services.preview_signing_service import construct_request
+    from app.services.preview_lifecycle import freshness
+    from app.services.preview_lifecycle import refresh_candidate
+    from app.services.preview_signing_service import request_bytes
+    from app.services.preview_lifecycle import stale_at
+    from app.services.preview_lifecycle import supersession_candidate
+    from app.services.preview_lifecycle import withdrawal_candidate
+
     b = request["binding"]
 
     def uid(label):
@@ -245,6 +219,28 @@ def build(
     fixture_time,
     confirmation,
 ):
+    from app.services.dataset_canonicalization import CanonicalSchema
+    from app.services.preview_package_service import CommitmentPreviewBuilder
+    from app.services.preview_signing_service import LocalCandidate
+    from app.services.preview_package_service import MEDIA_TYPE
+    from app.services.dataset_canonicalization import ParsingDeclaration
+    from app.services.preview_package_service import PublicationStore
+    from app.services.dataset_merkle_service import canonical_json_bytes
+    from app.services.dataset_merkle_service import canonical_rfc3339_utc
+    from app.services.preview_lifecycle import capture_rights
+    from app.services.preview_signing_service import construct_request
+    from app.services.preview_package_service import directory_fd
+    from app.services.dataset_merkle_service import encode_base64url
+    from app.services.preview_signing_service import manifest_budget
+    from app.services.preview_signing_service import public_bytes
+    from app.services.registration_service import read_preview_registration_evidence
+    from app.services.dataset_merkle_service import run_commitment_job
+    from app.services.preview_package_service import sample_hash
+    from app.services.preview_content_policy import scan_attestation_digest
+    from app.services.preview_signing_service import seller_attestation_digest
+    from app.services.preview_origin_service import validate_url
+    from app.services.preview_signing_service import verify_request
+
     if not confirmation:
         raise ValueError("explicit_consent_required")
     parsed = validate_url(origin)
@@ -469,6 +465,11 @@ def build(
 
 def expected_platform_fixture(output, request, signer):
     """Public deterministic TEST key, isolated from real platform trust/keys."""
+    from app.services.dataset_merkle_service import canonical_log_entry_bytes
+    from app.services.dataset_merkle_service import compute_log_leaf_hash
+    from app.services.dataset_merkle_service import encode_base64url
+    from app.services.preview_signing_service import public_bytes
+
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from app.services.preview_signing_service import (
         platform_envelope_bytes,
@@ -577,6 +578,10 @@ def expected_platform_fixture(output, request, signer):
 
 
 def check_host(output, *, retire=False):
+    from app.services.preview_package_service import PublicationStore
+    from app.services.preview_lifecycle import validate_retirement_receipts
+    from app.services.preview_origin_service import verify_hosted_package
+
     publication = json.loads((output / "publication.json").read_bytes())
     if retire:
         store = PublicationStore(output / "public", output / ".private" / "publication")
@@ -603,6 +608,11 @@ def check_host(output, *, retire=False):
 
 
 def main():
+    from app.core.crypto import DeviceCrypto
+    from app.services.preview_signing_service import PreviewSigningService
+    from app.services.dataset_merkle_service import canonical_rfc3339_utc
+    from app.services.registration_service import read_preview_registration_evidence
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("build", "check-host", "retire"))
     parser.add_argument("--output", required=True, type=Path)

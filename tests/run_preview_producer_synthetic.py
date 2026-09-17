@@ -18,24 +18,25 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from scripts import build_preview_producer_evidence as evidence  # noqa: E402
-from app.config import settings  # noqa: E402
-from app.core.crypto import DeviceCrypto  # noqa: E402
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey  # noqa: E402
-from app.services.preview_origin_service import make_origin, capture_receipt  # noqa: E402
-from app.services.preview_package_service import PublicationStore  # noqa: E402
-from app.services.preview_signing_service import (  # noqa: E402
-    PreviewSigningService,
-    fingerprint,
-    public_bytes,
-)  # noqa: E402
-from app.services.registration_service import read_preview_registration_evidence  # noqa: E402
-from tests.preview_fixture_factory import test_key, uid, NOW, STAMP  # noqa: E402
 
 MARKER = "unique synthetic cell marker aabbccdd"
 
 
 def run(output):
+    from scripts import build_preview_producer_evidence as evidence  # noqa: E402
+    from app.config import settings  # noqa: E402
+    from app.core.crypto import DeviceCrypto  # noqa: E402
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey  # noqa: E402
+    from app.services.preview_origin_service import make_origin, capture_receipt  # noqa: E402
+    from app.services.preview_package_service import PublicationStore  # noqa: E402
+    from app.services.preview_signing_service import (  # noqa: E402
+        PreviewSigningService,
+        fingerprint,
+        public_bytes,
+    )  # noqa: E402
+    from app.services.registration_service import read_preview_registration_evidence  # noqa: E402
+    from tests.preview_fixture_factory import test_key, uid, NOW, STAMP  # noqa: E402
+
     with tempfile.TemporaryDirectory(prefix="producer-synthetic-") as temporary:
         private = Path(temporary).resolve()
         private.chmod(0o700)
@@ -131,7 +132,10 @@ def run(output):
             return receipts
 
         try:
-            with patch.object(evidence, "verify_hosted_package", local_receipts):
+            with patch(
+                "app.services.preview_origin_service.verify_hosted_package",
+                local_receipts,
+            ):
                 evidence.check_host(output)
                 pub = json.loads((output / "publication.json").read_bytes())
                 package_path = (

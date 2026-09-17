@@ -11,6 +11,19 @@ import pytest
 from scripts import build_preview_producer_evidence as evidence
 
 
+def test_spawn_entrypoints_do_not_load_parent_scanner():
+    # spawn re-executes the entrypoint before starting the bounded parser worker.
+    # Loading spaCy/PII here consumed the worker budget on the Linux CI runner.
+    program = """
+import runpy, sys
+for path in ('scripts/build_preview_producer_evidence.py', 'tests/run_preview_producer_synthetic.py'):
+    runpy.run_path(path, run_name='__mp_main__')
+assert 'app.services.pii_service' not in sys.modules
+assert 'spacy' not in sys.modules
+"""
+    subprocess.run([sys.executable, "-c", program], check=True, capture_output=True)
+
+
 def test_consent_required_before_any_read_or_write(tmp_path):
     with pytest.raises(ValueError, match="explicit_consent_required"):
         evidence.build(
@@ -118,7 +131,9 @@ def test_failed_host_check_never_creates_receipt(tmp_path, monkeypatch):
     def unavailable(*args, **kwargs):
         raise ValueError("transport_failed")
 
-    monkeypatch.setattr(evidence, "verify_hosted_package", unavailable)
+    monkeypatch.setattr(
+        "app.services.preview_origin_service.verify_hosted_package", unavailable
+    )
     with pytest.raises(ValueError, match="transport_failed"):
         evidence.check_host(tmp_path)
     assert not (tmp_path / "hosting-receipts.json").exists()
