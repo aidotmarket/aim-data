@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Planned aim-data-v1.24.0 — verified preview producer
+
+- Build full-dataset commitments locally, select complete records, run strict local policy checks, and export a signed v2 preview package to a seller-controlled origin. Marketplace requests contain metadata and proofs, not rows.
+- Review origin headers, owner-bound signing identity, withdrawal, refresh and supersession. Before T support, prepared previews explicitly await marketplace support; No sample remains available.
+- Pin contract fixtures, verify Python/Node signing parity in CI, and generate a local evidence bundle. FLOAT/DOUBLE and other unsupported types remain ineligible; an explicitly declared lossless decimal source can be rebuilt.
+- Correct the customer preview-job route mount. Release remains controller-owned: RC minor, then stable promotion through the existing release script; no version defaults are manually changed.
+
 ### Requires ai.market backend 1c96b257c or later for delivery
 
 ### Added

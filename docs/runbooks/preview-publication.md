@@ -4,7 +4,11 @@ Authority: S1294 Chunk 2 build plan S1716 §§C/D/I. This procedure exports
 synthetic or explicitly seller-approved complete rows to the seller's own
 publication directory. It makes no marketplace request and grants no provider
 write authority. Producer-local signing/journal recovery is described in the Chunk 2c report;
-the customer UI remains Chunk 2d. Neither establishes live T integration.
+the customer UI is implemented in Chunk 2d. Neither establishes live T integration.
+The final [producer guide](../commitment-preview-producer.md) documents the
+Chunk 2e evidence commands, exact headers, registration prerequisites and remaining
+Gate-4 requirements. [Release readiness](../release-aim-data-v1.24.0.md) records
+the controller-only RC/promote commands; this chunk must not execute them.
 
 1. Within the live Chunk 2a private job, construct
    `CommitmentPreviewBuilder(tree, complete_schema_descriptors)`. The index must
