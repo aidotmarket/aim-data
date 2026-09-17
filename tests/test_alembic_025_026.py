@@ -16,7 +16,7 @@ def test_025_chain_and_upgrade_copy(tmp_path):
     module = module_from_spec(spec); spec.loader.exec_module(module)
     assert module.down_revision == '024_bq_data_verification_s1590'
     scripts = ScriptDirectory.from_config(Config('alembic.ini'))
-    assert scripts.get_heads() == ["027_bq_published_indices_s1717"]
+    assert scripts.get_heads() == ["026_bq_published_manifests_s1717"]
     source = sa.create_engine(f'sqlite:///{tmp_path}/install.db')
     with source.begin() as connection:
         connection.exec_driver_sql('CREATE TABLE dataset_records (id VARCHAR(36) PRIMARY KEY, original_filename TEXT, storage_filename TEXT, processed_path TEXT, status TEXT, listing_id TEXT, batch_id TEXT)')
@@ -54,30 +54,40 @@ def test_026_retains_snapshots_without_changing_legacy_rows(tmp_path):
         with Operations.context(MigrationContext.configure(connection)):
             module.upgrade()
         assert connection.exec_driver_sql('SELECT * FROM dataset_records').all() == before
+        columns = {column['name'] for column in sa.inspect(connection).get_columns('published_manifests')}
+        assert 'registration_to_published_index' in columns
+        connection.exec_driver_sql("INSERT INTO published_manifests (listing_version_id, manifest_hash, dataset_id, root_path, members, created_at) VALUES ('version', 'hash', 'dataset', '/root', '[]', CURRENT_TIMESTAMP)")
+        assert connection.exec_driver_sql("SELECT registration_to_published_index FROM published_manifests").scalar() == '{}'
+        from app.models.published_manifest import PublishedManifest
+        from alembic.autogenerate import compare_metadata
+        metadata = sa.MetaData()
+        PublishedManifest.__table__.to_metadata(metadata)
+        context = MigrationContext.configure(connection, opts={
+            'include_object': lambda obj, name, kind, reflected, compare_to:
+                kind != 'table' or name == 'published_manifests',
+        })
+        assert compare_metadata(context, metadata) == []
         assert sa.inspect(connection).get_pk_constraint('published_manifests')['constrained_columns'] == ['listing_version_id', 'manifest_hash']
         with Operations.context(MigrationContext.configure(connection)):
             module.downgrade()
         assert connection.exec_driver_sql('SELECT * FROM dataset_records').all() == before
 
 
-def test_027_mapping_upgrade_preserves_retained_rows(tmp_path):
-    engine = sa.create_engine(f'sqlite:///{tmp_path}/retained.db')
-    modules = []
-    for number, filename in [(26, "026_bq_published_manifests_s1717.py"), (27, "027_bq_published_indices_s1717.py")]:
-        spec = spec_from_file_location(f"migration{number}", Path("alembic/versions") / filename)
-        module = module_from_spec(spec); spec.loader.exec_module(module)
-        modules.append(module)
-    assert modules[1].down_revision == modules[0].revision
-    with engine.begin() as connection:
-        with Operations.context(MigrationContext.configure(connection)):
-            modules[0].upgrade()
-        connection.exec_driver_sql("INSERT INTO published_manifests VALUES ('version', 'hash', 'dataset', '/root', '[]', CURRENT_TIMESTAMP)")
-        before = connection.exec_driver_sql("SELECT * FROM published_manifests").all()
-        with Operations.context(MigrationContext.configure(connection)):
-            modules[1].upgrade()
-        after = connection.exec_driver_sql("SELECT * FROM published_manifests").all()
-        assert [tuple(row[:-1]) for row in after] == [tuple(row) for row in before]
-        assert after[0][-1] == '{}'
-        with Operations.context(MigrationContext.configure(connection)):
-            modules[1].downgrade()
-        assert connection.exec_driver_sql("SELECT * FROM published_manifests").all() == before
+
+def test_env_registers_published_manifests_in_fresh_process():
+    # A fresh interpreter prevents earlier test imports masking a missing env import.
+    import subprocess
+    import sys
+    subprocess.run([sys.executable, "-c", """
+import runpy
+from unittest.mock import patch
+from alembic import context
+from alembic.config import Config
+from sqlmodel import SQLModel
+assert 'published_manifests' not in SQLModel.metadata.tables
+config = Config()
+config.set_main_option('sqlalchemy.url', 'sqlite://')
+with patch.object(context, 'config', config, create=True), patch.object(context, 'is_offline_mode', return_value=True), patch.object(context, 'configure'), patch.object(context, 'begin_transaction'), patch.object(context, 'run_migrations'):
+    runpy.run_path('alembic/env.py')
+assert 'published_manifests' in SQLModel.metadata.tables
+"""], check=True)

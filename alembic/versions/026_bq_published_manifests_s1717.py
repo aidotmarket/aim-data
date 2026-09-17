@@ -16,6 +16,7 @@ def upgrade():
         sa.Column("dataset_id", sa.String(36), nullable=False),
         sa.Column("root_path", sa.Text(), nullable=False),
         sa.Column("members", sa.JSON(), nullable=False),
+        sa.Column("registration_to_published_index", sa.JSON(), nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(), nullable=False),
     )
     op.create_index("ix_published_manifests_dataset_id", "published_manifests", ["dataset_id"])
