@@ -1,7 +1,7 @@
 # S1717 directory UI wiring builder report
 
-Branch: `build/bq-multi-file-datasets-s1717-ui-wiring`  
-Base: `119f643b5fd25dc8fd61557649371c9832ca33c5` (`origin/main` at start)  
+Branch: `build/bq-multi-file-datasets-s1717-ui-wiring`
+Base: `119f643b5fd25dc8fd61557649371c9832ca33c5` (`origin/main` at start)
 Implementation commits: `caf8458` (directory preparation), `eeed9d5` (direct import completion).
 
 ## Fixes
