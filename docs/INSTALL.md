@@ -93,12 +93,17 @@ Once green, you can point AIM Data at any bucket and prefix you have read access
 
 ## Datasets with many files
 
-When folder uploads are enabled for your install, upload a folder to create one dataset.
-Its member table shows each file and its role: data, sample, docs, or other.
-You can mark a member as a free sample and choose which files buyers can try before buying.
+Put the folder in your install's import directory, which the **Local Import** screen browses.
+To set that directory, use the import-directory environment variable shown on that screen in your `.env` file.
+Import from there with **Import Selected**; with folder datasets enabled, the import creates **one dataset for the folder**.
+Dragging a folder into the upload box still creates one dataset per file.
 
-Publishing creates **one listing** with the members you chose as the free sample.
-Buyers receive the whole set and download its members from their order page.
+Each member has a role: `data`, `documentation`, or `other`, shown as-is in the member table.
+The separate sample tick is available only on `data` members; sample is not a role.
+Use it to choose which data members buyers can try for free before buying.
+Publishing creates **one listing** with your selected free samples.
+Buyers receive every `data` member, including selected samples; `documentation` and `other` members are not delivered.
+In the ai.market release that includes this feature, buyers download the data members from their order page.
 The verified shape label is optional and separate from publishing; you can publish without it.
 
 Directory publishing and delivery require **the current release**, which includes this feature.
