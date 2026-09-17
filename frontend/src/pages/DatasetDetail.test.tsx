@@ -416,6 +416,14 @@ describe("directory publish control", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("renders the receiver's paid-set refusal", async () => {
+    const detail = "at least one non-sample data member is required";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ detail }) }));
+    render(<DirectoryPublishControl {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(detail);
+  });
+
   it("renders the receiver's named upgrade refusal", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ detail: "agent_upgrade_required: upgrade AIM Data to 1.24.0" }) }));
     render(<DirectoryPublishControl {...props} />);

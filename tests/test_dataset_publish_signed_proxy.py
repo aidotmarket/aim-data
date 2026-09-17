@@ -275,7 +275,7 @@ def test_s3_version_bytes_identical_with_explicit_new_defaults(monkeypatch):
     expected = canonical_json_bytes(fields)
     for flag in (False, True):
         monkeypatch.setattr(settings, 'multi_file_datasets_enabled', flag)
-        for version in (mp.VersionPublishEmit(**fields), mp.VersionPublishEmit(**fields, source_kind='s3', members_total=None, members_upload_id=None)):
+        for version in (mp.VersionPublishEmit(**fields), mp.VersionPublishEmit(**fields, source_kind='s3', members_total=None, sample_members_total=None, members_upload_id=None)):
             assert canonical_json_bytes(mp._build_version_emit(version)) == expected
 
 
@@ -287,6 +287,7 @@ def test_directory_wire_has_exact_manifest_and_agent_version(local_dataset, monk
     assert payload['agent_version'] == '1.24.0'
     version = payload['versions'][0]
     assert version['source_kind'] == 'aim_data_local'
+    assert version['sample_members_total'] == 1
     assert version['members_total'] == 3
     assert version['object_count'] == 3
     assert version['total_size_bytes'] == 6
@@ -646,3 +647,79 @@ async def test_lost_member_ack_replays_exact_frozen_body_with_fresh_action_jwt(l
         session.add(row); session.commit()
     assert (await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace()))['status'] == 'published'
     assert len(chunks) == 3 and chunks[0] == chunks[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("profile_kind", ["two", "absent", "malformed"])
+async def test_section_3a_profiles_and_paid_set_refusal(local_dataset, monkeypatch, profile_kind):
+    import json
+    import httpx
+    columns = [[{"name": "id", "type": "INTEGER", "sample_values": [1]}],
+               [{"name": "title", "type": "VARCHAR"}]]
+    metadata = {}
+    if profile_kind == "two":
+        metadata = {"directory_profile": {"members": {
+            str(i): {"status": "profiled", "profile": {"columns": cols}}
+            for i, cols in enumerate(columns)
+        }}}
+        # Documentation profiles and unknown indices must not enter the carrier.
+        metadata["directory_profile"]["members"].update({
+            "2": {"status": "profiled", "profile": {"columns": columns[0]}},
+            "99": {"status": "profiled", "profile": {"columns": columns[0]}},
+        })
+    elif profile_kind == "malformed":
+        metadata = {"directory_profile": {"members": {
+            "0": {"status": "profiled", "profile": {"columns": [{"name": 1, "type": "INT"}]}},
+            "1": {"status": "parse_failed", "profile": {"columns": columns[1]}},
+            "2": {"status": "profiled", "profile": None},
+        }}}
+    with get_session_context() as session:
+        record = session.get(DBDatasetRecord, local_dataset)
+        record.metadata_json = json.dumps(metadata)
+        session.add(record)
+        member = session.get(DatasetMember, (local_dataset, 2))
+        member.role = "documentation"
+        session.add(member)
+        session.commit()
+
+    async def receive(request, claims):
+        assert request.url.path.endswith("/publish")
+        payload = json.loads(request.content)
+        assert claims["metadata_hash"] == _receiver_hash(payload)
+        assert payload["versions"][0]["sample_members_total"] == 1
+        if profile_kind == "two":
+            assert payload["schema_info"]["member_profiles"] == [
+                {"index": i, "columns": [{"name": c["name"], "type": c["type"]} for c in cols]}
+                for i, cols in enumerate(columns)
+            ]
+        else:
+            assert "member_profiles" not in payload["schema_info"]
+        return httpx.Response(400, json={"detail": "at least one non-sample data member is required"})
+
+    _signed_local_client(monkeypatch, receive)
+    body = mp.MarketplacePublishRequest(title="Test", description="Test", price_cents=2500,
+                                       vz_dataset_id=local_dataset)
+    with pytest.raises(HTTPException) as exc:
+        await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "at least one non-sample data member is required"
+
+
+def test_processable_types_wire_mirror():
+    import json
+    from pathlib import Path
+    from app.services.processing_service import PROCESSABLE_TYPES
+    raw = (Path(__file__).parent / "fixtures/multi_file_datasets/processable_types.json").read_bytes()
+    expected = sorted(PROCESSABLE_TYPES | {"unsupported"})
+    assert json.loads(raw) == expected
+    assert raw == (json.dumps(expected, separators=(",", ":")) + "\n").encode()
+
+
+def test_sample_count_refused_on_s3_and_paid_set_checked_on_local(monkeypatch):
+    monkeypatch.setattr(settings, "multi_file_datasets_enabled", True)
+    fields = dict(version_label="v1", object_count=1, total_size_bytes=2, manifest_hash="a" * 64)
+    with pytest.raises(HTTPException, match="members fields require aim_data_local"):
+        mp._build_version_emit(mp.VersionPublishEmit(**fields, sample_members_total=0))
+    with pytest.raises(HTTPException, match="paid_set_required"):
+        mp._build_version_emit(mp.VersionPublishEmit(**fields, source_kind="aim_data_local",
+            members_total=1, sample_members_total=1, members_upload_id=uuid4()))

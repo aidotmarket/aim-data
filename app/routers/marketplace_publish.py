@@ -136,6 +136,7 @@ class VersionPublishEmit(BaseModel):
     manifest_hash: str = Field(..., min_length=1, max_length=256)
     source_kind: Literal["s3", "aim_data_local"] = "s3"
     members_total: Optional[int] = Field(None, ge=1)
+    sample_members_total: Optional[int] = Field(None, ge=0)
     members_upload_id: Optional[UUID] = None
 
 
@@ -234,13 +235,15 @@ def _build_s3_connection_emit(resolution: S3PublishSourceResolution) -> dict[str
 
 def _build_version_emit(version: VersionPublishEmit) -> dict[str, Any]:
     if version.source_kind == "s3":
-        if version.members_total is not None or version.members_upload_id is not None:
+        if version.members_total is not None or version.members_upload_id is not None or version.sample_members_total is not None:
             raise HTTPException(422, "members fields require aim_data_local")
-        return version.model_dump(mode="json", exclude={"source_kind", "members_total", "members_upload_id"})
+        return version.model_dump(mode="json", exclude={"source_kind", "members_total", "sample_members_total", "members_upload_id"})
     if not settings.multi_file_datasets_enabled:
         raise HTTPException(404, "Not found")
-    if version.members_total is None or version.members_upload_id is None:
-        raise HTTPException(422, "Local version requires members_total and members_upload_id")
+    if version.members_total is None or version.members_upload_id is None or version.sample_members_total is None:
+        raise HTTPException(422, "Local version requires members_total, sample_members_total and members_upload_id")
+    if version.members_total - version.sample_members_total < 1:
+        raise HTTPException(409, "paid_set_required: at least one non-sample data member is required")
     return version.model_dump(mode="json")
 
 
@@ -286,6 +289,34 @@ def _response_version(data, label):
     return next((v for v in data.get("versions", []) if v.get("version_label") == label), {})
 
 
+def _local_member_profiles(metadata, members):
+    """Project chunk B's stored outcomes onto the Gate 2 section 3a carrier."""
+    directory = metadata.get("directory_profile")
+    outcomes = directory.get("members") if isinstance(directory, dict) else None
+    if not isinstance(outcomes, dict):
+        return []
+    profiles = []
+    for member in members:
+        if member["role"] != "data":
+            continue
+        outcome = outcomes.get(str(member["index"]))
+        if not isinstance(outcome, dict) or outcome.get("status") != "profiled":
+            continue
+        profile = outcome.get("profile")
+        columns = profile.get("columns") if isinstance(profile, dict) else None
+        if not isinstance(columns, list) or any(
+            not isinstance(column, dict)
+            or not isinstance(column.get("name"), str)
+            or not isinstance(column.get("type"), str)
+            for column in columns
+        ):
+            continue
+        profiles.append({"index": member["index"], "columns": [
+            {"name": column["name"], "type": column["type"]} for column in columns
+        ]})
+    return profiles
+
+
 def _local_publish_snapshot(dataset_id, version_label=None):
     if not settings.multi_file_datasets_enabled:
         return None
@@ -324,10 +355,12 @@ def _local_publish_snapshot(dataset_id, version_label=None):
             raise HTTPException(409, str(exc)) from None
         upload_id = uuid5(NAMESPACE_URL, canonical_json_bytes([dataset_id, root, label, manifest["manifest_hash"]]).decode())
         return {"dataset_id": dataset_id, "root_path": root, "manifest": manifest, "offset": offset,
+            "member_profiles": _local_member_profiles(json.loads(record.metadata_json), manifest["members"]),
             "retained_version_id": progress.get("version_id") if retained and progress.get("status") == "pending_members" else None,
             "version": VersionPublishEmit(version_label=label, object_count=manifest["data_member_count"],
                 total_size_bytes=manifest["total_data_bytes"], manifest_hash=manifest["manifest_hash"],
-                source_kind="aim_data_local", members_total=manifest["member_count"], members_upload_id=upload_id)}
+                source_kind="aim_data_local", members_total=manifest["member_count"],
+                sample_members_total=manifest["sample_member_count"], members_upload_id=upload_id)}
 
 
 def _record_local_publish(local, listing_id, version_id, status):
@@ -737,6 +770,11 @@ async def publish_via_signed_proxy(
     local = _local_publish_snapshot(body.vz_dataset_id, versions[0].version_label if versions else None)
     if local is not None:
         versions = [local["version"]]
+        schema_info = dict(body.schema_info or {})
+        schema_info.pop("member_profiles", None)
+        if local["member_profiles"]:
+            schema_info["member_profiles"] = local["member_profiles"]
+        body = body.model_copy(update={"schema_info": schema_info})
     # 1. Load crypto + keypairs
     crypto = _get_crypto()
     ed_priv, _ed_pub, _x_priv, _x_pub = crypto.get_or_create_keypairs()
