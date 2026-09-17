@@ -159,6 +159,12 @@ def _db_to_record(db_row) -> DatasetRecord:
     except (json.JSONDecodeError, TypeError):
         meta = {}
 
+    if settings.multi_file_datasets_enabled and rec.file_type == "directory":
+        from app.services.directory_processing import profile_on_read
+        meta["directory_profile"] = profile_on_read(db_row)
+        if meta["directory_profile"]["status"] == "timeout":
+            rec.status = DatasetStatus.PREVIEW_READY
+
     # Extract document_content from metadata if present
     rec.document_content = meta.pop("document_content", None)
     rec.metadata = meta
@@ -203,7 +209,7 @@ def _record_to_db(rec: DatasetRecord, storage_filename: str):
         metadata["error"] = rec.error
 
     file_size = rec.file_size_bytes or 0
-    if not file_size and rec.upload_path:
+    if rec.file_type != "directory" and not file_size and rec.upload_path:
         try:
             file_size = os.path.getsize(rec.upload_path)
             _log.debug("_record_to_db: file_size_bytes was 0, resolved %d from disk for %s", file_size, rec.id)
@@ -278,7 +284,7 @@ class ProcessingService:
                     existing.metadata_json = json.dumps(metadata, default=str)
                     existing.updated_at = datetime.now(timezone.utc)
 
-                    if rec.upload_path:
+                    if rec.file_type != "directory" and rec.upload_path:
                         try:
                             existing.file_size_bytes = os.path.getsize(rec.upload_path)
                         except OSError:
@@ -408,11 +414,14 @@ class ProcessingService:
             record.processed_path.unlink()
 
         # Remove from DB
-        from app.models.dataset import DatasetRecord as DBDatasetRecord
+        from app.models.dataset import DatasetMember, DatasetRecord as DBDatasetRecord
+        from sqlalchemy import delete
 
         with self._get_session() as session:
             db_row = session.get(DBDatasetRecord, dataset_id)
             if db_row:
+                # D1a backfills members without changing the legacy file_type.
+                session.exec(delete(DatasetMember).where(DatasetMember.dataset_id == dataset_id))
                 session.delete(db_row)
                 session.commit()
         return True
@@ -538,6 +547,11 @@ class ProcessingService:
         if not record:
             raise ValueError(f"Dataset {dataset_id} not found")
 
+        if settings.multi_file_datasets_enabled and record.file_type == "directory":
+            from app.services.directory_processing import process_directory
+            await process_directory(dataset_id)
+            return self.get_dataset(dataset_id)
+
         s3_provenance = {
             key: record.metadata[key]
             for key in S3_PROVENANCE_KEYS
@@ -645,6 +659,25 @@ class ProcessingService:
         storage_fn = record.upload_path.name if record.upload_path else f"{dataset_id}"
         self._save_record(record, storage_fn)
         return record
+
+    def profile_member(self, path: Path, file_type: str, output_dir: Path) -> dict:
+        """Reuse extraction without creating records, PII passes or provider calls.
+
+        Called only in the directory's disposable worker. Artifacts are previews,
+        never registered as deliverable bytes.
+        """
+        record = DatasetRecord(str(uuid.uuid4()), path.name, file_type)
+        record.upload_path = path
+        record.file_size_bytes = path.stat().st_size
+        self.processed_dir = output_dir
+        self._extract_in_memory(record, file_type)
+        if record.metadata.get("extraction_error"):
+            raise ValueError("Member metadata extraction failed")
+        with ephemeral_duckdb_service() as duckdb:
+            metadata = duckdb.get_file_metadata(record.processed_path)
+            metadata["column_profiles"] = duckdb.get_column_profile(record.processed_path)
+            metadata["sample_rows"] = duckdb.get_sample_rows(record.processed_path, limit=5)
+        return metadata
 
     def _is_large_file(self, record: DatasetRecord) -> bool:
         """Return true when a dataset should use the streaming extraction path."""

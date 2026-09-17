@@ -825,6 +825,13 @@ async def get_dataset_status(
         "error": record.error if status_val == DatasetStatus.ERROR.value else None,
     }
 
+    if settings.multi_file_datasets_enabled and record.file_type == "directory":
+        profile = record.metadata["directory_profile"]
+        result["directory_profile"] = profile
+        if profile["status"] == "timeout":
+            result.update(status="timeout", error=profile["reason"])
+        return result
+
     # Show queue position for datasets waiting to be processed
     from app.services.processing_queue import get_processing_queue
     pq_inst = get_processing_queue()
@@ -928,6 +935,13 @@ async def run_processing_pipeline(
     if not record:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     
+    if settings.multi_file_datasets_enabled and record.file_type == "directory":
+        background_tasks.add_task(pipeline_service.run_pipeline, dataset_id)
+        return JSONResponse(status_code=202, content={
+            "dataset_id": dataset_id, "message": "Directory profiling started.",
+            "status_url": f"/api/datasets/{dataset_id}/pipeline-status",
+        })
+
     if record.status != ProcessingStatus.PREVIEW_READY:
         raise HTTPException(
             status_code=400,
@@ -964,6 +978,13 @@ async def process_full_pipeline(
     if not record:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
 
+    if settings.multi_file_datasets_enabled and record.file_type == "directory":
+        background_tasks.add_task(pipeline_service.run_full_pipeline, dataset_id)
+        return JSONResponse(status_code=202, content={
+            "dataset_id": dataset_id, "message": "Directory profiling started.",
+            "status_url": f"/api/datasets/{dataset_id}/pipeline-status",
+        })
+
     if record.status != ProcessingStatus.PREVIEW_READY:
         raise HTTPException(
             status_code=400,
@@ -993,6 +1014,9 @@ async def get_pipeline_status(
     Returns overall status, message, and individual step statuses
     (pending/running/success/failed/skipped) with timestamps.
     """
+    from app.services.directory_processing import directory_record, pipeline_status
+    if directory_record(dataset_id) is not None:
+        return pipeline_status(dataset_id)
     status_data = pipeline_service.get_pipeline_status(dataset_id)
 
     if status_data.get("status") == "failed" and status_data.get("message") == "No pipeline run found for this dataset.":
@@ -1065,6 +1089,13 @@ async def get_dataset_statistics(
     if not record:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
 
+    if settings.multi_file_datasets_enabled and record.file_type == "directory":
+        from app.services.directory_processing import profile_snapshot
+        profile = profile_snapshot(dataset_id)
+        return {"dataset_id": dataset_id, "directory_profile": profile,
+                "members": profile.get("members", {}), "statistics": [],
+                "column_count": profile.get("column_count", 0)}
+
     if record.status != ProcessingStatus.PREVIEW_READY:
         raise HTTPException(
             status_code=400,
@@ -1098,6 +1129,13 @@ async def get_dataset_profile(
     record = processing.get_dataset(dataset_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+
+    if settings.multi_file_datasets_enabled and record.file_type == "directory":
+        from app.services.directory_processing import profile_snapshot
+        profile = profile_snapshot(dataset_id)
+        return {"dataset_id": dataset_id, "directory_profile": profile,
+                "members": profile.get("members", {}), "column_profiles": [],
+                "column_count": profile.get("column_count", 0)}
 
     if record.status != ProcessingStatus.PREVIEW_READY:
         raise HTTPException(
