@@ -114,7 +114,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
         if (job && active) await previewBuildApi.cancel(job.job_id);
         setJob(null); setSelected([]); setPermission(false); setRestricted(false); setAccuracy(false);
       })}>No sample</Button>
-      {!active && <Button type="button" disabled={busy || recovering || !metadataApproved} onClick={prepare}>Prepare verified preview</Button>}
+      {!active && job?.state !== 'withdrawn' && <Button type="button" disabled={busy || recovering || !metadataApproved} onClick={prepare}>Prepare verified preview</Button>}
       {active && !job?.publication && <Button type="button" variant="outline" disabled={busy} onClick={() => run(async () => { setJob(await previewBuildApi.cancel(job!.job_id)); })}>Cancel preview build</Button>}
     </div>
     {declarationsNeeded && !active && <div className="space-y-2">

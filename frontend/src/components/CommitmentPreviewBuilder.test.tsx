@@ -126,3 +126,19 @@ it('offers a fresh build after an expired review without polling or reading rows
   await new Promise(resolve => setTimeout(resolve, 850));
   expect(previewBuildApi.status).not.toHaveBeenCalled();
 });
+
+it('keeps withdrawal retry available and hides preparation until retirement',async () => {
+  job={...job,state:'withdrawn',code:'external_retirement_pending',review_ready:false,
+    publication:{destination:'export',local_directory:'/app/exports',relative_path:'previews/v/h.json',package_sha256:'a'.repeat(64),byte_count:100,sample_hash:'b'.repeat(64),disclosure_version:'v'}};
+  vi.mocked(previewBuildApi.latest).mockResolvedValue(job);
+  vi.mocked(previewBuildApi.withdraw).mockImplementation(async () => {
+    job={...job,state:'retired',code:null}; return job;
+  });
+  render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
+  const retry = await screen.findByRole('button',{name:'Withdraw preview'});
+  expect(retry).toBeEnabled();
+  expect(screen.queryByRole('button',{name:'Prepare verified preview'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Replace preview'})).not.toBeInTheDocument();
+  fireEvent.click(retry);
+  expect(await screen.findByRole('button',{name:'Replace preview'})).toBeEnabled();
+});
