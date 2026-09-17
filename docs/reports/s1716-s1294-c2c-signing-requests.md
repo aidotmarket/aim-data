@@ -108,3 +108,5 @@ For retirement, preserve the source dataset/entitlements; act on the exact previ
 Review source: DeepSeek `response-20260917-121500-938722`, CC `response-20260917-121529-807322`, GLM `response-20260917-121517-622711`; original reviewed candidate `0a409a7329d82e14d0281d3b169bf3af57c4eaef`.
 
 DS-F4 corrected review extent: `app/models/dataset_commitment_schemas.py` contains 339 lines; 233 was the diff insertion count, not its full length.
+
+DS-F2 release dependency: Chunk 2d must stop producing the legacy `approved_rows` request before this producer change ships, with an end-to-end seller click-through proving the replacement flow; no UI implementation or release is claimed by this fold.
