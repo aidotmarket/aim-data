@@ -351,6 +351,7 @@ def _local_publish_snapshot(dataset_id, version_label=None):
             root = retained.root_path
             label = progress["version_label"]
             offset = progress.get("offset", 0)
+            accepted_samples = progress.get("accepted_sample_indices", [])
         else:
             rows = session.exec(select(DatasetMember).where(DatasetMember.dataset_id == dataset_id,
                 DatasetMember.status != "removed").order_by(DatasetMember.index)).all()
@@ -365,6 +366,7 @@ def _local_publish_snapshot(dataset_id, version_label=None):
             root = str(Path(record.root_path).resolve())
             label = version_label or f"manifest-{manifest['manifest_hash'][:32]}"
             offset = 0
+            accepted_samples = []
         if manifest["data_member_count"] - manifest["sample_member_count"] < 1:
             raise HTTPException(409, "paid_set_required: data_member_count - sample_member_count must be >= 1")
         try:
@@ -373,6 +375,7 @@ def _local_publish_snapshot(dataset_id, version_label=None):
             raise HTTPException(409, str(exc)) from None
         upload_id = uuid5(NAMESPACE_URL, canonical_json_bytes([dataset_id, root, label, manifest["manifest_hash"]]).decode())
         return {"dataset_id": dataset_id, "root_path": root, "manifest": manifest, "offset": offset,
+            "accepted_sample_indices": accepted_samples,
             "registration_to_published_index": index_mapping,
             "member_profiles": _local_member_profiles(metadata, manifest["members"], index_mapping),
             "retained_version_id": progress.get("version_id") if retained and progress.get("status") == "pending_members" else None,
@@ -399,20 +402,25 @@ def _record_local_publish(local, listing_id, version_id, status):
         metadata = _local_metadata(record)
         metadata["local_publish"] = {"version_id": version_id, "manifest_hash": key[1],
             "version_label": local["version"].version_label, "status": status,
-            "offset": local.get("offset", 0)}
+            "offset": local.get("offset", 0),
+            "accepted_sample_indices": local.get("accepted_sample_indices", [])}
         record.metadata_json = json.dumps(metadata)
         record.listing_id = listing_id
         session.add(record)
         session.commit()
 
 
-def _local_progress(dataset_id, offset, status):
+def _local_progress(dataset_id, offset, status, sample_index=None):
     with get_session_context() as session:
         record = session.get(DatasetRecord, dataset_id)
         metadata = _local_metadata(record)
         if not metadata.get("local_publish"):
             raise HTTPException(409, "local_publish_progress_missing")
         metadata["local_publish"].update(offset=offset, status=status)
+        if sample_index is not None:
+            accepted = set(metadata["local_publish"].get("accepted_sample_indices", []))
+            accepted.add(sample_index)
+            metadata["local_publish"]["accepted_sample_indices"] = sorted(accepted)
         record.metadata_json = json.dumps(metadata)
         session.add(record)
         session.commit()
@@ -897,6 +905,7 @@ async def publish_via_signed_proxy(
         version_id = str(version_data["version_id"])
         if local.get("retained_version_id") != version_id:
             local["offset"] = 0
+            local["accepted_sample_indices"] = []
         _record_local_publish(local, str(data["listing_id"]), version_id, version_data.get("status", "pending_members"))
 
         async def post(path, signed_payload, *, action, content=None):
@@ -928,6 +937,10 @@ async def publish_via_signed_proxy(
         def checkpoint(offset, result):
             _local_progress(body.vz_dataset_id, offset, result.get("status", "pending_members"))
 
+        def sample_checkpoint(index, result):
+            _local_progress(body.vz_dataset_id, len(local["manifest"]["members"]),
+                result.get("status", "pending_members"), sample_index=index)
+
         # A repeated publish returns the existing version status. In particular,
         # recovering a lost final-sample ACK must not resend to an active version.
         if version_data.get("status") == "pending_members":
@@ -939,7 +952,8 @@ async def publish_via_signed_proxy(
             try:
                 sample_result = await upload_samples(dataset_id=body.vz_dataset_id, root_path=local["root_path"],
                     version_id=version_id, members_upload_id=local["version"].members_upload_id,
-                    members=local["manifest"]["members"], post=post)
+                    members=local["manifest"]["members"], post=post,
+                    accepted_indices=local.get("accepted_sample_indices", []), checkpoint=sample_checkpoint)
             except ValueError as exc:
                 raise HTTPException(409, str(exc)) from None
             if sample_result:

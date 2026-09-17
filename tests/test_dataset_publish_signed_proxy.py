@@ -862,6 +862,44 @@ async def test_pending_status_requires_keystore(local_dataset, monkeypatch):
 
 def test_sample_timeout_setting_alias(monkeypatch):
     from app.config import Settings
-    assert Settings.model_fields["sample_upload_timeout_s"].default == 900
+    assert Settings.model_fields["sample_upload_timeout_s"].default == 930
     monkeypatch.setenv("AIM_DATA_SAMPLE_UPLOAD_TIMEOUT_S", "1200")
     assert Settings(_env_file=None).sample_upload_timeout_s == 1200
+
+
+@pytest.mark.asyncio
+async def test_sample_retry_skips_persisted_acknowledged_sample(local_dataset, monkeypatch):
+    import json
+    import httpx
+    with get_session_context() as session:
+        member = session.get(DatasetMember, (local_dataset, 1))
+        member.is_sample = True
+        session.add(member)
+        session.commit()
+    local = mp._local_publish_snapshot(local_dataset)
+    version_id = str(uuid4())
+    seen = []
+    async def receive(request, claims):
+        version = {"version_id": version_id, "version_label": local["version"].version_label,
+                   "status": "pending_members"}
+        if request.url.path.endswith("/publish"):
+            return httpx.Response(200, json={"listing_id": "listing", "versions": [version]})
+        if request.url.path.endswith("/members"):
+            return httpx.Response(200, json=version)
+        index = int(request.url.path.rsplit("/", 1)[1])
+        seen.append(index)
+        if seen == [0, 1]:
+            raise httpx.ReadError("sample 2 interrupted", request=request)
+        return httpx.Response(200, json={**version, "index": index,
+            "status": "active" if index == 1 else "pending_members"})
+    _signed_local_client(monkeypatch, receive)
+    body = mp.MarketplacePublishRequest(title="Test", description="Test", price_cents=2500, vz_dataset_id=local_dataset)
+    with pytest.raises(HTTPException) as failure:
+        await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    assert failure.value.status_code == 502
+    with get_session_context() as session:
+        progress = json.loads(session.get(DBDatasetRecord, local_dataset).metadata_json)["local_publish"]
+        assert progress["accepted_sample_indices"] == [0]
+    assert mp._local_publish_snapshot(local_dataset)["accepted_sample_indices"] == [0]
+    assert (await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace()))["status"] == "published"
+    assert seen == [0, 1, 1]

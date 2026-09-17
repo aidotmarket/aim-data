@@ -440,6 +440,7 @@ async def upload_member_chunks(*, version_id, members_upload_id, members, post, 
     """
     if not settings.multi_file_datasets_enabled:
         raise MarketplacePushError("multi_file_datasets_disabled")
+    # Receiver PUBLISH_MEMBER_CHUNK is pinned to 1000 members per request.
     chunk_size = min(settings.publish_member_chunk, 1000)
     result = {"status": "pending_members"}
     for offset in range(start_offset, len(members), chunk_size):

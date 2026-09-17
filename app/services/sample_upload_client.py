@@ -21,13 +21,16 @@ def validate_sample_members(members):
     return samples
 
 
-async def upload_samples(*, dataset_id, root_path, version_id, members_upload_id, members, post):
+async def upload_samples(*, dataset_id, root_path, version_id, members_upload_id, members, post,
+                         accepted_indices=(), checkpoint=None):
     if not settings.multi_file_datasets_enabled:
         raise ValueError("multi_file_datasets_disabled")
     samples = validate_sample_members(members)  # validate ALL before any upload
     result = None
     dataset = SimpleNamespace(id=dataset_id, root_path=root_path)
     for member in samples:
+        if member["index"] in accepted_indices:
+            continue
         local = SimpleNamespace(**member, dataset_id=dataset_id, status="current")
         path = resolve_member_path(dataset, local)
         if path is None:
@@ -64,6 +67,8 @@ async def upload_samples(*, dataset_id, root_path, version_id, members_upload_id
                 f"?members_upload_id={members_upload_id}",
                 signed_payload, action="publish_sample_member", content=content(),
             )
+        if checkpoint is not None:
+            checkpoint(member["index"], result)
         if result and result.get("status") in ("active", "quarantined", "superseded"):
             break
     return result
