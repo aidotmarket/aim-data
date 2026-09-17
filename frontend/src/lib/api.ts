@@ -1518,12 +1518,17 @@ export interface ImportScanResponse {
   truncated: boolean;
 }
 
-export interface ImportStartResponse {
+export type ImportStartResponse = {
   job_id: string;
   total_files: number;
   total_bytes: number;
   status: string;
-}
+} | {
+  dataset_id: string;
+  status: "complete";
+  total_files: number;
+  total_bytes: number;
+};
 
 export interface ImportProgress {
   files_total: number;

@@ -192,6 +192,14 @@ export function LocalImportBrowser({
 
     try {
       const res = await importApi.start(rootPath, filePaths);
+      if ("dataset_id" in res) {
+        setResults([{ file: currentPath, dataset_id: res.dataset_id, status: res.status }]);
+        setPhase("complete");
+        onImportingChange?.(false);
+        toast.success(`Imported 1 dataset (${res.total_files} files)`);
+        onSuccess?.();
+        return;
+      }
       setJobId(res.job_id);
 
       // Start polling

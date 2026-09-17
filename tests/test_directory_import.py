@@ -38,6 +38,10 @@ def test_directory_import_flag(tmp_path, monkeypatch, enabled):
         response = client.post('/imports/start', json={'path': str(root), 'files': ['a.csv','b.csv']})
     assert response.status_code == 200, response.text
     if enabled:
+        body = response.json()
+        assert body == {'dataset_id': body['dataset_id'], 'status': 'complete',
+                        'total_files': 2, 'total_bytes': 2}
+        assert isinstance(body['dataset_id'], str) and body['dataset_id']
         svc.start_import.assert_not_called(); svc.run_import.assert_not_called()
         with get_session_context() as session:
             assert len(session.exec(select(DatasetMember).where(
