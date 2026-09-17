@@ -416,3 +416,31 @@ describe("directory profiling outcomes", () => {
     expect(container.querySelector(".animate-spin")).toBeNull();
   });
 });
+
+
+describe("directory profile read states", () => {
+  it.each(["not_started", "absent"])("renders neutral copy for %s", async (state) => {
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [], total: 0, page: 1, page_size: 100, editable: true });
+    const fixture = { ...dataset(), file_type: "directory", metadata: {
+      ...dataset().metadata,
+      ...(state === "absent" ? {} : { directory_profile: { status: state, members: {} } }),
+    } };
+    render(<DirectoryMembers dataset={fixture} />);
+    expect(await screen.findByText("Not profiled yet")).toBeInTheDocument();
+    expect(screen.queryByText("Ready to list")).not.toBeInTheDocument();
+    expect(screen.queryByText("Processing")).not.toBeInTheDocument();
+  });
+
+  it("renders a stale timeout without Processing", async () => {
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [], total: 0, page: 1, page_size: 100, editable: true });
+    const fixture = { ...dataset(), file_type: "directory", metadata: {
+      ...dataset().metadata,
+      directory_profile: { status: "timeout", reason: "profiling run did not complete (stale)", members: {} },
+    } };
+    render(<DirectoryMembers dataset={fixture} />);
+    expect(await screen.findByText("Profiling timed out")).toBeInTheDocument();
+    expect(screen.getByText("profiling run did not complete (stale)")).toBeInTheDocument();
+    expect(screen.queryByText("Processing")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to list")).not.toBeInTheDocument();
+  });
+});

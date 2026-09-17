@@ -1362,8 +1362,9 @@ export function DirectoryMembers({ dataset }: { dataset: ApiDataset }) {
   };
   return <section className="space-y-4" aria-label="Directory members">
     <p>{dataset.metadata?.directory?.member_count ?? result?.total ?? 0} files</p>
+    {!profile && <p>Not profiled yet</p>}
     {profile && <div aria-label="Profiling result">
-      <p>{profile.status === "running" ? "Processing" : profile.status === "profiling_skipped" ? "Profiling skipped" : "Ready to list"}</p>
+      <p>{profile.status === "running" ? "Processing" : profile.status === "profiling_skipped" ? "Profiling skipped" : profile.status === "completed" ? "Ready to list" : profile.status === "timeout" ? "Profiling timed out" : "Not profiled yet"}</p>
       <p>{profile.summary}</p>
       {profile.reason && <p>{profile.reason}</p>}
       <p>{(profile.profiled_bytes ?? 0).toLocaleString()} bytes profiled</p>
