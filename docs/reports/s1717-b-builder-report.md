@@ -2,7 +2,7 @@
 
 Branch: `build/bq-multi-file-datasets-s1717-b`.
 Base: `adb97f0497223525d4247fa4bb200076fa5fa969` (chunk A merged).
-Implementation head: `d7fd820162b0bf1b712f73f3074bfab2e4c92fdd`; the report commit follows it.
+Implementation head (R2): `f56c9ce7fde6a75b48687d990b733f297101f572`; the documentation-only report commit follows it. R2 review input: `9624a037d8345893cff5e9738a19cda38c6680e9`.
 
 Chunk B implements bounded local directory profiling and the carried legacy-deletion fix. The feature flag remains off by default. No PR, deployment, publish-wire change, scanner change, secret change or Alembic revision was made. Council review is for the caller on the final pushed head; this report does not claim Gate 3 or enabled-release acceptance.
 
@@ -184,3 +184,69 @@ Evidence SHA-256 digests:
 - `r1-focused.xml`: `6f3a91d1418a0169df27789c36214a9f7d8008d0d5ff6ef29adcac60c3e27745`.
 - `r1-full.xml`: `e9078fa5f5c24ae1317b4300757ab1cefbaef8d723e89f7f2f159f7ab5916411`.
 - `r1-comparison.json`: `849c5d5ead4c045d24fb35ea1ac037f07097a3c1fe1c1a2588b2d654f9b4f6c3`.
+
+
+## R2 fold
+
+Review input: `9624a037d8345893cff5e9738a19cda38c6680e9`. Caller-supplied Council: DeepSeek **REQUEST_CHANGES** (1 MEDIUM, 3 LOW, 3 NIT), GLM **APPROVE_WITH_NITS** (1 LOW, 1 NIT), CC **APPROVE_WITH_NITS**. Backend fold: `d443ba2`; frontend fold: `f56c9ce`. This section supersedes affected R1 behavior and counts. The existing clean branch worktree `/private/var/tmp/koskadeux/minimal-bridge-worktrees/57806225a01e-a5e300` was used; the supplied bridge checkout was detached at the same review input. Read the current Gate 2 specification and gate-procedure runbook in the runbooks repository. No new branch, rebase, history rewrite, PR or deployment.
+
+### Findings and dispositions
+
+| Finding | Disposition |
+| --- | --- |
+| DeepSeek F-1 MEDIUM | Adopted. `_save_record` never stats a directory to overwrite its registered `file_size_bytes`; the insert conversion also preserves a directory's authoritative zero size. HTTP regression registers a real two-file directory under the upload directory, profiles it, posts listing-metadata and checks `file_size_bytes == sum(member.size_bytes) == 10` before and after. Extraction/provider calls are stubbed; the registration, HTTP handler and record save are real. |
+| DeepSeek F-2 LOW | Adopted. Persist UTC `started_at` at run start. Read-time projection converts `running` older than `PROFILE_TIMEOUT_S + 5` seconds to `timeout`, reason **profiling run did not complete (stale)**. Older pre-fold records lacking `started_at` use their persisted `updated_at`. `/pipeline-status`, `/status` and dataset metadata consumed by the card use this projection. Unfinished/missing data-member outcomes become `timeout`; completed outcomes survive. No read-time DB mutation or new worker is required. Tests exercise persisted running records at 901 and 906 seconds with a 900-second timeout, both endpoints, card metadata and rendered terminal copy. |
+| DeepSeek F-3 LOW | Adopted using the shared-budget option. Data and documentation consume the same `profile_max_members` attempt allowance, default **64**; failed reads consume slots. Data remains first. Documentation retains `profile_docs_context_bytes`, default **262144**, plus the shared aggregate-byte/deadline bounds. Tests cover failed documentation attempts and no documentation read after data exhausts the shared slots. No separate `profile_max_doc_members` setting is introduced. |
+| DeepSeek F-6 NIT | Adopted. Count-limit state remains D2 `too_large`; exact default reason is **too_large: PROFILE_MAX_MEMBERS=64**. The 64/65 boundary test asserts that string. This replaces R1's `member limit 64 reached` wording. |
+| DeepSeek F-7 NIT | Adopted. Absent or `not_started` profile renders **Not profiled yet**, never Ready to list. Both fixtures have rendered-copy tests. |
+| GLM NIT | Adopted. `detected_type` participates in each member's local cache identity. A type-only change invalidates a completed profile and takes the unsupported-type path in the regression test. |
+| DeepSeek F-4 LOW | Not adopted, as instructed. Pipeline routes remain the trigger; listing-metadata cache misses may synchronously await profiling up to `PROFILE_TIMEOUT_S`. Caller's recorded acceptance is retained; no scheduling change. |
+| DeepSeek F-5 NIT | Not adopted as a code change. Packet metadata remains caller-owned. No replacement Council packet is generated or claimed validated. |
+| GLM LOW | Report identity refreshed to the current implementation head above, with the following documentation-only commit explicitly distinguished. No runtime change for this finding. |
+
+### Policy values for caller's §6 record
+
+| Setting | Default | Effective policy |
+| --- | ---: | --- |
+| `profile_max_members` / `PROFILE_MAX_MEMBERS` | **64** | One shared read-attempt budget across data and documentation; not 64 of each. |
+| `profile_docs_context_bytes` / `AIM_DATA_PROFILE_DOCS_CONTEXT_BYTES` | **262144 bytes (256 KiB)** | Total documentation context, additionally limited by remaining aggregate bytes and time. |
+
+Stale-run read grace is the named internal constant `PROFILE_STALE_GRACE_S = 5` seconds, in addition to the existing `profile_timeout_s = 900`; it is not another documentation budget.
+
+### R2 validation
+
+Same Python environment and frontend dependency tree as R1. Commands retain the seven focused modules from above, `python -m pytest -q --tb=short --junitxml=<path>` for the full suite, and all three frontend commands. Fresh serial directories: `/tmp/s1717-b-evidence/r2-focused-serial` and `r2-full-serial`. Evidence prefix: `/tmp/s1717-b-evidence/r2-`.
+
+| Check | Result |
+| --- | --- |
+| Focused seven backend modules | **109 passed**, 0 failures/errors, 64 warnings, 14.22 seconds |
+| Frontend `NODE_OPTIONS=--no-experimental-webstorage npm test` | **78 passed**, 10 files, 1.75 seconds |
+| Frontend `tsc --noEmit` | Passed, no diagnostics |
+| Frontend `npm run build` | Passed, 3.00 seconds; existing chunk-size/Browserslist warnings |
+
+Focused counts: directory_processing **39**, directory_registration **12**, dataset_members_api **10**, single_file_uploads **5**, member_migration **5**, batch_upload **23**, pipeline **15**. R2 adds five backend cases and three frontend cases. Existing thread/deprecation warnings remain recorded in the logs.
+
+The first R2 full run (`r2-full.xml`) returned **3025 passed, 56 failed, 38 errors, 34 skipped**, 3153 total, 804 warnings, 159.39 seconds. Exact comparison with `base.xml` has one additional failing identity: `tests.test_sql::test_query_execution_blocked` (403 versus expected 400). This is the same suite-state-sensitive SQL case disclosed in the original report, where isolated unchanged base and candidate both fail identically. All 39 directory cases pass, and all 93 base failing/error identities remain. No SQL code was changed. A fresh-serial full rerun follows to verify parity; the first result is retained rather than omitted.
+
+
+The fresh-serial candidate rerun and an unchanged-base rerun used isolated temporary databases and serial directories. No code changed between the two R2 candidate runs. Fresh base remains `adb97f0497223525d4247fa4bb200076fa5fa969` in `/private/tmp/s1717-b-base`.
+
+| Full-suite run | Passed | Failed | Errors | Skipped | Total | Seconds |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Saved original base / `base.xml` | 2987 | 55 | 38 | 34 | 3114 | 167.12 |
+| Fresh unchanged base / `r2-base-full.xml` | 2986 | 56 | 38 | 34 | 3114 | 158.06 |
+| R2 implementation `f56c9ce` / `r2-final-full.xml` | 3025 | 56 | 38 | 34 | 3153 | 162.33 |
+
+**New failing cases versus the fresh unchanged base: none.** The same **94** failure/error identities occur in both; no base failure disappears. Candidate adds **39 passing cases**. All **39 directory-processing tests pass** in both R2 full runs. The fresh base reproduces the SQL 403-versus-400 failure: both fresh runs have that one extra identity compared with the saved original base, so this report does not claim identical results to the saved 93-failure snapshot. Full-suite exit status remains 1; this is baseline parity, not a green full suite. Candidate warnings: 804; fresh-base warnings: 764. Exact comparison is saved in `r2-comparison.json`.
+
+Evidence SHA-256 digests:
+
+- `base.xml`: `013e61539f7f6ecc9ff55f0f3c6e08cf1c93958b4e49576528181906179ac01e`.
+- `r2-focused.xml`: `214444663f7fa22c33ca0aabcdf3d4398afdca17a9e5d1d661f107ffee0e093a`.
+- `r2-full.xml`: `05f181ccfce7fa0b411b5ec12c461d0f2ff3fb0dfd60c63a299aef2fe5398ae1`.
+- `r2-base-full.xml`: `f4f8555651ef852d79b18f93e7a9afac6911ead9de3d5c524c876f271297945b`.
+- `r2-final-full.xml`: `eb382e67d4c5e63ec29e8ada567d9ec1a7edbf65b4bf259446e402e8ece82c3c`.
+- `r2-comparison.json`: `603db82696ce8f621ed1e3d9001b6401439099a325761d7213cd27990eae76ff`.
+- `r2-frontend.log`: `0ac3caa0bbf4da3f65ca8a619061d4568f6b01ce581dd0907dff35305947f5fe`.
+- `r2-types.log`: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- `r2-build.log`: `2d9199c8e858e74354d301834488f6b229720b420b8191fab8cdee3f7568ca92`.
