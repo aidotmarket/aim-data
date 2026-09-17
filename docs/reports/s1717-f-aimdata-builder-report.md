@@ -8,36 +8,36 @@ Branch: `build/bq-multi-file-datasets-s1717-f`.
 - Extended `tests/test_channel_dataset_detail.py` with a directory publish that starts without verification metadata or a verification panel action. It exercises the dataset publish route, real JSON serialization and signing, mocked ai.market responses, member chunks, and the selected sample upload. It recursively rejects serialized keys matching verification, verified, scan, or shape label and asserts successful publication and the saved listing ID.
 - Added single-file publish coverage with the feature flag on and off. Canonical payload bytes and HTTP JSON bytes must match the literal legacy payload expectation from `test_no_versions_legacy_publish_payload_is_unchanged`, including its exact keys and absence of new version/verification fields.
 - The target module had no backend fixtures at the specified base; reused the existing signed-publish helpers and directory fixture from the backend publish tests. Its three original presentation assertions remain intact.
-- Added a 13-line “Datasets with many files” section to each of `README.md` and `docs/INSTALL.md`, covering roles, seller-selected free samples, one listing, whole-set order-page delivery, optional verification, and the current release with an upgrade link. Other README sections are unchanged.
+- Added a concise “Datasets with many files” section to each of `README.md` and `docs/INSTALL.md`, covering roles, seller-selected free samples, one listing, data-member order-page delivery, optional verification, and the current release with an upgrade link. Other README sections are unchanged.
 - No schema, API, frontend, or default-flag changes. Frontend tests were neither changed nor run. Gate 1/Gate 2 specs were not read.
 
 ## Validation environment
 
-Used the existing `/Users/max/Projects/ai-market/aim-data/.venv/bin/python`: Python 3.12.12, pytest 7.4.4, httpx 0.27.2. The shell-default Python lacked `duckdb`; its initial collection attempt was superseded by the project environment run. No dependencies were installed or changed.
+Used the existing project Python environment: Python 3.12.12, pytest 7.4.4, httpx 0.27.2. The shell-default Python lacked `duckdb`; its initial collection attempt was superseded by the project environment run. No dependencies were installed or changed.
 
-The full suite was also run on a separate detached worktree at the exact base, `/tmp/s1717-f-base`, to identify inherited failures. Each run uses the suite's per-run temporary SQLite database; the commands also set a distinct `AIM_DATA_SERIAL_STORE_PATH`.
+The full suite was also run on a separate detached worktree at the exact base to identify inherited failures. Each run uses the suite's per-run temporary SQLite database and a distinct serial store. Commands below use portable output names; choose a separate writable serial-store location for each run.
 
 ## Commands and results
 
-Focused module (6 passed, 5 warnings):
+Original focused module (6 passed, 5 warnings):
 
 ```sh
-rtk proxy env AIM_DATA_SERIAL_STORE_PATH=/tmp/s1717-f-focused2-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q tests/test_channel_dataset_detail.py --junitxml=/tmp/s1717-f-focused.xml > /tmp/s1717-f-focused.log 2>&1
+AIM_DATA_SERIAL_STORE_PATH=./focused-serial python -m pytest -q tests/test_channel_dataset_detail.py --junitxml=focused.xml
 ```
 
 Full backend suite, candidate (run from the branch worktree):
 
 ```sh
-rtk proxy env AIM_DATA_SERIAL_STORE_PATH=/tmp/s1717-f-final-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --junitxml=/tmp/s1717-f-final.xml > /tmp/s1717-f-final.log 2>&1
+AIM_DATA_SERIAL_STORE_PATH=./candidate-serial python -m pytest -q --junitxml=candidate.xml
 ```
 
-Full backend suite, unchanged base (run from `/tmp/s1717-f-base`):
+Full backend suite, unchanged base (run from the base checkout):
 
 ```sh
-rtk proxy env AIM_DATA_SERIAL_STORE_PATH=/tmp/s1717-f-base-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --junitxml=/tmp/s1717-f-base.xml > /tmp/s1717-f-base.log 2>&1
+AIM_DATA_SERIAL_STORE_PATH=./base-serial python -m pytest -q --junitxml=base.xml
 ```
 
-`rtk git diff --check` passed with no whitespace errors.
+`git diff --check` passed with no whitespace errors.
 
 | Run | Passed | Failed | Skipped | Errors | Warnings | Duration |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -45,7 +45,7 @@ rtk proxy env AIM_DATA_SERIAL_STORE_PATH=/tmp/s1717-f-base-serial /Users/max/Pro
 | Full backend, candidate | 3162 | 109 | 34 | 38 | 820 | 217.72s |
 | Full backend, unchanged base | 3159 | 109 | 34 | 38 | 820 | 303.96s |
 
-The full suite is **not green**. Both full runs exit 1 with exactly the same 147 failing/error node IDs and the same failure/error classifications. No new failing nodes; the candidate adds three passing cases. Dominant inherited causes include the unavailable `/data` path, no local HTTP service for beta-readiness setup, unconfigured entitlement signing, directory verification disabled in existing tests, and existing missing-module/metering mismatches. No inherited failures were fixed or suppressed.
+The full suite is **not green**. Both full runs exit 1 with exactly the same 147 failing/error node IDs and the same failure/error classifications. No new failing nodes; the candidate adds three passing cases. Dominant inherited causes include an unavailable data directory, no local HTTP service for beta-readiness setup, unconfigured entitlement signing, directory verification disabled in existing tests, and existing missing-module/metering mismatches. No inherited failures were fixed or suppressed.
 
 The following node IDs failed identically on the exact base and candidate.
 
@@ -205,6 +205,29 @@ tests/test_beta_readiness.py::TestBetaReadiness::test_batch_path_traversal_block
 tests/test_beta_readiness.py::TestBetaReadiness::test_batch_null_byte_blocked
 tests/test_beta_readiness.py::TestBetaReadiness::test_upload_traversal_filename
 ```
+
+## R1 fold
+
+Reviewed head: `8dd3a052e26a8a5433e6dd8b8c4fdf03d3a89288`. Council outcomes: GLM APPROVE_WITH_MANDATES; DeepSeek REVISE. This fold changes only the two documentation sections, one heading assertion, and this report.
+
+- **GLM HIGH — adopted.** Both sections describe the install import-directory route through Local Import and **Import Selected**, not browser **Browse Folder** upload. `frontend/src/components/LocalImportBrowser.tsx:72` obtains the directory setting name from `useBrand().importDirEnvVar`; its empty-state guidance displays that name at line 316, and its button reads **Import Selected** at line 441. The docs refer to the displayed environment-variable name without inventing a literal name or value. The enabled route registers one directory dataset in `app/routers/imports.py:53-75`. Both sections include: “Dragging a folder into the upload box still creates one dataset per file.” Max's product decision on 2026-09-18 defers browser folder upload as one dataset to a follow-up release.
+- **GLM MEDIUM / DeepSeek F1 — adopted.** Both sections use the stored roles `data`, `documentation`, and `other`; the sample tick is separate and only available for `data`. Delivery means every `data` member, including selected samples, and excludes `documentation` and `other`. Delivery-filter reference supplied with the fold: `app/services/manifest_fulfillment.py:76-80`.
+- **DeepSeek F2 — adopted.** The order-page sentence is qualified with “In the ai.market release that includes this feature”. Receiver merge references supplied with the fold: ai-market-backend chunk D and ai-market-frontend PR #71. These references are not live-delivery verification by this fold.
+- **DeepSeek F3 — adopted.** Added `test_verified_shape_label_heading_is_optional` in `tests/test_channel_dataset_detail.py`, asserting that `frontend/src/pages/DatasetDetail.tsx` contains “Optional: add a verified shape label”. This makes AC6's heading half traceable from the module named by Gate 2. Existing rendered-heading test references supplied with the fold are `frontend/src/pages/DatasetDetail.test.tsx:145` and `frontend/src/pages/DatasetDetail.test.tsx:421`; those tests were not changed or rerun.
+- **DeepSeek F4 — no additional change.** No F4 change was included in the authorized adoption list; this fold adds none.
+- **DeepSeek F5 — adopted.** Removed machine-specific paths and command-wrapper details from the report. Commands now use ordinary Python and Git invocations with portable output names.
+- **Release wording and size — retained.** Both customer-facing sections keep “the current release” and their upgrade links, with no version numbers or internal project/session/customer names. Each section is 17 lines, below the 25-line limit.
+
+R1 implementation commits: `6466e07` (documentation), `ea7e9ce` (heading assertion). Report cleanup and dispositions are committed separately.
+
+R1 validation:
+
+```sh
+AIM_DATA_SERIAL_STORE_PATH=./r1-serial python -m pytest -q tests/test_channel_dataset_detail.py
+git diff --check
+```
+
+Focused module: **7 passed, 5 warnings in 7.79s**. Whitespace check: passed. The original full-suite comparison above remains historical evidence; the full suite was not rerun for this narrow fold. No specs were read, and no runtime behavior was changed.
 
 ## Delivery
 
