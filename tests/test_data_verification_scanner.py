@@ -786,3 +786,254 @@ def test_v2_preserves_scan_before_verification_prohibition(tmp_path, monkeypatch
     with pytest.raises((ContractError, ScanRefusedError)):
         scanner.scan(signed_spec=response.scan_spec.model_dump(mode="json"), d6_candidate=VALID_D6,
                      now=FIXED_NOW + timedelta(days=1) if failure == "expired" else FIXED_NOW)
+
+
+DIRECTORY_GOLDEN = Path(__file__).parent / "fixtures/multi_file_datasets/directory_verification_golden.json"
+BASE_E = "7dc92619c2cecce4c7492d1eed823fcaf9ee4328"
+
+
+def _directory_dataset(tmp_path, monkeypatch):
+    from app.config import settings
+    from app.models.published_manifest import PublishedManifest
+    from app.core.database import get_engine
+    from sqlmodel import SQLModel
+    from app.services.dataset_manifest import build_manifest
+    monkeypatch.setattr(settings, "multi_file_datasets_enabled", True)
+    SQLModel.metadata.create_all(get_engine())
+    fixture = json.loads(DIRECTORY_GOLDEN.read_text())
+    tmp_path.mkdir(exist_ok=True, parents=True)
+    for name, payload in fixture["payloads_hex"].items():
+        (tmp_path / name).write_bytes(bytes.fromhex(payload))
+    listing_id, dataset_id, version_id = (str(uuid4()) for _ in range(3))
+    manifest = build_manifest(fixture["members"])
+    # Deliberately make manifest order the reverse of canonical object-id order.
+    binding = b"local_directory_object\0" + str(tmp_path.resolve()).encode()
+    rows = sorted(manifest["members"], key=lambda m: eolymp_v1.object_commitment(
+        COMMITMENT_KEY, binding, "member\0" + m["relative_path"] + "\0" + m["sha256"]), reverse=True)
+    rows = [dict(m, index=i) for i, m in enumerate(rows)]
+    manifest = build_manifest(rows)
+    with get_session_context() as session:
+        session.add(DatasetRecord(id=dataset_id, listing_id=listing_id, file_type="directory",
+            original_filename=tmp_path.name, storage_filename=tmp_path.name, root_path=str(tmp_path.resolve()),
+            status="preview_ready", metadata_json=json.dumps({"local_publish": {"version_id": version_id,
+            "manifest_hash": manifest["manifest_hash"], "status": "active"}})))
+        session.add(PublishedManifest(listing_version_id=version_id, manifest_hash=manifest["manifest_hash"],
+            dataset_id=dataset_id, root_path=str(tmp_path.resolve()), members=manifest["members"]))
+        session.commit()
+    spec = _signed_spec(listing_id=listing_id, source_handle_id=dataset_id,
+        listing_version_id=version_id, manifest_hash=manifest["manifest_hash"])
+    return spec, manifest
+
+
+def test_directory_ac5_report_order_zip_privacy_and_probe(tmp_path, monkeypatch):
+    from app.services import data_verification_local_service as local
+    spec, manifest = _directory_dataset(tmp_path, monkeypatch)
+    from app.models.dataset import DatasetMember
+    with get_session_context() as session:
+        session.add(DatasetMember(dataset_id=spec["payload"]["source_handle_id"], index=0,
+            relative_path="a.csv", role="documentation", detected_type="csv"))
+        session.commit()
+    calls = []
+    original = EolympConnectorV1.scan_bytes
+    def spy(self, **kwargs):
+        assert not __import__("zipfile").is_zipfile(io.BytesIO(kwargs["payload"]))
+        calls.append(kwargs["artifact_name"])
+        return original(self, **kwargs)
+    monkeypatch.setattr(EolympConnectorV1, "scan_bytes", spy)
+    execution = _scanner().scan(signed_spec=spec, d6_candidate=VALID_D6, now=FIXED_NOW)
+    report = execution.report
+    assert len(calls) == 2
+    assert report["coverage"] == {"objects_discovered": 3, "objects_scanned": 2,
+        "objects_skipped_by_reason": {"unsupported_type": 1}, "skipped": report["coverage"]["skipped"]}
+    assert len(report["coverage"]["skipped"]) == 1
+    assert report["coverage"]["skipped"][0]["reason"] == "unsupported_type"
+    binding = b"local_directory_object\0" + str(tmp_path.resolve()).encode()
+    expected = [eolymp_v1.object_commitment(COMMITMENT_KEY, binding,
+        "member\0" + m["relative_path"] + "\0" + m["sha256"])
+        for m in manifest["members"] if m["role"] == "data" and m["relative_path"] != "container.csv"]
+    assert expected != sorted(expected)
+    assert [o["object_id"] for o in report["objects"]] == sorted(expected)
+    assert [o["object_id"] for o in execution.d8_projection] == sorted(expected)
+    assert_report_field_contract(report)
+    wire = canonical_json_bytes(report)
+    assert all(m["relative_path"].encode() not in wire for m in manifest["members"])
+    assert b"PRIVATE" not in wire and str(tmp_path).encode() not in wire
+    with get_session_context() as session:
+        dataset = session.get(DatasetRecord, spec["payload"]["source_handle_id"])
+        probe, view = local._probe(dataset, True)
+        assert local._view(dataset, None).supported
+    assert probe.objects_discovered == 3
+    assert view.fixed_reason_skips == {"unsupported_type": 1}
+    assert report["spec_version"] == "1"
+
+
+@pytest.mark.parametrize("mutation", ["bytes", "missing", "escape", "between_reads", "during_read"])
+def test_directory_stale_manifest_never_reports(tmp_path, monkeypatch, mutation):
+    spec, _ = _directory_dataset(tmp_path, monkeypatch)
+    target = tmp_path / "a.csv"
+    def mutate():
+        if mutation == "missing": target.unlink()
+        elif mutation == "escape":
+            outside = tmp_path.parent / (tmp_path.name + "-outside.csv")
+            outside.write_bytes(target.read_bytes()); target.unlink(); target.symlink_to(outside)
+        else: target.write_bytes(b"id\n7\n8\n9\n")
+    if mutation == "between_reads":
+        original = DataVerificationScanner._directory_pre_read
+        def between(cls, artifact):
+            count = original(artifact); mutate(); return count
+        monkeypatch.setattr(DataVerificationScanner, "_directory_pre_read", classmethod(between))
+    elif mutation == "during_read":
+        original = scanner_module.os.read
+        changed = False
+        def read(fd, size):
+            nonlocal changed
+            value = original(fd, size)
+            if not changed and value == b"id\n4\n5\n6\n":
+                changed = True; mutate()
+            return value
+        monkeypatch.setattr(scanner_module.os, "read", read)
+    else: mutate()
+    calls = []
+    monkeypatch.setattr(scanner_module, "sign_receipt_payload", lambda *a: calls.append(a))
+    with pytest.raises(ScanRefusedError):
+        _scanner().scan(signed_spec=spec, d6_candidate=VALID_D6, now=FIXED_NOW)
+    assert not calls
+
+
+def test_directory_bound_streams_every_member_and_count_fails_closed(tmp_path, monkeypatch):
+    spec, manifest = _directory_dataset(tmp_path, monkeypatch)
+    monkeypatch.setattr(scanner_module.settings, "scan_max_member_bytes", 8)
+    reads = []
+    original = DataVerificationScanner._read_directory_member
+    def read(artifact, member, *, buffer):
+        reads.append((member["relative_path"], buffer))
+        return original(artifact, member, buffer=buffer)
+    monkeypatch.setattr(DataVerificationScanner, "_read_directory_member", staticmethod(read))
+    report = _scanner().scan(signed_spec=spec, d6_candidate=VALID_D6, now=FIXED_NOW).report
+    assert len(reads) == 3 and all(not buffered for _, buffered in reads)
+    assert [name for name, _ in reads] == [m["relative_path"] for m in manifest["members"] if m["role"] == "data"]
+    assert report["coverage"]["objects_skipped_by_reason"] == {"unsupported_type": 3}
+    assert report["coverage"]["skipped"] == sorted(report["coverage"]["skipped"], key=lambda x: x["object_id"])
+    from app.services import data_verification_local_service as local
+    from dataclasses import replace
+    original_resolve = local.resolve_source_artifact
+    monkeypatch.setattr(local, "resolve_source_artifact", lambda *a: replace(original_resolve(*a), data_member_count=99))
+    with pytest.raises(ScanRefusedError, match="count mismatch"):
+        _scanner().scan(signed_spec=spec, d6_candidate=VALID_D6, now=FIXED_NOW)
+
+
+@pytest.mark.parametrize("error, reason", [(PermissionError, "permission_denied"), (TimeoutError, "timeout"),
+                                         (eolymp_v1.UnsupportedConnectorShape, "unsupported_type")])
+def test_directory_runtime_skips(tmp_path, monkeypatch, error, reason):
+    spec, _ = _directory_dataset(tmp_path, monkeypatch)
+    def fail(*a, **kw): raise error("private member text")
+    monkeypatch.setattr(EolympConnectorV1, "scan_bytes", fail)
+    report = _scanner().scan(signed_spec=spec, d6_candidate=VALID_D6, now=FIXED_NOW).report
+    assert report["coverage"]["objects_skipped_by_reason"][reason] >= 2
+    assert b"private member text" not in canonical_json_bytes(report)
+
+
+def _base_module(path, name):
+    import subprocess, types, sys
+    source = subprocess.check_output(["git", "show", f"{BASE_E}:{path}"], text=True)
+    module = types.ModuleType(name)
+    sys.modules[name] = module
+    exec(compile(source, path, "exec"), module.__dict__)
+    return module
+
+
+def test_connector_blob_frozen_and_old_install_rejects_directory_spec(tmp_path, monkeypatch):
+    import subprocess
+    from pydantic import ValidationError
+    path = "app/services/data_verification/connectors/eolymp_v1.py"
+    assert Path(path).read_bytes() == subprocess.check_output(["git", "show", f"{BASE_E}:{path}"])
+    spec, _ = _directory_dataset(tmp_path, monkeypatch)
+    old = _base_module("app/services/data_verification/contract.py", "s1717_old_contract")
+    with pytest.raises(ValidationError) as exc:
+        old.ScanSpecPayload.model_validate(spec["payload"])
+    assert {e["loc"][0] for e in exc.value.errors() if e["type"] == "extra_forbidden"} == {"listing_version_id", "manifest_hash"}
+
+
+@pytest.mark.parametrize("changes", [{"listing_version_id": "v1"}, {"manifest_hash": "a"*64},
+    {"listing_version_id": None, "manifest_hash": None}, {"listing_version_id": "v1", "manifest_hash": "bad"}])
+def test_directory_spec_presence_is_strict(changes):
+    from app.services.data_verification.contract import ScanSpecPayload
+    from pydantic import ValidationError
+    payload = _signed_spec(listing_id="l", source_handle_id="d")["payload"]
+    with pytest.raises(ValidationError): ScanSpecPayload.model_validate({**payload, **changes})
+
+
+@pytest.mark.parametrize("kind", ["local", "s3"])
+def test_legacy_scan_and_spec_byte_identical_to_base(tmp_path, monkeypatch, kind):
+    from app.services.data_verification.contract import ScanSpecPayload
+    payload = b"id\n1\n2\n3\n"
+    listing, dataset = (_local_dataset(tmp_path, monkeypatch, payload) if kind == "local"
+                        else _s3_dataset(tmp_path, monkeypatch, payload))
+    spec = _signed_spec(listing_id=listing, source_handle_id=dataset)
+    assert canonical_json_bytes(ScanSpecPayload.model_validate(spec["payload"]).model_dump(mode="json")) == canonical_json_bytes(spec["payload"])
+    old = _base_module("app/services/data_verification/scanner.py", "s1717_old_scanner")
+    previous = old.DataVerificationScanner(commitment_key=COMMITMENT_KEY, install_private_key=INSTALL_PRIVATE_KEY,
+        install_key_id="install-fixture-key-v1", platform_public_key=PLATFORM_PRIVATE_KEY.public_key(),
+        broker_client=_Broker(payload), clock=_clock())
+    before = previous.scan(signed_spec=spec, d6_candidate=VALID_D6, now=FIXED_NOW)
+    after = _scanner(broker=_Broker(payload)).scan(signed_spec=spec, d6_candidate=VALID_D6, now=FIXED_NOW)
+    assert canonical_json_bytes(before.report) == canonical_json_bytes(after.report)
+    assert before.d8_projection == after.d8_projection
+
+
+def test_directory_missing_binding_and_flag_off_refuse_before_read(tmp_path, monkeypatch):
+    spec, _ = _directory_dataset(tmp_path, monkeypatch)
+    unsigned_binding = _signed_spec(listing_id=spec["payload"]["listing_id"], source_handle_id=spec["payload"]["source_handle_id"])
+    with pytest.raises(ScanRefusedError, match="binding is required"):
+        _scanner().scan(signed_spec=unsigned_binding, d6_candidate=VALID_D6, now=FIXED_NOW)
+    monkeypatch.setattr(scanner_module.settings, "multi_file_datasets_enabled", False)
+    monkeypatch.setattr(DataVerificationScanner, "_read_directory_member", lambda *a, **kw: pytest.fail("read while disabled"))
+    with pytest.raises(resolver.ArtifactResolutionError, match="disabled"):
+        _scanner().scan(signed_spec=spec, d6_candidate=VALID_D6, now=FIXED_NOW)
+
+
+def test_directory_fact_time_exact_bound_and_deleted_registration(tmp_path, monkeypatch):
+    from app.services import data_verification_local_service as local
+    from app.models.published_manifest import PublishedManifest
+    from app.services.dataset_manifest import build_manifest
+    spec, manifest = _directory_dataset(tmp_path, monkeypatch)
+    rows = [dict(next(m for m in manifest["members"] if m["relative_path"] == "a.csv"), index=0)]
+    single = build_manifest(rows)
+    version = str(uuid4())
+    with get_session_context() as session:
+        session.add(PublishedManifest(listing_version_id=version, manifest_hash=single["manifest_hash"],
+            root_path=str(tmp_path.resolve()), dataset_id=spec["payload"]["source_handle_id"], members=rows))
+        session.commit()
+        dataset = session.get(DatasetRecord, spec["payload"]["source_handle_id"])
+        session.delete(dataset); session.commit()
+    # Retention is independent of the registration lifecycle.
+    single_spec = _signed_spec(listing_id=spec["payload"]["listing_id"], source_handle_id=spec["payload"]["source_handle_id"],
+        listing_version_id=version, manifest_hash=single["manifest_hash"])
+    monkeypatch.setattr(scanner_module.settings, "scan_max_member_bytes", rows[0]["size_bytes"])
+    report = _scanner().scan(signed_spec=single_spec, d6_candidate=VALID_D6, now=FIXED_NOW).report
+    assert report["coverage"]["objects_scanned"] == report["coverage"]["objects_discovered"] == 1
+    assert report["coverage"]["skipped"] == []
+    another = DataVerificationScanner(commitment_key=b"d"*32, install_private_key=INSTALL_PRIVATE_KEY,
+        install_key_id="install-fixture-key-v1", platform_public_key=PLATFORM_PRIVATE_KEY.public_key(), clock=_clock())
+    different_key = another.scan(signed_spec=single_spec, d6_candidate=VALID_D6, now=FIXED_NOW).report
+    assert different_key["content_sha256"] == report["content_sha256"]
+    assert different_key["objects"][0]["object_id"] != report["objects"][0]["object_id"]
+
+
+def test_directory_detected_unsupported_never_buffers_or_calls_connector(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from app.services import data_verification_local_service as local
+    spec, _ = _directory_dataset(tmp_path, monkeypatch)
+    resolve = local.resolve_source_artifact
+    def unsupported(*args):
+        artifact = resolve(*args)
+        return replace(artifact, members=tuple(dict(m, detected_type="unsupported") for m in artifact.members))
+    monkeypatch.setattr(local, "resolve_source_artifact", unsupported)
+    original = DataVerificationScanner._read_directory_member
+    def read(artifact, member, *, buffer):
+        assert not buffer
+        return original(artifact, member, buffer=buffer)
+    monkeypatch.setattr(DataVerificationScanner, "_read_directory_member", staticmethod(read))
+    monkeypatch.setattr(EolympConnectorV1, "scan_bytes", lambda *a, **kw: pytest.fail("unsupported connector call"))
+    report = _scanner().scan(signed_spec=spec, d6_candidate=VALID_D6, now=FIXED_NOW).report
+    assert report["coverage"]["objects_skipped_by_reason"] == {"unsupported_type": 3}
