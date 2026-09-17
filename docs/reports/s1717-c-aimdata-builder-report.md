@@ -1,4 +1,59 @@
-# S1717 chunk C — AIM Data sender reconciliation report
+# S1717 chunk C — section 3a wire-contract follow-up
+
+Branch: `build/bq-multi-file-datasets-s1717-c`; continuation start: `3662046601bad10c1d9e32d3cbe3c6c31f27b352`; implementation: `e1e4eb5`.
+Base remains `adb97f0497223525d4247fa4bb200076fa5fa969`.
+
+Authority: fetched runbooks `origin/main` at `bd703814803642f5a8e364767caecc89ef472083`, `specs/BQ-MULTI-FILE-DATASETS-S1717-GATE2.md` **§3a, Chunk C wire contract**. Receiver source: `ai-market-backend@305248064d836f9caaa4118f34aab4889aa21fae`. Read chunk B source at `9624a037d8345893cff5e9738a19cda38c6680e9` with `git show`; no merge of B. Continued in the existing branch-owning worktree; no new branch, rebase, history rewrite, PR or deployment.
+
+## Changes against §3a
+
+1. **Carrier addition / Publish payload (§3a):** local versions now emit signed `sample_members_total`, counted from the frozen manifest's `is_sample` members. The emitter requires it for local versions, refuses it on S3, and checks `members_total - sample_members_total >= 1`. The existing stricter data-only paid-set check still runs before registration or signing. Both S3 byte goldens pass unchanged, including explicitly null new defaults. A real signed HTTP mock verifies the count is in the hashed payload. The receiver's HTTP 400 `at least one non-sample data member is required` passes through verbatim and is rendered in the frontend alert (backend and UI tests).
+2. **Profile carrier (§3a):** chunk B writes `metadata_json.directory_profile.members[str(index)] = {status: "profiled", profile: {columns: [{name, type, nullable, ...}], ...}, ...}` in `directory_processing.py`; `listing_metadata_service.py` persists aggregate listing metadata separately. The sender projects the former onto `schema_info.member_profiles`, retaining only index/name/type for profiled data members in the published manifest. Non-data/unknown members, absent profiles and malformed outcomes are ignored; no valid profiles means no key, allowing the receiver's “not profiled” fallback. A stored-metadata fixture with two different column sets verifies both signed profiles, plus absent/malformed cases. No chunk B runtime import or merge is needed.
+3. **Members endpoint detected_type mirror (§3a):** added `tests/fixtures/multi_file_datasets/processable_types.json`, the exact sorted literal set serialized with `json.dumps(sorted(list), separators=(",", ":")) + "\n"`. The test checks both bytes and equality with `processing_service.PROCESSABLE_TYPES | {"unsupported"}`. SHA-256: **`5d6c91d85e77762277a79c03d31f442e21fc69de350f0d65588b77857faea089`**. The file is not present at the pinned backend SHA or its locally available chunk C branch at inspection; this digest is supplied for the in-progress backend fold to match. No claim of a cross-repository file comparison is made.
+
+## Follow-up validation
+
+Focused modules: **52 passed** in 4.21 s (`test_member_upload_client.py`, `test_dataset_publish_signed_proxy.py`, `test_alembic_025_026.py`). Frontend: **74 passed across 10 files**, 1.48 s; production build passed in 2.96 s (existing bundle-size warning); `tsc --noEmit` passed. `git diff --check` passed.
+
+Fresh full-suite comparison on base and implementation `e1e4eb5`, with default-off flags, the same Python environment, separate serial directories and `PYTHONHASHSEED=0`:
+
+| Run | Passed | Failed | Errors | Skipped | Total | Duration |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base `adb97f0` | 2,986 | 56 | 38 | 34 | 3,114 | 151.13 s |
+| Candidate `e1e4eb5` | 3,033 | 56 | 38 | 34 | 3,161 | 153.89 s |
+
+**No new failing cases; no resolved cases.** All 94 failure/error identities match exactly by JUnit `classname::name`. Candidate has 47 additional passing tests over base. The full suite remains non-green.
+
+The initial unseeded comparison had base 2,987 passed / 55 failed / 38 errors and candidate 3,033 passed / 56 failed / 38 errors. Its sole difference was `tests.test_sql::test_query_execution_blocked` (403 versus expected 400). The fixed-seed full repeat reproduces that failure on both revisions; SQL router/service/test files are unchanged from base. Both runs are retained; this is a pre-existing variable result, not silently discarded evidence.
+
+Evidence: `/tmp/s1717-c-wire-{base,final,base2,final2,focused}.{log,xml}`, `/tmp/s1717-c-wire-comparison.json`, `/tmp/s1717-c-wire-{frontend,build,tsc}.log`. `base2`/`final2` are the fixed-seed full repeats. Commands (from the corresponding checkout; frontend commands from `frontend/`):
+
+```sh
+rtk proxy env PYTHONHASHSEED=0 AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-wire-base2-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-wire-base2.xml
+rtk proxy env PYTHONHASHSEED=0 AIM_DATA_SERIAL_DATA_DIR=/tmp/s1717-c-wire-final2-serial /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q --tb=short --junitxml=/tmp/s1717-c-wire-final2.xml
+rtk proxy /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q tests/test_member_upload_client.py tests/test_dataset_publish_signed_proxy.py tests/test_alembic_025_026.py --tb=short --junitxml=/tmp/s1717-c-wire-focused.xml
+rtk proxy env NODE_OPTIONS=--no-experimental-webstorage npm test -- --run
+rtk proxy npm run build
+rtk proxy ./node_modules/.bin/tsc --noEmit
+```
+
+JUnit SHA-256:
+
+- `base2`: `5694f05ba71ac30866ec0c9ffa2a67c3f8d380ef9e42452661479a72d936765a`.
+- `final2`: `d7364b4c30b2b001a97cbaf1374c7855c29618615d0f72e30b0dfb88b080b8c5`.
+- `focused`: `d323a3fbcaa25b4fe5d095d67199bd011dcdc22c84ffac4bb01f91ad54f614f5`.
+
+## Operating scope
+
+Re-read `runbooks/aim-data-seller-publish-journey.md`; the branch-local operating supplement below still applies. §3a adds no operator action. Local-route enablement remains gated; no provider, credential, production or external-message changes. Live receiver/database/store integration, independent review, copied real-install acceptance and enabled release remain outstanding and are not claimed by this sender follow-up.
+
+---
+
+## Prior reconciliation report (historical)
+
+The following records the preceding reconciliation and its older receiver pin/results. The §3a follow-up above supersedes its carrier list and validation counts.
+
+### S1717 chunk C — AIM Data sender reconciliation report
 
 Branch: `build/bq-multi-file-datasets-s1717-c`.
 Base: `adb97f0497223525d4247fa4bb200076fa5fa969` (chunk A, merged PR #66).
