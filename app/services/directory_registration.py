@@ -25,6 +25,12 @@ class DirectoryRegistrationError(ValueError):
     pass
 
 
+def member_detected_type(file_type):
+    """Map legacy/upload types into the manifest's detected-type domain."""
+    from app.services.processing_service import PROCESSABLE_TYPES
+    return file_type if file_type in PROCESSABLE_TYPES else "unsupported"
+
+
 def require_enabled():
     if not settings.multi_file_datasets_enabled:
         raise DirectoryRegistrationError("Multi-file datasets are disabled")
@@ -273,7 +279,7 @@ def register_uploaded_file(session, dataset_id, upload_path, original_filename):
         source.rename(target)
         digest, info = stable_read(target)
         values = dict(relative_path=filename, size_bytes=info.st_size, sha256=digest,
-                      detected_type=dataset.file_type, role="data", is_sample=False,
+                      detected_type=member_detected_type(dataset.file_type), role="data", is_sample=False,
                       status="current", reason=None, mtime=datetime.fromtimestamp(info.st_mtime, timezone.utc))
         return _store(session, root, [values], dataset)
     except BaseException:

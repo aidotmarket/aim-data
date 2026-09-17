@@ -75,3 +75,41 @@ def test_backfill_flag_off(install_copy, monkeypatch):
     monkeypatch.setattr(settings, 'multi_file_datasets_enabled', False)
     with pytest.raises(ValueError, match='disabled'): migrate_members(install_copy)
     assert not install_copy.exec(select(DatasetMember)).all()
+
+
+def test_legacy_unknown_type_maps_to_manifest_domain(install_copy):
+    record = install_copy.get(DatasetRecord, 'upload')
+    record.file_type = 'legacy-binary'
+    install_copy.add(record)
+    install_copy.commit()
+    migrate_members(install_copy)
+    member = install_copy.get(DatasetMember, ('upload', 0))
+    assert member.detected_type == 'unsupported'
+    assert build_manifest([member])['members'][0]['detected_type'] == 'unsupported'
+    assert record.file_type == 'legacy-binary'
+
+
+@pytest.mark.parametrize('reason', ['Unreadable entry', 'changing entry'])
+def test_backfill_failure_names_source_and_rolls_back(install_copy, monkeypatch, reason):
+    from app.services import member_migration
+    from app.services.directory_registration import DirectoryRegistrationError
+    original = member_migration.stable_read
+    record = install_copy.get(DatasetRecord, 'upload')
+    path = _resolve_file_path(record, upload_directory=settings.upload_directory,
+                              processed_directory=settings.processed_directory)
+
+    def fail_selected(candidate):
+        if Path(candidate) == Path(path):
+            raise DirectoryRegistrationError(reason)
+        return original(candidate)
+
+    monkeypatch.setattr(member_migration, 'stable_read', fail_selected)
+    with pytest.raises(DirectoryRegistrationError) as error:
+        migrate_members(install_copy)
+    assert record.id in str(error.value) and str(path) in str(error.value)
+    assert reason in str(error.value)
+    install_copy.rollback()  # Caller retains the existing all-or-nothing transaction.
+    assert not install_copy.exec(select(DatasetMember)).all()
+    assert all(d.root_path is None for d in install_copy.exec(select(DatasetRecord)).all())
+    monkeypatch.setattr(member_migration, 'stable_read', original)
+    assert migrate_members(install_copy) == 4

@@ -6,7 +6,9 @@ from sqlmodel import select
 
 from app.config import settings
 from app.models.dataset import DatasetMember, DatasetRecord
-from app.services.directory_registration import require_enabled, stable_read
+from app.services.directory_registration import (
+    DirectoryRegistrationError, member_detected_type, require_enabled, stable_read,
+)
 from app.services.dataset_manifest import canonical_path
 from app.services.source_artifact_resolver import _resolve_file_path
 
@@ -31,12 +33,17 @@ def migrate_members(session):
                          str(Path(settings.upload_directory) / dataset.storage_filename))
         values = dict(size_bytes=0, sha256=None, status="missing", reason="source_missing", mtime=None)
         if path is not None:
-            digest, info = stable_read(path)
+            try:
+                digest, info = stable_read(path)
+            except (DirectoryRegistrationError, OSError) as exc:
+                raise DirectoryRegistrationError(
+                    f"Legacy dataset {dataset.id!r} at {str(path)!r}: {exc}"
+                ) from exc
             values = dict(size_bytes=info.st_size, sha256=digest, status="current", reason=None,
                           mtime=datetime.fromtimestamp(info.st_mtime, timezone.utc))
         session.add(DatasetMember(dataset_id=dataset.id, index=0,
                                   relative_path=canonical_path(candidate.name),
-                                  detected_type=dataset.file_type, role="data", is_sample=False, **values))
+                                  detected_type=member_detected_type(dataset.file_type), role="data", is_sample=False, **values))
         dataset.root_path = str(candidate.parent)
         session.add(dataset)
         count += 1
