@@ -90,3 +90,28 @@ it('shows local awaiting-backend state and key fingerprint on recovery',async ()
   expect(screen.getByText('f'.repeat(64))).toBeInTheDocument();
   expect(previewBuildApi.submit).not.toHaveBeenCalled();
 });
+
+it('reviews source, origin and fingerprint before signing, then records pending submission',async () => {
+  job={...job,state:'hosted',selection:{leaf_indices:[0],display_columns:['value'],rows:1,fields:1,canonical_bytes:40},
+    policy:{policy:'aim-preview-policy-v1',version:'1.0.0',passed:true,reason_codes:[]},
+    publication:{destination:'export',local_directory:'/app/exports',relative_path:'previews/v/h.json',package_sha256:'a'.repeat(64),byte_count:100,sample_hash:'b'.repeat(64),disclosure_version:'v'},
+    origin:'https://seller.example/previews/v/h.json',signing:{fingerprint:'f'.repeat(64),code:null},
+    receipts:[{url:'https://seller.example/previews/v/h.json',method:'GET',status:200,captured_at:'2026-09-17',headers:{},no_set_cookie:true},{url:'https://seller.example/previews/v/h.json',method:'OPTIONS',status:204,captured_at:'2026-09-17',headers:{},no_set_cookie:true}]};
+  vi.mocked(previewBuildApi.latest).mockResolvedValue(job);
+  vi.mocked(previewBuildApi.candidate).mockImplementation(async()=>{
+    job={...job,state:'signed_candidate',candidate:{kind:'fixture_candidate',key_fingerprint:'f'.repeat(64),request_digest:'d'.repeat(64),sample_hash:'b'.repeat(64),disclosure_version:'v'}};return job;
+  });
+  vi.mocked(previewBuildApi.submit).mockImplementation(async()=>({...job,outcome:'Prepared locally; marketplace preview submission awaits backend support'}));
+  render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
+  expect(await screen.findByRole('button',{name:'Prepare signed preview'})).toBeDisabled();
+  expect(screen.getByText(/Registered key fingerprint:/)).toHaveTextContent('f'.repeat(64));
+  expect(screen.getByText('Origin: https://seller.example/previews/v/h.json')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Rights basis'),{target:{value:'owner'}});
+  fireEvent.click(screen.getByLabelText(PREVIEW_PERMISSION));
+  fireEvent.click(screen.getByLabelText(/I confirm these selected records contain no/));
+  fireEvent.click(screen.getByLabelText(/I confirm the approved metadata is accurate/));
+  fireEvent.click(screen.getByRole('button',{name:'Prepare signed preview'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Finish local preparation'}));
+  expect(await screen.findByText('Prepared locally; marketplace preview submission awaits backend support')).toBeInTheDocument();
+  expect(previewBuildApi.candidate).toHaveBeenCalledWith('job',{rights_basis:'owner',public_preview_permission:true,restricted_content_confirmed:true,metadata_accuracy_confirmed:true});
+});

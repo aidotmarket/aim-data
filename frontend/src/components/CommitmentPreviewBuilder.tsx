@@ -153,7 +153,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
             const value = await previewBuildApi.selection(job.job_id,selected,columns); setJob(value); setPermission(false); setRestricted(false); setAccuracy(false);
           })}>Save selection</Button>
         </div>
-        <fieldset disabled={busy || !!job.candidate} className="space-y-3">
+        <fieldset disabled={busy} className="space-y-3">
           <legend className="font-medium">Rights and local policy review</legend>
           <label className="block">Rights basis <select aria-label="Rights basis" value={rights} onChange={e => { setRights(e.target.value as typeof rights); setPermission(false); setAccuracy(false); }}>
             <option value="">Choose rights basis</option><option value="owner">I own the rights</option><option value="licensed">Licensed for public preview</option><option value="public_domain">Public domain</option><option value="other_authorized">Other authorization</option>
@@ -172,7 +172,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
           <p>{job.selection.rows} selected records · Display fields: {job.selection.display_columns.join(', ')}</p>
           <p>Origin: {job.origin}</p>
           <p>Registered key fingerprint: {job.signing?.fingerprint || job.signing?.code || "Registration evidence required"}</p>
-          <label className="flex gap-2"><input type="checkbox" checked={accuracy} onChange={e => setAccuracy(e.target.checked)} disabled={!!job.candidate} />I confirm the approved metadata is accurate for this source and selection.</label>
+          <label className="flex gap-2"><input type="checkbox" checked={accuracy} onChange={e => setAccuracy(e.target.checked)} />I confirm the approved metadata is accurate for this source and selection.</label>
           <Button type="button" disabled={busy || !!job.candidate || !metadataApproved || !readyConsent || !accuracy} onClick={() => run(async () => {
             if (approvedMetadataDigest) await previewBuildApi.approveMetadata(datasetId, approvedMetadataDigest);
             setJob(await previewBuildApi.candidate(job.job_id,{...consent,metadata_accuracy_confirmed:accuracy}));
