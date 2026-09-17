@@ -1,0 +1,20 @@
+import json,os,subprocess
+from pathlib import Path
+root=Path.cwd(); out=Path('/tmp/s1716-c2d-evidence')
+mutations=[
+ ('inert-render','frontend/src/components/CommitmentPreviewBuilder.tsx','<span>{inertPreviewText(row.cells?.[column])}</span>','<span dangerouslySetInnerHTML={{__html:inertPreviewText(row.cells?.[column])}} />', ['npm','test','--','--run','src/components/CommitmentPreviewBuilder.test.tsx','-t','renders hostile cells'],root/'frontend'),
+ ('dataset-owner','app/services/preview_build_service.py','if record.metadata.get("preview_owner_id") != owner:','if False:', ['/Users/max/Projects/ai-market/aim-data/.venv/bin/python','-m','pytest','tests/test_preview_build_routes.py::test_missing_ownership_and_declarations','-p','results_plugin','-q','--tb=short'],root),
+]
+results=[]
+for name,file,before,after,cmd,cwd in mutations:
+ p=root/file; original=p.read_text();assert before in original,name
+ try:
+  p.write_text(original.replace(before,after,1))
+  env=dict(os.environ,PYTHONPATH=str(out)+':.',PREVIEW_TEST_RESULTS=str(out/(name+'-nodeids.json')))
+  run=subprocess.run(cmd,cwd=cwd,env=env,capture_output=True,text=True)
+  (out/(name+'.log')).write_text(run.stdout+run.stderr)
+  results.append(dict(name=name,file=file,mutation=before+' -> '+after,argv=cmd,exit=run.returncode,killed=run.returncode!=0))
+ finally:p.write_text(original)
+(out/'mutations.json').write_text(json.dumps(results,indent=2))
+print(json.dumps(results,indent=2))
+assert all(r['killed'] for r in results)

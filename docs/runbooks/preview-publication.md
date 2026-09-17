@@ -83,3 +83,77 @@ the customer UI remains Chunk 2d. Neither establishes live T integration.
 All fixtures and tests in this chunk use synthetic data. Real seller hosting,
 external TLS/domain configuration, copied-object retirement and viewer policy
 parity are not established by loopback or mocked-transport tests.
+
+## Seller UI and local job API (Chunk 2d)
+
+The listing detail page retains its three outer steps. After metadata approval,
+its optional Public sample panel defaults to **No sample**. **Prepare verified
+preview** builds the complete original source, offers immutable leaf selection,
+and reviews rights, local policy, publication location and the signing key.
+Display-column selection never removes fields from published records. Cells are
+plain React text children; HTML, Markdown, spreadsheet formulas and cell links
+are not interpreted.
+
+The installed application's existing `/api/marketplace` router mounts
+`/preview-builds`. All job operations require authenticated write scope and both
+job and dataset ownership. New single/bulk uploads record `preview_owner_id`;
+processing preserves that ownership. Historic uploads with no recorded owner are
+rejected (`dataset_owner_unverified`); re-upload while signed in. Confirmation or
+batch membership is not ownership evidence. This adapter uses an original file
+inside the managed upload root. S3/database records require a separately proven
+complete source-manifest adapter and fail closed here; a processed sample is
+never a substitute.
+
+If parsing declarations are absent, the compact declaration editor accepts the
+complete explicit schema and 2a parsing options. No field type or nullability is
+silently inferred from sample rows. The current UI accepts these declarations as
+JSON; CSV/TSV must include all required parser choices. Unsupported formats remain
+ineligible. No client-supplied source or publication filesystem path is accepted.
+
+Jobs are local to one application process and use 2a's installation-wide private
+worker lock, resource watchdog and source checks. A live review keeps the private
+index inside `private_job`; cancellation/withdrawal releases it. A browser reload
+finds the latest owned job. After application restart, source identity is checked
+and the private index is rebuilt before serving any rows. Job/candidate journals
+contain metadata, indices and digests, never records. An unexported scanned
+package is not persisted: rescan after restart. An exported package has the 2b
+publication journal and can be downloaded again. Operate this local UI with the
+normal single application process; cross-process job dispatch is not implemented.
+
+Publication roots are beneath the dedicated `preview-builds` directory in the
+configured data directory. The exact owner-specific directory and immutable
+object path appear on screen. `publications/<owner-hex>` is for the controlled
+origin; `exports/<owner-hex>` is separate and is not exposed by that origin. Their
+private sibling journals are `publications-journals/<owner-hex>` and
+`exports-journals/<owner-hex>`. Configure the isolated origin as above using the
+selected controlled directory and its matching journal. Export downloads must be
+hosted under the exact displayed `previews/<disclosure>/<sample-hash>.json` path.
+No upload, provider configuration, HTTPS proxy or public-access grant is automatic.
+
+The pre-T local metadata approval endpoint stores the browser's approved metadata
+SHA-256 and explicitly local fixture references. These are not P1 platform
+allocations or approval receipts. The new preview Submit operation writes only
+local prepared state and returns **Prepared locally; marketplace preview
+submission awaits backend support**. Ordinary listing publication still sends
+its existing no-sample disclosure separately; preview retry never republishes a
+listing. Legacy projected-row preparation is removed from this UI and rejected
+by the disclosure helper.
+
+Signing reads the existing encrypted install key and owner-bound evidence from
+`preview-builds/registration-evidence.json`, using 2c's closed evidence reader and
+a one-hour evidence freshness policy. The UI/API does not generate keys, fabricate
+registration status, request credentials, or contact a registration endpoint.
+Missing/stale/revoked/mismatched evidence returns `signing_authority_unavailable`.
+The evidence must come from the existing authorized registration readback flow.
+The fingerprint appears before signing and in the local candidate confirmation.
+
+**Refresh attestation** starts another bounded local preparation, retaining source,
+leaf/proof identities and sample hash while creating a new package/evidence
+revision linked through 2c's refresh candidate to the predecessor. Review and
+consent are required again. **Retire previous package** is separate. **Withdraw
+preview** freezes a newly signed withdrawal when a signed candidate exists,
+records retirement pending, invokes the 2c journal/2b store, and checks GET
+404/410 plus OPTIONS. External exports require seller removal; failures remain
+visibly pending and can be retried. Source files and listing entitlements are
+never removed. Real registered-owner, seller-origin, release and post-T platform
+proof remain outside these synthetic local tests.
