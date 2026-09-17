@@ -1,0 +1,17 @@
+{
+  "frontend_r1_cwd": "/tmp/s1716-c2d-r2-baseline/frontend",
+  "frontend_r2_cwd": "/private/var/tmp/koskadeux/minimal-bridge-worktrees/25200cd439ec-9265fd/frontend",
+  "commands": [
+    "rtk proxy npm test -- --reporter=json --outputFile=<r1|r2>-vitest.json",
+    "rtk proxy npm run lint",
+    "rtk proxy npx tsc -p tsconfig.app.json --noEmit",
+    "rtk proxy npm run build (R2 only)",
+    "rtk proxy npm test -- --run src/components/CommitmentPreviewBuilder.test.tsx src/components/PreviewOriginReview.test.tsx (R2 only)",
+    "rtk proxy ruff check app/services/preview_build_service.py app/routers/preview_builds.py tests/test_preview_build_routes.py tests/test_s804_disclosure_dataset_detail.py",
+    "rtk proxy /tmp/s1716-r2-typecheck/bin/mypy --check-untyped-defs --follow-imports=silent --ignore-missing-imports app/services/preview_build_service.py app/routers/preview_builds.py",
+    "rtk proxy git diff --check 9420621dbafcd64186d2c4044ece6b1840209975"
+  ],
+  "mypy": "2.3.1, isolated /tmp venv; baseline 6 errors, R2 4 inherited errors; no new diagnostic",
+  "dependency_note": "R1 frontend temporary detached worktree shares existing R2 node_modules (identical lockfile); backend uses existing Python 3.12.12 venv. No dependency files changed.",
+  "limits": "Full backend was not repeated; affected 16 suites rerun for R1 and R2. Earlier full backend receipts remain historical. Pinned customer image and live seller/cloud/browser proof remain unverified."
+}
