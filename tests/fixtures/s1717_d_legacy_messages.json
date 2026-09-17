@@ -1,0 +1,24 @@
+{
+  "source_commit": "7dc92619c2cecce4c7492d1eed823fcaf9ee4328",
+  "source_file": "app/services/fulfillment_service.py",
+  "fixture": "data.csv: byte a repeated 262147 times; fixed UUID 00000000-0000-4000-8000-000000000123",
+  "canonicalization": "UTF-8 json.dumps(sort_keys=True,separators=(comma,colon))",
+  "actions": [
+    "vai.fulfillment.metadata",
+    "vai.fulfillment.chunk",
+    "vai.fulfillment.chunk",
+    "vai.fulfillment.chunk",
+    "vai.fulfillment.chunk",
+    "vai.fulfillment.chunk",
+    "vai.fulfillment.complete"
+  ],
+  "message_sha256": [
+    "9cbfbd568f9122efc5292c995d3ffb69c2320546c4f99a32dafdfbc58dbd45ba",
+    "18e483e939553900154ea983433047269517154ab0035a65b094ecfa4b21a469",
+    "74210e66f15c66671fac3d215c6d21ea71f3a0c3cd4be4af65b8dd32601edbc2",
+    "e88dcc1d28d83f27bb00c9e582d96ad52bbcc0942ae89d99620cdd6debc442c2",
+    "e179ff8d648e7b4a016a819ea815dfadccef39533eba3e615d0439af08afe557",
+    "c13afaf75ab71cb5fbb73fa32bf2dd50a8f3fa18287fad85c7209647c2cf464e",
+    "f733db73d7409dc883acca1f85a96b4ce7f8de7d180c18d8007b1845a943a881"
+  ]
+}

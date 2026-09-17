@@ -22,7 +22,7 @@ import asyncio
 import base64
 import hashlib
 import os
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from uuid import uuid4
 import json
@@ -63,6 +63,47 @@ class _RateLimited(ConnectionError):
     """The server rejected traffic before decrypting its request ID."""
 
 
+class FulfillmentInbox:
+    """Application-only correlation for one manifest transfer; no transport changes."""
+
+    def __init__(self, client, transfer_id):
+        self.client = client
+        self.transfer_id = transfer_id
+        self.pending = set()
+        self.queue = asyncio.Queue()
+
+    def clear(self):
+        self.pending.clear()
+        while not self.queue.empty():
+            self.queue.get_nowait()
+
+    async def send(self, message):
+        message.setdefault("request_id", str(uuid4()))
+        self.pending.add(message["request_id"])
+        try:
+            await self.client.send_action(message)
+        except (ConnectionClosed, OSError) as exc:
+            raise ConnectionError("Trust Channel disconnected") from exc
+
+    async def receive(self, timeout):
+        result = await asyncio.wait_for(self.queue.get(), timeout)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    def dispatch(self, message):
+        request_id = message.get("request_id")
+        data = message.get("data")
+        action = data if isinstance(data, dict) else message
+        if request_id in self.pending:
+            self.pending.discard(request_id)
+        elif (request_id or action.get("action") != "vai.fulfillment.ack"
+              or action.get("transfer_id") != self.transfer_id):
+            return False
+        self.queue.put_nowait(message)
+        return True
+
+
 class TrustChannelClient:
     """
     WebSocket client that connects to ai.market's Trust Channel
@@ -80,6 +121,7 @@ class TrustChannelClient:
         self._send_resume_at = 0.0
         self._waiters: Dict[str, asyncio.Future] = {}
         self._response_waiters: set[asyncio.Future] = set()
+        self._fulfillment_inbox = None
         # Build WS URL from ai_market_url (http → ws, https → wss)
         base = settings.ai_market_url.rstrip("/")
         if base.startswith("https://"):
@@ -88,6 +130,19 @@ class TrustChannelClient:
             self._ws_url = base.replace("http://", "ws://") + "/api/v1/trust/stream"
         else:
             self._ws_url = "wss://" + base + "/api/v1/trust/stream"
+
+    @contextmanager
+    def fulfillment_responses(self, transfer_id):
+        """Opt in only for manifest mode; legacy dispatch stays byte-identical."""
+        if self._fulfillment_inbox is not None:
+            raise RuntimeError("Manifest fulfillment already active")
+        inbox = FulfillmentInbox(self, transfer_id)
+        self._fulfillment_inbox = inbox
+        try:
+            yield inbox
+        finally:
+            self._fulfillment_inbox = None
+            inbox.clear()
 
     def register_handler(self, action: str, handler: ActionHandler) -> None:
         """Register a handler for a specific action type."""
@@ -273,6 +328,8 @@ class TrustChannelClient:
                 task.cancel()
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
+            if self._fulfillment_inbox is not None:
+                self._fulfillment_inbox.queue.put_nowait(ConnectionError("Trust Channel disconnected"))
             for future in self._waiters.values():
                 if not future.done():
                     future.set_exception(ConnectionError("Trust Channel disconnected"))
@@ -359,6 +416,8 @@ class TrustChannelClient:
         return await asyncio.wait_for(exchange(), timeout=30.0)
 
     def _dispatch(self, message):
+        if self._fulfillment_inbox is not None and self._fulfillment_inbox.dispatch(message):
+            return
         # Preserve the envelope: response delivery is correlated by request_id,
         # and outer execution success alone does not mean delivery succeeded.
         if not message.get("action"):
