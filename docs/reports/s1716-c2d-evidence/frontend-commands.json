@@ -1,0 +1,14 @@
+{
+  "node": "25.6.0",
+  "npm": "11.8.0",
+  "baseline": "9420621dbafcd64186d2c4044ece6b1840209975",
+  "candidate": "f10aa1cd857fb2900e7d88874800fc2e39e3ffe9",
+  "commands": [
+    "rtk npm test",
+    "rtk proxy npm test -- --reporter=json --outputFile=<side>-vitest.json",
+    "rtk npm run lint",
+    "rtk proxy npx tsc -p tsconfig.app.json --noEmit",
+    "rtk npm run build"
+  ],
+  "note": "Same npm lockfile and installed dependencies on both worktrees. See per-node outcomes. Production build was executed on branch."
+}

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { datasetsApi, marketplaceApi, piiApi, type ApiDataset, type DatasetListingMetadata, type PIIScanResponse } from "@/lib/api";
+import { datasetsApi, marketplaceApi, previewBuildApi, piiApi, type ApiDataset, type DatasetListingMetadata, type PIIScanResponse } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY } from "@/lib/disclosure";
 import DatasetDetail, { DisclosureSnapshotFailurePanel, ListingPreparation, DirectoryMembers } from "./DatasetDetail";
@@ -110,6 +110,7 @@ function renderPreparation(apiDataset: ApiDataset, onDatasetRefresh = vi.fn()) {
 }
 
 beforeEach(() => {
+  vi.spyOn(previewBuildApi, "latest").mockResolvedValue(null);
   const storage = new Map<string, string>();
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -245,6 +246,9 @@ describe("publish completion", () => {
     expectSuccessToast();
     expect(screen.getByTestId("context-published")).toHaveTextContent("true");
     expect(refetch).toHaveBeenCalledWith("ds-1");
+    expect(datasetsApi.getDisclosureSample).not.toHaveBeenCalled();
+    expect(marketplaceApi.createDisclosureSnapshot).toHaveBeenCalledWith("listing-1", expect.objectContaining({sample_decision:"none", approved_sample:null}));
+    expect(screen.getByRole("region", {name:"Public sample"})).toBeInTheDocument();
     expect(screen.getByText("Complete")).toBeInTheDocument();
     const published = screen.getByRole("button", { name: "Published" });
     expect(published).toBeDisabled();

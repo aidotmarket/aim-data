@@ -1,0 +1,16 @@
+{
+  "baseline": {
+    "passed": 729,
+    "failed": 15,
+    "skipped": 1
+  },
+  "branch": {
+    "passed": 739,
+    "failed": 15,
+    "skipped": 1
+  },
+  "branch_only_failures": [],
+  "missing_baseline_nodeids": [],
+  "additional_skips": [],
+  "baseline_failed_now_passed": []
+}

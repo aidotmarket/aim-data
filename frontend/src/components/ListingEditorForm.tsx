@@ -27,6 +27,7 @@ interface ListingEditorFormProps {
   onTagInputChange: (value: string) => void;
   priceMin?: number;
   disabled?: boolean;
+  previewStatus?: string;
 }
 
 const categories = [
@@ -50,6 +51,7 @@ export function ListingEditorForm({
   onTagInputChange,
   priceMin = 25,
   disabled = false,
+  previewStatus,
 }: ListingEditorFormProps) {
   const update = (patch: Partial<ListingEditorValue>) => onChange({ ...value, ...patch });
 
@@ -67,6 +69,7 @@ export function ListingEditorForm({
 
   return (
     <div className="space-y-4">
+      {previewStatus && <p role="status" className="text-sm text-muted-foreground">Preview: {previewStatus}</p>}
       <div className="space-y-2">
         <Label htmlFor="listing-title">Title</Label>
         <Input

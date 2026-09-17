@@ -1,0 +1,70 @@
+{
+  "backend": {
+    "r1_counts": {
+      "passed": 739,
+      "failed": 15,
+      "skipped": 1
+    },
+    "r2_counts": {
+      "passed": 746,
+      "failed": 15,
+      "skipped": 1
+    },
+    "new_failures": [],
+    "missing": [],
+    "new_skips": [],
+    "changes": {},
+    "added": [
+      "tests/test_preview_build_routes.py::test_duplicate_and_independent_owner_dataset_sessions",
+      "tests/test_preview_build_routes.py::test_failed_start_never_leaves_building_row[start]",
+      "tests/test_preview_build_routes.py::test_failed_start_never_leaves_building_row[thread]",
+      "tests/test_preview_build_routes.py::test_idle_expiry_cleans_index_without_polling",
+      "tests/test_preview_build_routes.py::test_idle_timeout_configuration",
+      "tests/test_preview_build_routes.py::test_queued_build_is_live_cancellable_and_bounded[cancel]",
+      "tests/test_preview_build_routes.py::test_queued_build_is_live_cancellable_and_bounded[idle]"
+    ]
+  },
+  "intentional_node_renames": {
+    "tests/test_preview_build_routes.py::test_restart_rebuilds_same_index": "tests/test_preview_build_routes.py::test_reload_reattaches_and_restart_expires",
+    "tests/test_s804_disclosure_dataset_detail.py::test_dataset_detail_uses_unredacted_preview_and_retry_without_republish": "tests/test_s804_disclosure_dataset_detail.py::test_dataset_detail_avoids_unredacted_preview_and_retries_without_republish"
+  },
+  "frontend": {
+    "r1_counts": {
+      "passed": 56,
+      "failed": 23
+    },
+    "r2_counts": {
+      "passed": 58,
+      "failed": 23
+    },
+    "new_failures": [],
+    "missing": [],
+    "new_skips": [],
+    "changes": {},
+    "added": [
+      "keeps withdrawal retry available and hides preparation until retirement",
+      "offers a fresh build after an expired review without polling or reading rows"
+    ]
+  },
+  "typecheck": {
+    "r1_count": 35,
+    "r2_count": 35,
+    "new": [],
+    "removed": []
+  },
+  "lint": {
+    "r1_count": 35,
+    "r2_count": 35,
+    "new": [],
+    "removed": []
+  },
+  "mypy": {
+    "r1_count": 6,
+    "r2_count": 4,
+    "new": [],
+    "removed": [
+      "app/services/preview_build_service.py: error: Incompatible types in assignment (expression has type \"CommitmentPreviewBuilder\", target has type \"Event | None\")  [assignment]",
+      "app/services/preview_build_service.py: error: Incompatible types in assignment (expression has type \"Thread\", target has type \"Event | None\")  [assignment]"
+    ]
+  }
+}

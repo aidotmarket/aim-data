@@ -83,3 +83,108 @@ the customer UI remains Chunk 2d. Neither establishes live T integration.
 All fixtures and tests in this chunk use synthetic data. Real seller hosting,
 external TLS/domain configuration, copied-object retirement and viewer policy
 parity are not established by loopback or mocked-transport tests.
+
+## Seller UI and local job API (Chunk 2d)
+
+The listing detail page retains its three outer steps. After metadata approval,
+its optional Public sample panel defaults to **No sample**. **Prepare verified
+preview** builds the complete original source, offers immutable leaf selection,
+and reviews rights, local policy, publication location and the signing key.
+Display-column selection never removes fields from published records. Cells are
+plain React text children; HTML, Markdown, spreadsheet formulas and cell links
+are not interpreted.
+
+The installed application's existing `/api/marketplace` router mounts
+`/preview-builds`. All job operations require authenticated write scope and both
+job and dataset ownership. New single/bulk uploads record `preview_owner_id`;
+processing preserves that ownership. Historic uploads with no recorded owner are
+rejected (`dataset_owner_unverified`); re-upload while signed in. Confirmation or
+batch membership is not ownership evidence. This adapter uses an original file
+inside the managed upload root. S3/database records require a separately proven
+complete source-manifest adapter and fail closed here; a processed sample is
+never a substitute.
+
+If parsing declarations are absent, the compact declaration editor accepts the
+complete explicit schema and 2a parsing options. No field type or nullability is
+silently inferred from sample rows. The current UI accepts these declarations as
+JSON; CSV/TSV must include all required parser choices. Unsupported formats remain
+ineligible. No client-supplied source or publication filesystem path is accepted.
+
+Jobs are local to one application process, with independent review sessions per
+(owner, dataset). Heavy 2a builds remain serialized under the installation worker
+flock; waiting builds have a live cancellable session. When computation finishes,
+the build flock is released while the review retains only its scoped private
+index/flock. Different datasets and owners can therefore review independently.
+The scope directory is SHA-256 of the closed owner/dataset tuple, not a supplied
+path. Cross-process job dispatch remains unsupported.
+
+A review expires after **1,800 seconds (30 minutes)** since its last authorized
+owner API interaction. Set `PREVIEW_REVIEW_IDLE_SECONDS` to a positive finite
+number of seconds to configure it; invalid settings fail startup. Background
+progress does not renew the lease. An independent idle watcher covers queued,
+building and ready reviews. The UI polls only builds, never completed/released
+reviews. API status/row/selection interactions renew an unexpired lease.
+
+| State/action | HTTP / stable code | Session and private row index |
+|---|---|---|
+| `building` (queued or computing) | 200 / null | Live; bounded idle lease plus existing 2a worker budgets |
+| `ready`, `selected`, `scanned` | 200 / null | Live; same idle lease |
+| Same owner/dataset second create | 409 / `detail: {code: job_already_running, job_id: <existing>}` | Existing session unchanged; no new job row |
+| Another owner requests this dataset/job | 403 / `dataset_owner_unverified` or `job_owner_mismatch` | No foreign job id/content or lease renewal |
+| Another owned dataset create/list/status | 200 / normal result (list may be null) | Independent session; computation may queue |
+| Synchronous start failure | 409 / `detail: {code: build_start_failed, job_id: <failed>}` | Durable `failed` row, no live session; never stranded `building` |
+| Worker failure | 200 status / `build_failed` or stable 2a code | `failed`; released and index deleted |
+| Idle expiry or reload without a live review | 200 status / `review_expired` | `expired`; no automatic rebuild; row operations return 409 / `review_expired` |
+| Reload while live | 200 / existing state | Reattaches the same owner session/index |
+| `packaged` (package written) | 200 / null | Released; index deleted before action returns |
+| `signed_candidate` (candidate / submit) | 200 / null; submit adds local outcome | Released; metadata/proofs suffice, no index rebuild |
+| `cancelled` (cancel) | 200 / null; published job: 409 / `withdraw_required` | Cancelled build/review released and index deleted before return |
+| Withdraw: `withdrawn`, then `retired` | 200 / `external_retirement_pending`, then null; verifier failures retain pending state | Released and index deleted, including pending external retirement |
+
+Job/candidate journals contain metadata, selected proof paths, indices and digests,
+never records. A packaged job continues through origin review, candidate signing,
+local submit and retirement without reopening an index. Publication bytes retain
+the existing 2b journal/download/retirement rules. After process death, startup
+cleans orphan private indexes under their locks; unfinished review recovery reports
+`expired` / `review_expired`, and the seller explicitly starts a fresh preparation.
+An expired review cannot resume a stale scan. Cancellation, package completion,
+prepared candidate, submit and withdrawal all release the live session; the heavy
+worker's cancellation/termination cleanup completes before a terminal API returns.
+
+Publication roots are beneath the dedicated `preview-builds` directory in the
+configured data directory. The exact owner-specific directory and immutable
+object path appear on screen. `publications/<owner-hex>` is for the controlled
+origin; `exports/<owner-hex>` is separate and is not exposed by that origin. Their
+private sibling journals are `publications-journals/<owner-hex>` and
+`exports-journals/<owner-hex>`. Configure the isolated origin as above using the
+selected controlled directory and its matching journal. Export downloads must be
+hosted under the exact displayed `previews/<disclosure>/<sample-hash>.json` path.
+No upload, provider configuration, HTTPS proxy or public-access grant is automatic.
+
+The pre-T local metadata approval endpoint stores the browser's approved metadata
+SHA-256 and explicitly local fixture references. These are not P1 platform
+allocations or approval receipts. The new preview Submit operation writes only
+local prepared state and returns **Prepared locally; marketplace preview
+submission awaits backend support**. Ordinary listing publication still sends
+its existing no-sample disclosure separately; preview retry never republishes a
+listing. Legacy projected-row preparation is removed from this UI and rejected
+by the disclosure helper.
+
+Signing reads the existing encrypted install key and owner-bound evidence from
+`preview-builds/registration-evidence.json`, using 2c's closed evidence reader and
+a one-hour evidence freshness policy. The UI/API does not generate keys, fabricate
+registration status, request credentials, or contact a registration endpoint.
+Missing/stale/revoked/mismatched evidence returns `signing_authority_unavailable`.
+The evidence must come from the existing authorized registration readback flow.
+The fingerprint appears before signing and in the local candidate confirmation.
+
+**Refresh attestation** starts another bounded local preparation, retaining source,
+leaf/proof identities and sample hash while creating a new package/evidence
+revision linked through 2c's refresh candidate to the predecessor. Review and
+consent are required again. **Retire previous package** is separate. **Withdraw
+preview** freezes a newly signed withdrawal when a signed candidate exists,
+records retirement pending, invokes the 2c journal/2b store, and checks GET
+404/410 plus OPTIONS. External exports require seller removal; failures remain
+visibly pending and can be retried. Source files and listing entitlements are
+never removed. Real registered-owner, seller-origin, release and post-T platform
+proof remain outside these synthetic local tests.

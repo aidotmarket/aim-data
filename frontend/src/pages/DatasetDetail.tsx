@@ -85,6 +85,8 @@ import {
   sellerSetupRequiredDescription,
   sellerSetupToastAction,
 } from "@/lib/sellerOnboarding";
+import { PreviewOriginReview } from "@/components/PreviewOriginReview";
+import { CommitmentPreviewBuilder } from "@/components/CommitmentPreviewBuilder";
 import {
   filenameToTitle,
   ListingEditorForm,
@@ -95,13 +97,9 @@ import {
   buildApprovedMetadataDraft,
   buildDisclosureSnapshotPayload,
   classifyDisclosureSnapshotFailure,
-  prepareDisclosureSample,
   type ApprovedMetadataDraft,
-  type ApprovedSample,
   type DisclosureSnapshotFailure,
-  type DisclosureSampleDecision,
   type DisclosureSnapshotPayload,
-  type PreparedDisclosureSample,
 } from "@/lib/disclosure";
 
 interface DisclosureSnapshotFailurePanelProps {
@@ -352,16 +350,24 @@ export function ListingPreparation({
     tags: persistedListingMetadata?.tags || [],
   });
   const [approvedMetadataDraft, setApprovedMetadataDraft] = useState<ApprovedMetadataDraft | null>(null);
-  const [sampleDecision, setSampleDecision] = useState<DisclosureSampleDecision>("none");
-  const [preparedSample, setPreparedSample] = useState<PreparedDisclosureSample>(() => prepareDisclosureSample([]));
-  const [sampleLoading, setSampleLoading] = useState(false);
-  const [sampleError, setSampleError] = useState<string | null>(null);
+  const [previewMetadataDigest, setPreviewMetadataDigest] = useState<string>();
+  const [previewStatus, setPreviewStatus] = useState("No sample");
   const [finalDisclosureConfirmed, setFinalDisclosureConfirmed] = useState(false);
   const [disclosureFailure, setDisclosureFailure] = useState<DisclosureSnapshotFailure | null>(null);
   const [publishedListingId, setPublishedListingId] = useState<string | null>(dataset.listing_id ?? null);
   const [publishComplete, setPublishComplete] = useState(false);
   const [publishedListingUrl, setPublishedListingUrl] = useState<string | null>(null);
   const [retrySnapshotPayload, setRetrySnapshotPayload] = useState<DisclosureSnapshotPayload | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setPreviewMetadataDigest(undefined);
+    if (approvedMetadataDraft && metadataApproved) {
+      crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(approvedMetadataDraft)))
+        .then(buffer => { if (active) setPreviewMetadataDigest(Array.from(new Uint8Array(buffer), b => b.toString(16).padStart(2,'0')).join('')); });
+    }
+    return () => { active = false; };
+  }, [approvedMetadataDraft, metadataApproved]);
 
   const datasetReady = dataset.status === "preview_ready";
   const flaggedColumns = piiScan?.column_results ?? [];
@@ -538,30 +544,6 @@ export function ListingPreparation({
     handleGenerateMetadata();
   }, [activeStep, dataset.id, metadata, metadataState, handleGenerateMetadata]);
 
-  useEffect(() => {
-    if (activeStep !== 3) return;
-    let cancelled = false;
-    setSampleLoading(true);
-    setSampleError(null);
-    datasetsApi.getDisclosureSample(dataset.id, 100)
-      .then((response) => {
-        if (cancelled) return;
-        setPreparedSample(prepareDisclosureSample(response.sample || []));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setPreparedSample(prepareDisclosureSample([]));
-        setSampleError(e instanceof Error ? e.message : "Could not load disclosure preview rows.");
-        setSampleDecision("none");
-      })
-      .finally(() => {
-        if (!cancelled) setSampleLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeStep, dataset.id]);
-
   const handleApproveMetadata = () => {
     if (!metadata) return;
     setMetadataApproved(true);
@@ -673,11 +655,10 @@ export function ListingPreparation({
     if (!approvedFields) {
       throw new Error("Metadata approval expired. Review and approve Step 2 again.");
     }
-    const approvedSample = sampleDecision === "approved_rows" ? preparedSample.sample : null;
     return buildDisclosureSnapshotPayload({
       approvedFields,
-      sampleDecision,
-      approvedSample,
+      sampleDecision: "none",
+      approvedSample: null,
       confirmed: finalDisclosureConfirmed,
       sourcePublishOperationId,
     });
@@ -727,10 +708,6 @@ export function ListingPreparation({
     if (!approvedMetadataDraft || !metadataApproved) {
       toast({ title: "Review metadata again", description: "Approved metadata changed before publish.", variant: "destructive" });
       setActiveStep(2);
-      return;
-    }
-    if (sampleDecision === "approved_rows" && !preparedSample.sample) {
-      toast({ title: "Sample unavailable", description: "Choose no sample rows or reload the disclosure preview.", variant: "destructive" });
       return;
     }
     if (!finalDisclosureConfirmed) {
@@ -835,9 +812,6 @@ export function ListingPreparation({
     }));
   }, [dataset.id, listingDraftUpdates]);
 
-  const piiFlaggedColumnNames = new Set(flaggedColumns.map((column) => column.column));
-  const approvedSample: ApprovedSample | null = preparedSample.sample;
-  const sampleColumnsWithPii = approvedSample?.columns.filter((column) => piiFlaggedColumnNames.has(column)) ?? [];
 
   return (
     <div className="space-y-6">
@@ -1170,98 +1144,12 @@ export function ListingPreparation({
               tagInput={tagInput}
               onTagInputChange={setTagInput}
               disabled={publishing}
+              previewStatus={previewStatus}
             />
 
-            <div className="space-y-3 rounded-md border p-3">
-              <div>
-                <h3 className="text-sm font-medium">Public sample</h3>
-                <p className="text-xs text-muted-foreground">
-                  Choose whether real preview rows become public. The displayed set is the complete public sample.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={sampleDecision === "none" ? "default" : "outline"}
-                  disabled={publishing}
-                  onClick={() => {
-                    setSampleDecision("none");
-                    setFinalDisclosureConfirmed(false);
-                  }}
-                >
-                  No sample rows
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={sampleDecision === "approved_rows" ? "default" : "outline"}
-                  disabled={publishing || sampleLoading || !approvedSample}
-                  onClick={() => {
-                    setSampleDecision("approved_rows");
-                    setFinalDisclosureConfirmed(false);
-                  }}
-                >
-                  Publish these real sample rows
-                </Button>
-              </div>
-
-              {sampleLoading && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading disclosure preview
-                </div>
-              )}
-              {sampleError && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                  {sampleError} No sample rows will be submitted unless the preview loads.
-                </div>
-              )}
-              {approvedSample && (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline">{approvedSample.rows.length} row{approvedSample.rows.length === 1 ? "" : "s"}</Badge>
-                    <Badge variant="outline">{approvedSample.columns.length} column{approvedSample.columns.length === 1 ? "" : "s"}</Badge>
-                    {preparedSample.truncatedRows && <Badge variant="secondary">Rows truncated to public limit</Badge>}
-                    {preparedSample.truncatedColumns && <Badge variant="secondary">Columns truncated to public limit</Badge>}
-                    {preparedSample.truncatedForBytes && <Badge variant="secondary">Sample reduced to 250 KB</Badge>}
-                  </div>
-                  {sampleColumnsWithPii.length > 0 && (
-                    <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 text-sm">
-                      Personal-data flagged columns in this sample: {sampleColumnsWithPii.join(", ")}. Choose no sample rows or confirm the exact row content below before publishing.
-                    </div>
-                  )}
-                  <ScrollArea className="w-full rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          {approvedSample.columns.map((column) => (
-                            <TableHead key={column}>
-                              <span className="inline-flex items-center gap-1">
-                                {column}
-                                {piiFlaggedColumnNames.has(column) && <Badge variant="secondary">PII</Badge>}
-                              </span>
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {approvedSample.rows.map((row, index) => (
-                          <TableRow key={approvedSample.row_refs[index]}>
-                            {approvedSample.columns.map((column) => (
-                              <TableCell key={column} className="max-w-[220px] truncate">
-                                {String(row[column] ?? "")}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    <ScrollBar orientation="horizontal" />
-                  </ScrollArea>
-                </div>
-              )}
-            </div>
+            <CommitmentPreviewBuilder datasetId={dataset.id} metadataApproved={metadataApproved}
+              approvedMetadataDigest={previewMetadataDigest} onStatus={setPreviewStatus}
+              originReview={(job, onChange) => <PreviewOriginReview job={job} onChange={onChange} />} />
 
             <div className="rounded-md border p-3 text-sm">
               <h3 className="font-medium">Disclosure summary</h3>
@@ -1272,7 +1160,7 @@ export function ListingPreparation({
                 </div>
                 <div>
                   <span className="text-muted-foreground">Sample choice</span>
-                  <p className="font-medium">{sampleDecision === "none" ? "No sample rows" : "Publish these real sample rows"}</p>
+                  <p className="font-medium">No sample rows on ai.market; {previewStatus}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Category</span>
@@ -1309,7 +1197,7 @@ export function ListingPreparation({
 
             <Button
               onClick={handlePublish}
-              disabled={Boolean(publishedListingId) || publishing || !finalDisclosureConfirmed || !approvedMetadataDraft || (sampleDecision === "approved_rows" && !approvedSample)}
+              disabled={Boolean(publishedListingId) || publishing || !finalDisclosureConfirmed || !approvedMetadataDraft}
               size="sm"
               className="gap-2"
             >

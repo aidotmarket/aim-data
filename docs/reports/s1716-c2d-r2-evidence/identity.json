@@ -1,0 +1,27 @@
+{
+  "r1": "88cff50969e116482ed23ad4d631ff7ed2fc56b2",
+  "application_candidate": "24866389f28a4535be47f71712b249366389fb6b",
+  "source_sha256": {
+    "app/routers/preview_builds.py": "ac5837538a491acaa67b8100e8fd0a8c07d83f81ea6f9c87df8831963ddff710",
+    "app/services/preview_build_service.py": "05214f194cf159429e34e1e4590b157f80e34e9a6192c20ebf0c239475f36c73",
+    "frontend/src/components/CommitmentPreviewBuilder.test.tsx": "60b2c60c204e5c42315803003489cc791e94dd6d39070510012cfa847c9d564d",
+    "frontend/src/components/CommitmentPreviewBuilder.tsx": "40c6dfefe5199b00b9160e7bd30b840a4969e0de74c763e90b057d25a17e123e",
+    "frontend/src/lib/api.ts": "182725a54ad1a8cdf0d10494ee5cd3473e0323809e525b3b492185294709c3aa",
+    "tests/test_preview_build_routes.py": "359418e1011a92ddaee4fda77bba3155bb7e1115a2b6ae2fee1b53ff04c88fcf",
+    "tests/test_s804_disclosure_dataset_detail.py": "d1e37abb272fdabb93b87ca2dd1c2333ed4fd31e894ffff5044fa113c4c6e5ad"
+  },
+  "reviews": {
+    "deepseek": {
+      "path": "/Users/max/council/deepseek/response-20260917-142532-545589.md",
+      "sha256": "03a623bfd55b980dda3a6490ad9ebfe143377f8c28d5951757cd565635603549"
+    },
+    "glm": {
+      "path": "/Users/max/council/glm/response-20260917-142547-004149.md",
+      "sha256": "a7337983b34ff345baac324e8102530775f014ec7d2956d3c0af0ac896e36407"
+    },
+    "cc": {
+      "path": "/Users/max/council/cc/response-20260917-142557-753293.md",
+      "sha256": "c78db3de8fb79fbd11e6bb1e5e3ed36db6b65982297a16aa12ed138df1cc8a12"
+    }
+  }
+}
