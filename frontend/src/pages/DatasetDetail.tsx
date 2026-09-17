@@ -1329,7 +1329,14 @@ export function ListingPreparation({
   );
 }
 
+type DirectoryProfile = {
+  status: string; summary?: string; reason?: string; profiled_bytes?: number;
+  members: Record<string, { status: string; reason?: string }>;
+};
+
 export function DirectoryMembers({ dataset }: { dataset: ApiDataset }) {
+  const profile = (dataset.metadata as unknown as { directory_profile?: DirectoryProfile })?.directory_profile;
+
   const [page, setPage] = useState(1);
   const [role, setRole] = useState("");
   const [status, setStatus] = useState("");
@@ -1355,6 +1362,12 @@ export function DirectoryMembers({ dataset }: { dataset: ApiDataset }) {
   };
   return <section className="space-y-4" aria-label="Directory members">
     <p>{dataset.metadata?.directory?.member_count ?? result?.total ?? 0} files</p>
+    {profile && <div aria-label="Profiling result">
+      <p>{profile.status === "running" ? "Processing" : profile.status === "profiling_skipped" ? "Profiling skipped" : "Ready to list"}</p>
+      <p>{profile.summary}</p>
+      {profile.reason && <p>{profile.reason}</p>}
+      <p>{(profile.profiled_bytes ?? 0).toLocaleString()} bytes profiled</p>
+    </div>}
     {error && <p role="alert">{error}</p>}
     <div className="flex gap-4">
       <label>Role <select aria-label="Filter by role" value={role} onChange={e => { setRole(e.target.value); setPage(1); }}>
@@ -1378,7 +1391,8 @@ export function DirectoryMembers({ dataset }: { dataset: ApiDataset }) {
           <td><input type="checkbox" aria-label={`Sample ${member.relative_path}`} checked={member.is_sample}
             disabled={!result.editable || saving || member.role !== "data"}
             onChange={e => edit(member.index, { is_sample: e.target.checked })} /></td>
-          <td>{member.status}</td><td>{member.reason ?? "—"}</td>
+          <td>{profile?.members[String(member.index)]?.status ?? member.status}</td>
+          <td>{profile?.members[String(member.index)]?.reason ?? member.reason ?? "—"}</td>
         </tr>)}</tbody>
       </table></div>
       <div className="flex items-center gap-4">

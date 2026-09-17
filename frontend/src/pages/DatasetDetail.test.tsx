@@ -380,3 +380,39 @@ describe("directory members", () => {
     expect(screen.getByLabelText("Role for README.md")).toBeDisabled();
   });
 });
+
+describe("directory profiling outcomes", () => {
+  it.each(["unsupported_type", "too_large", "parse_failed", "timeout"])("renders %s and a terminal state without a spinner", async (reason) => {
+    const row = { dataset_id: "ds-1", index: 0, relative_path: "data.bin", size_bytes: 4,
+      sha256: "0".repeat(64), detected_type: "unsupported", role: "data" as const,
+      is_sample: false, status: "current" as const, reason: null };
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [row], total: 2, page: 1, page_size: 100, editable: true });
+    const fixture = { ...dataset(), file_type: "directory", metadata: {
+      ...dataset().metadata,
+      directory_profile: { status: "completed", summary: "profiled on 1 of 2 files", profiled_bytes: 4,
+        members: { "0": { status: reason, reason: `${reason}: member could not be profiled` } } },
+    } };
+    const { container } = render(<DirectoryMembers dataset={fixture} />);
+    expect(await screen.findByText(`${reason}: member could not be profiled`)).toBeInTheDocument();
+    expect(screen.getByText("Ready to list")).toBeInTheDocument();
+    expect(screen.getByText("profiled on 1 of 2 files")).toBeInTheDocument();
+    expect(screen.getByText("4 bytes profiled")).toBeInTheDocument();
+    expect(screen.queryByText("Processing")).not.toBeInTheDocument();
+    expect(container.querySelector(".animate-spin")).toBeNull();
+  });
+
+  it("renders not profiled and the skip reason", async () => {
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [], total: 2, page: 1, page_size: 100, editable: true });
+    const fixture = { ...dataset(), file_type: "directory", metadata: {
+      ...dataset().metadata,
+      directory_profile: { status: "profiling_skipped", summary: "not profiled (0 of 2 files)",
+        reason: "No member fits PROFILE_MAX_MEMBER_BYTES=268435456", members: {} },
+    } };
+    const { container } = render(<DirectoryMembers dataset={fixture} />);
+    expect(await screen.findByText("Profiling skipped")).toBeInTheDocument();
+    expect(screen.getByText("not profiled (0 of 2 files)")).toBeInTheDocument();
+    expect(screen.getByText("No member fits PROFILE_MAX_MEMBER_BYTES=268435456")).toBeInTheDocument();
+    expect(screen.queryByText("Processing")).not.toBeInTheDocument();
+    expect(container.querySelector(".animate-spin")).toBeNull();
+  });
+});
