@@ -234,10 +234,10 @@ per-finding commits and verification receipts are recorded below after validatio
 | Worker failure | 200 status / `build_failed` or stable 2a code | `failed`; released and index deleted |
 | Idle expiry or reload without a live review | 200 status / `review_expired` | `expired`; no automatic rebuild; row operations return 409 / `review_expired` |
 | Reload while live | 200 / existing state | Reattaches the same owner session/index |
-| Package written | 200 / `packaged` | Released; index deleted before action returns |
-| Candidate prepared / submit | 200 / `signed_candidate` (submit adds local outcome) | Released; metadata/proofs suffice, no index rebuild |
-| Cancel | 200 / `cancelled`; published job: 409 / `withdraw_required` | Cancelled build/review released and index deleted before return |
-| Withdraw | `withdrawn` / `external_retirement_pending`, then `retired` / null | Released and index deleted, including pending external retirement |
+| `packaged` (package written) | 200 / null | Released; index deleted before action returns |
+| `signed_candidate` (candidate / submit) | 200 / null; submit adds local outcome | Released; metadata/proofs suffice, no index rebuild |
+| `cancelled` (cancel) | 200 / null; published job: 409 / `withdraw_required` | Cancelled build/review released and index deleted before return |
+| Withdraw: `withdrawn`, then `retired` | 200 / `external_retirement_pending`, then null; verifier failures retain pending state | Released and index deleted, including pending external retirement |
 
 D2 (DeepSeek F2): corrected the authorization statement above with the explicit
 admin-mount note allowed by the finding. The gate is unchanged. A production-style
@@ -245,3 +245,84 @@ JWT-cookie mount test is carried with CC NIT-2; the route suite alone does not p
 that composition.
 
 CC LOW-1 traceability: §H authorizes the Local Job API files `app/services/preview_build_service.py`, `app/routers/preview_builds.py`, `app/models/preview_build_schemas.py` and ownership/router/review wiring in `datasets.py`, `processing_service.py`, `dataset_merkle_service.py`, and `marketplace_publish.py`, beyond the abbreviated §I/2d file list.
+
+
+### R2 finding commits
+
+Input responses: DeepSeek `response-20260917-142532-545589`, GLM
+`response-20260917-142547-004149`, CC `response-20260917-142557-753293`.
+Exact response paths/hashes and application source hashes are in
+[identity.json](s1716-c2d-r2-evidence/identity.json).
+
+| Finding | Outcome | Commit |
+|---|---|---|
+| D1 / DeepSeek F1 | Folded lifecycle mandate, route/component coverage, runbook | `62d71ded2d06ef36f0c5a492d7de4294ac5fbe55` |
+| D2 / DeepSeek F2 | Folded the explicitly permitted admin-mount documentation outcome | `7c37133fcbf90d9d962063266481bcd565586755` |
+| GLM 1 | Removed log EOF blank line; updated its checksum | `541d4d691c374ee72d991e463c5f769fe15c8f58` |
+| GLM 2 | One-line prepare-button guard during pending withdrawal, plus regression | `a7a632c7b4319b523f7c505ce5b43e3d0635eeb3` |
+| CC NIT-2, stale test name | Renamed the existing assertion to describe refusal of unredacted preview | `432075ceed0a8645602c97cfad7c9bc35de78b8b` |
+| CC LOW-1 | Added Local Job API file-scope traceability | `24866389f28a4535be47f71712b249366389fb6b` |
+
+Carried items (no claim that these are resolved or accepted risks):
+
+- **CC NIT-2 remainder:** production admin-wrapped/JWT-cookie test and explicit
+  JSON-cell/status-announcement component assertions exceed the requested
+  one-line nit fold. D2 uses its explicit documentation alternative; changing
+  authentication policy is not part of R2.
+- **GLM BETTER advisory:** backend `allowed_actions` response/state-machine
+  centralization remains carried. The concrete pending-withdrawal condition is
+  fixed without adding that API contract. GLM SIMPLER is satisfied by the guard.
+- **CC single-session advisory:** superseded by the explicit D1 ruling and fold;
+  build computation is still serialized, but idle review sessions are independent.
+  CC's optional removal of the write-scope branch is not adopted.
+- **DeepSeek F3–F8:** beyond the two findings selected for this round: supported
+  single-row policy helper, preview metadata redaction on the pre-existing shared
+  dataset read endpoint, earlier 2b fixture scope/flake characterization,
+  local-destination download clarification, unused awaiting constant/code-list
+  cleanup, and additional mutation coverage remain carried. The prior non-owner
+  metadata exposure observation remains open; this fold does not resolve it.
+  The lifecycle codes requested by D1 are documented above. No additional 2b test
+  or production policy change was made in R2.
+
+### R2 verification
+
+Application candidate **24866389f28a4535be47f71712b249366389fb6b**, compared with
+R1 **88cff50969e116482ed23ad4d631ff7ed2fc56b2**. Final documentation/evidence commit
+adds no application changes. Complete commands, per-node outcomes, compressed
+logs, source hashes and checksums are retained in
+[s1716-c2d-r2-evidence](s1716-c2d-r2-evidence/SHA256SUMS), with machine comparison
+in [parity.json](s1716-c2d-r2-evidence/parity.json).
+
+| Check | R1 rerun | R2 | Result |
+|---|---:|---:|---|
+| Preview route suite (also in affected run) | 10 passed | 17 passed | Owner/dataset concurrency, exact 403/409 codes, existing id, failed start/thread start, queued cancel/expiry, idle renewal/cleanup, reload expiry, all terminal releases |
+| Two preview components | 13 existing tests | 15 passed | Expired recovery and pending withdrawal added; signing tested with `review_ready=false` |
+| Affected backend, 16 suites | 739 passed / 15 failed / 1 skipped | 746 passed / 15 failed / 1 skipped | No new failures or skips; no missing nodes after two declared renames |
+| Full frontend | 56 passed / 23 failed | 58 passed / 23 failed | No new failures; all common outcomes identical |
+| Frontend TypeScript | 35 diagnostics | Same 35 | No new diagnostic |
+| Frontend lint | 10 errors / 25 warnings | Same | No new diagnostic |
+| Frontend production build | — | Passed | Existing chunk-size warning retained |
+| Ruff, changed Python modules/tests | — | Passed | Default configured checks |
+| Mypy, changed application modules, `--check-untyped-defs --follow-imports=silent --ignore-missing-imports` | 6 errors | 4 inherited errors | No new diagnostic; not a clean typecheck |
+| `git diff --check` from original 2d base | GLM found evidence EOF error | Passed | Includes committed evidence whitespace fix |
+
+The remaining mypy findings are the existing signing-status dictionary inference,
+row-list annotation, local-reference dictionary typing, and nullable crypto secret
+argument. The 15 affected backend failures still concern `/data` writes on this
+macOS environment; the existing facet-service background warning is retained.
+Frontend failures retain the existing localStorage-method issue. Full-backend
+pytest was not rerun for R2; prior full-suite receipts remain historical.
+
+Two intentional node renames are explicit in parity: restart rebuild is replaced
+by the mandated live-reattach/expired-recovery assertion, and CC's stale preview
+assertion name is corrected without weakening its content. The final affected
+run exercises the real spawned 2a worker and sealed 2b scan with synthetic input,
+including package → origin → signed candidate → local submit → refresh → retire.
+Pre-R2 packaged proof metadata recovers from the immutable package, without an
+index rebuild. Tests reopen legacy retained sessions to prove candidate, submit
+and withdraw release them too. The original index, rows and flock are gone at
+terminal completion and after idle expiry.
+
+No merge, deployment, provider mutation, real seller-data processing, or live
+marketplace submission was performed. Pinned customer-image and real browser/
+cloud/registration evidence remain unverified as stated in the R1 limits.

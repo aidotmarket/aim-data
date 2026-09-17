@@ -1,0 +1,5 @@
+import json, subprocess, sys
+from pathlib import Path
+root=Path(__file__).parent
+args=json.loads((root/'affected-files.json').read_text())
+sys.exit(subprocess.call(['rtk','proxy','/Users/max/Projects/ai-market/aim-data/.venv/bin/python',str(root/'run.py'),*sys.argv[1:],*args]))

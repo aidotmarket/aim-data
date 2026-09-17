@@ -136,10 +136,10 @@ reviews. API status/row/selection interactions renew an unexpired lease.
 | Worker failure | 200 status / `build_failed` or stable 2a code | `failed`; released and index deleted |
 | Idle expiry or reload without a live review | 200 status / `review_expired` | `expired`; no automatic rebuild; row operations return 409 / `review_expired` |
 | Reload while live | 200 / existing state | Reattaches the same owner session/index |
-| Package written | 200 / `packaged` | Released; index deleted before action returns |
-| Candidate prepared / submit | 200 / `signed_candidate` (submit adds local outcome) | Released; metadata/proofs suffice, no index rebuild |
-| Cancel | 200 / `cancelled`; published job: 409 / `withdraw_required` | Cancelled build/review released and index deleted before return |
-| Withdraw | `withdrawn` / `external_retirement_pending`, then `retired` / null | Released and index deleted, including pending external retirement |
+| `packaged` (package written) | 200 / null | Released; index deleted before action returns |
+| `signed_candidate` (candidate / submit) | 200 / null; submit adds local outcome | Released; metadata/proofs suffice, no index rebuild |
+| `cancelled` (cancel) | 200 / null; published job: 409 / `withdraw_required` | Cancelled build/review released and index deleted before return |
+| Withdraw: `withdrawn`, then `retired` | 200 / `external_retirement_pending`, then null; verifier failures retain pending state | Released and index deleted, including pending external retirement |
 
 Job/candidate journals contain metadata, selected proof paths, indices and digests,
 never records. A packaged job continues through origin review, candidate signing,
