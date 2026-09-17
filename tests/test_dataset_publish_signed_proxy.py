@@ -339,46 +339,104 @@ async def test_missing_version_id_retries_and_never_records_publish(local_datase
     with get_session_context() as session:
         assert session.get(DBDatasetRecord, local_dataset).listing_id is None
 
-@pytest.mark.asyncio
-async def test_local_publish_round_trip_signs_chunks_and_retains_before_upload(local_dataset, monkeypatch):
-    from app.models.published_manifest import PublishedManifest
-    from app.services.marketplace_action_signer import canonical_payload_hash
+def _signed_local_client(monkeypatch, handler):
+    """Use real httpx request serialization and Ed25519 signatures, no network."""
+    import httpx
     key = Ed25519PrivateKey.from_private_bytes(bytes([9]) * 32)
-    calls = []
+    seller_id, install_id = str(uuid4()), str(uuid4())
     monkeypatch.setattr(settings, 'publish_member_chunk', 2)
     monkeypatch.setattr(settings, 'app_version', '1.24.0')
     monkeypatch.setattr(mp, '_get_crypto', lambda: SimpleNamespace(get_or_create_keypairs=lambda: (key, None, None, None)))
-    monkeypatch.setattr(mp, 'get_serial_store', lambda: SimpleNamespace(state=SimpleNamespace(last_status_cache={}, ai_market_seller_id='seller', ai_market_access_token='token')))
-    async def register(*args, **kwargs): return 'install'
+    monkeypatch.setattr(mp, 'get_serial_store', lambda: SimpleNamespace(state=SimpleNamespace(last_status_cache={}, ai_market_seller_id=seller_id, ai_market_access_token='token')))
+    async def register(*args, **kwargs): return install_id
     monkeypatch.setattr(mp, 'ensure_vz_install_registered', register)
     monkeypatch.setattr(mp, 'resolve_s3_publish_source', lambda *args: None)
+    original = httpx.AsyncClient
+    nonces = set()
+
+    async def receive(request):
+        claims = jwt.decode(request.headers['Authorization'].removeprefix('Bearer '), key.public_key(), algorithms=['EdDSA'])
+        assert claims['sub'] == seller_id and claims['iss'] == install_id
+        assert claims['exp'] - claims['iat'] == 300
+        assert claims['jti'] not in nonces
+        nonces.add(claims['jti'])
+        assert 'metadata_hash' in claims and 'payload_hash' not in claims
+        return await handler(request, claims)
+
+    monkeypatch.setattr(mp.httpx, 'AsyncClient', lambda **kwargs: original(transport=httpx.MockTransport(receive), **kwargs))
+
+
+def _receiver_hash(payload):
+    # Mirrored verbatim serialization options from ai-market-backend 7002ab34:
+    # app/services/vz_publish_service.py:68-86 (_jcs_serialize / compute_metadata_hash).
+    # Keep independent of the sender helper: this is the receiver hash oracle.
+    import hashlib
+    import json
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                         ensure_ascii=False, allow_nan=False).encode("utf-8")
+    assert canonical_json_bytes(payload) == encoded
+    return hashlib.sha256(encoded).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_local_publish_round_trip_signs_chunks_and_retains_before_upload(local_dataset, monkeypatch):
+    import hashlib
+    import httpx
+    import json
+    from app.models.published_manifest import PublishedManifest
+    calls = []
     version_id = str(uuid4())
-    class Client:
-        def __init__(self, **kwargs): pass
-        async def __aenter__(self): return self
-        async def __aexit__(self, *args): pass
-        async def post(self, url, **kwargs):
-            payload = kwargs['json']; calls.append((url, payload))
-            claims = jwt.decode(kwargs['headers']['Authorization'].removeprefix('Bearer '), key.public_key(), algorithms=['EdDSA'])
-            assert claims['metadata_hash'] == canonical_payload_hash(payload)
+    # Non-ASCII text exercises ensure_ascii=False in signed member JSON.
+    with get_session_context() as session:
+        member = session.get(DatasetMember, (local_dataset, 2))
+        member.relative_path = 'données/界.csv'
+        session.add(member); session.commit()
+    local = mp._local_publish_snapshot(local_dataset)
+    upload_id = str(local['version'].members_upload_id)
+
+    async def receive(request, claims):
+        path = request.url.path
+        calls.append(path)
+        if '/samples/' in path:
+            assert path == f'/api/v1/vz/versions/{version_id}/samples/0'
+            assert dict(request.url.params) == {'members_upload_id': upload_id}
+            assert request.headers['Content-Type'] == 'application/octet-stream'
+            assert request.headers['Content-Length'] == '2'
+            assert request.content == b'0\n'
+            signed_payload = dict(version_id=version_id, members_upload_id=upload_id,
+                index=0, size_bytes=2, sha256=hashlib.sha256(b'0\n').hexdigest())
+            assert claims['action'] == 'publish_sample_member'
+            assert claims['metadata_hash'] == _receiver_hash(signed_payload)
+            return httpx.Response(200, json={'version_id': version_id, 'status': 'active', 'index': 0})
+        payload = json.loads(request.content)
+        assert request.headers['Content-Type'] == 'application/json'
+        assert claims['metadata_hash'] == _receiver_hash(payload)
+        if path.endswith('/publish'):
             assert claims['action'] == 'publish_listing'
-            if url.endswith('/publish'):
-                version = payload['versions'][0]
-                return SimpleNamespace(status_code=200, json=lambda: {'listing_id': 'listing', 'versions': [dict(version_id=version_id, version_label=version['version_label'], status='pending_members')]})
-            with get_session_context() as session:
-                record = session.get(DBDatasetRecord, local_dataset)
-                import json
-                state = json.loads(record.metadata_json)['local_publish']
-                snapshot = session.get(PublishedManifest, (version_id, state['manifest_hash']))
-                assert snapshot is not None and record.listing_id == 'listing'
-            return SimpleNamespace(status_code=200, json=lambda: {'status': 'active' if '/samples/' in url else 'pending_members'})
-    monkeypatch.setattr(mp.httpx, 'AsyncClient', Client)
+            assert payload['agent_version'] == '1.24.0'
+            assert payload['versions'][0] == mp._build_version_emit(local['version'])
+            return httpx.Response(200, json={'listing_id': 'listing', 'versions': [dict(version_id=version_id,
+                version_label=local['version'].version_label, status='pending_members', quarantine_reason=None)]})
+        assert claims['action'] == 'publish_version_members'
+        offset = 0 if len(calls) == 2 else 2
+        assert payload == dict(version_id=version_id, members_upload_id=upload_id,
+                               members=local['manifest']['members'][offset:offset + 2])
+        with get_session_context() as session:
+            record = session.get(DBDatasetRecord, local_dataset)
+            state = json.loads(record.metadata_json)['local_publish']
+            snapshot = session.get(PublishedManifest, (version_id, state['manifest_hash']))
+            assert snapshot is not None and record.listing_id == 'listing'
+        return httpx.Response(200, json=dict(version_id=version_id, version_label=local['version'].version_label,
+                                           status='pending_members', quarantine_reason=None))
+
+    _signed_local_client(monkeypatch, receive)
     body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id=local_dataset)
     result = await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
     assert result['status'] == 'published'
     assert result['version']['version_id'] == version_id
-    assert [len(payload['members']) for url, payload in calls if url.endswith('/members')] == [2, 1]
-    assert len(calls) == 4
+    assert result['versions'][0]['status'] == 'active'
+    assert calls == ['/api/v1/vz/publish', f'/api/v1/vz/versions/{version_id}/members',
+                     f'/api/v1/vz/versions/{version_id}/members', f'/api/v1/vz/versions/{version_id}/samples/0']
 
 
 def test_full_s3_payload_golden_is_independent_of_flag_and_app_version(monkeypatch):
@@ -409,3 +467,182 @@ def test_migrated_legacy_dataset_republish_uses_retained_original_binding(local_
         row = session.get(DBDatasetRecord, local_dataset)
         assert row.file_type == 'csv' and row.processed_path == '/unchanged/legacy.parquet'
         assert row.batch_id == 'shared' and row.listing_id == 'legacy-listing'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', ['active', 'quarantined', 'superseded'])
+@pytest.mark.parametrize('terminal_at', ['publish', 'members', 'sample'])
+async def test_receiver_terminal_status_stops_uploads(local_dataset, monkeypatch, terminal, terminal_at):
+    import httpx
+    import json
+    version_id = str(uuid4())
+    paths = []
+    # Two selected samples prove terminal sample responses stop the loop too.
+    with get_session_context() as session:
+        row = session.get(DatasetMember, (local_dataset, 1)); row.is_sample = True
+        session.add(row); session.commit()
+    local = mp._local_publish_snapshot(local_dataset)
+
+    async def receive(request, claims):
+        path = request.url.path
+        paths.append(path)
+        status = terminal if path.endswith('/' + terminal_at) else 'pending_members'
+        if '/samples/' in path:
+            status = terminal
+            return httpx.Response(200, json=dict(version_id=version_id, status=status, index=0))
+        result = dict(version_id=version_id, version_label=local['version'].version_label,
+                      status=status, quarantine_reason='test refusal' if terminal == 'quarantined' else None)
+        if path.endswith('/publish'):
+            return httpx.Response(200, json={'listing_id': 'listing', 'versions': [result]})
+        return httpx.Response(200, json=result)
+
+    _signed_local_client(monkeypatch, receive)
+    body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id=local_dataset)
+    result = await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    assert result['status'] == ('published' if terminal == 'active' else terminal)
+    assert result['version']['status'] == terminal
+    assert len(paths) == {'publish': 1, 'members': 2, 'sample': 4}[terminal_at]
+    with get_session_context() as session:
+        state = json.loads(session.get(DBDatasetRecord, local_dataset).metadata_json)['local_publish']
+        assert state['status'] == terminal
+
+
+@pytest.mark.asyncio
+async def test_no_samples_activates_on_final_member_chunk(local_dataset, monkeypatch):
+    import httpx
+    import json
+    with get_session_context() as session:
+        member = session.get(DatasetMember, (local_dataset, 0)); member.is_sample = False
+        session.add(member); session.commit()
+    local = mp._local_publish_snapshot(local_dataset)
+    version_id = str(uuid4())
+    received = []
+
+    async def receive(request, claims):
+        assert '/samples/' not in request.url.path
+        payload = json.loads(request.content)
+        result = dict(version_id=version_id, version_label=local['version'].version_label,
+                      status='pending_members', quarantine_reason=None)
+        if request.url.path.endswith('/publish'):
+            return httpx.Response(200, json={'listing_id': 'listing', 'versions': [result]})
+        received.extend(payload['members'])
+        if len(received) == 3:
+            result['status'] = 'active'
+        return httpx.Response(200, json=result)
+
+    _signed_local_client(monkeypatch, receive)
+    body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id=local_dataset)
+    assert (await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace()))['status'] == 'published'
+    assert received == local['manifest']['members']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('code,detail', [
+    (400, '0.csv: SAMPLE_MAX_FILE_BYTES: 1'),
+    (400, 'SAMPLE_MAX_FILES: 1; SAMPLE_MAX_TOTAL_BYTES: 1'),
+    (409, 'SAMPLE_SELLER_QUOTA_BYTES: 1'),
+    (429, 'SAMPLE_UPLOAD_RATE: 1'),
+    (409, 'version is no longer pending_members'),
+    (413, 'sample size mismatch'),
+    (400, 'sample size mismatch'),
+    (409, 'sample hash mismatch'),
+    (503, 'sample_store_unavailable'),
+])
+async def test_sample_refusals_preserve_named_error_and_retry_pending(local_dataset, monkeypatch, code, detail):
+    import httpx
+    import json
+    local = mp._local_publish_snapshot(local_dataset)
+    version_id = str(uuid4())
+    member_bodies = []
+    sample_bodies = []
+    failing = True
+
+    async def receive(request, claims):
+        result = dict(version_id=version_id, version_label=local['version'].version_label,
+                      status='pending_members', quarantine_reason=None)
+        if request.url.path.endswith('/publish'):
+            return httpx.Response(200, json={'listing_id': 'listing', 'versions': [result]})
+        if request.url.path.endswith('/members'):
+            member_bodies.append(json.loads(request.content))
+            return httpx.Response(200, json=result)
+        sample_bodies.append(request.content)
+        assert claims['action'] == 'publish_sample_member'
+        if failing:
+            return httpx.Response(code, json={'detail': detail})
+        return httpx.Response(200, json=dict(version_id=version_id, status='active', index=0))
+
+    _signed_local_client(monkeypatch, receive)
+    body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id=local_dataset)
+    with pytest.raises(HTTPException) as exc:
+        await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    assert exc.value.status_code == code and exc.value.detail == detail
+    state = await mp.publish_status(dataset_id=local_dataset, user=None)
+    assert state['status'] == 'pending_members' and state['offset'] == 3
+    failing = False
+    result = await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    assert result['status'] == 'published'
+    assert len(member_bodies) == 2  # acknowledged chunks were not resent
+    assert sample_bodies == [b'0\n', b'0\n']
+
+
+@pytest.mark.asyncio
+async def test_lost_final_sample_ack_retry_uses_publish_status_without_sample_replay(local_dataset, monkeypatch):
+    import httpx
+    local = mp._local_publish_snapshot(local_dataset)
+    version_id = str(uuid4())
+    activated = False
+    sample_calls = 0
+
+    async def receive(request, claims):
+        nonlocal activated, sample_calls
+        result = dict(version_id=version_id, version_label=local['version'].version_label,
+                      status='active' if activated else 'pending_members', quarantine_reason=None)
+        if request.url.path.endswith('/publish'):
+            return httpx.Response(200, json={'listing_id': 'listing', 'versions': [result]})
+        if request.url.path.endswith('/members'):
+            return httpx.Response(200, json=result)
+        sample_calls += 1
+        activated = True
+        raise httpx.ReadTimeout('lost final ACK', request=request)
+
+    _signed_local_client(monkeypatch, receive)
+    body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id=local_dataset)
+    with pytest.raises(HTTPException, match='upload interrupted'):
+        await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    assert (await mp.publish_status(dataset_id=local_dataset, user=None))['status'] == 'pending_members'
+    assert (await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace()))['status'] == 'published'
+    assert sample_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_lost_member_ack_replays_exact_frozen_body_with_fresh_action_jwt(local_dataset, monkeypatch):
+    import httpx
+    import json
+    local = mp._local_publish_snapshot(local_dataset)
+    version_id = str(uuid4())
+    chunks = []
+
+    async def receive(request, claims):
+        result = dict(version_id=version_id, version_label=local['version'].version_label,
+                      status='pending_members', quarantine_reason=None)
+        if request.url.path.endswith('/publish'):
+            return httpx.Response(200, json={'listing_id': 'listing', 'versions': [result]})
+        if request.url.path.endswith('/members'):
+            payload = json.loads(request.content)
+            assert claims['action'] == 'publish_version_members'
+            assert claims['metadata_hash'] == _receiver_hash(payload)
+            chunks.append(request.content)
+            if len(chunks) == 1:
+                raise httpx.ReadTimeout('lost ACK', request=request)
+            return httpx.Response(200, json=result)
+        return httpx.Response(200, json=dict(version_id=version_id, status='active', index=0))
+
+    _signed_local_client(monkeypatch, receive)
+    body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id=local_dataset)
+    with pytest.raises(HTTPException, match='upload interrupted'):
+        await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    with get_session_context() as session:
+        row = session.get(DatasetMember, (local_dataset, 1)); row.relative_path = 'changed.csv'
+        session.add(row); session.commit()
+    assert (await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace()))['status'] == 'published'
+    assert len(chunks) == 3 and chunks[0] == chunks[1]

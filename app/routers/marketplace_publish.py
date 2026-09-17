@@ -345,7 +345,7 @@ def _record_local_publish(local, listing_id, version_id, status):
                 dataset_id=record.id, root_path=local["root_path"], members=local["manifest"]["members"]))
         metadata = json.loads(record.metadata_json)
         metadata["local_publish"] = {"version_id": version_id, "manifest_hash": key[1],
-            "version_label": local["version"].version_label, "status": "pending_members",
+            "version_label": local["version"].version_label, "status": status,
             "offset": local.get("offset", 0)}
         record.metadata_json = json.dumps(metadata)
         record.listing_id = listing_id
@@ -839,12 +839,22 @@ async def publish_via_signed_proxy(
             local["offset"] = 0
         _record_local_publish(local, str(data["listing_id"]), version_id, version_data.get("status", "pending_members"))
 
-        async def post(path, chunk):
-            signed = _build_jwt(str(seller_id), install_id, _jcs_hash(chunk), ed_priv)
+        async def post(path, signed_payload, *, action, content=None):
+            signed = build_action_jwt(seller_id=str(seller_id), install_id=install_id,
+                action=action, payload_hash=_jcs_hash(signed_payload), private_key=ed_priv,
+                hash_claim="metadata_hash")
+            headers = {"Authorization": f"Bearer {signed}"}
+            if content is None:
+                headers["Content-Type"] = "application/json"
+                transport = {"json": signed_payload}
+            else:
+                headers.update({"Content-Type": "application/octet-stream",
+                                "Content-Length": str(signed_payload["size_bytes"])})
+                transport = {"content": content}
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.post(settings.ai_market_url + path, json=chunk,
-                        headers={"Authorization": f"Bearer {signed}", "Content-Type": "application/json"})
+                    response = await client.post(settings.ai_market_url.rstrip("/") + path,
+                        headers=headers, **transport)
             except httpx.RequestError as exc:
                 raise HTTPException(502, "pending_members: upload interrupted; retry publish") from exc
             if response.status_code not in (200, 201):
@@ -856,22 +866,24 @@ async def publish_via_signed_proxy(
             return response.json()
 
         def checkpoint(offset, result):
-            _local_progress(body.vz_dataset_id, offset, "pending_members")
+            _local_progress(body.vz_dataset_id, offset, result.get("status", "pending_members"))
 
-        result = await upload_member_chunks(version_id=version_id,
-            members_upload_id=local["version"].members_upload_id, members=local["manifest"]["members"],
-            post=post, checkpoint=checkpoint, start_offset=local.get("offset", 0))
-        if local.get("offset", 0) >= len(local["manifest"]["members"]):
-            result = version_data
-        try:
-            sample_result = await upload_samples(dataset_id=body.vz_dataset_id, root_path=local["root_path"],
-                version_id=version_id, manifest_hash=local["manifest"]["manifest_hash"],
-                members=local["manifest"]["members"], post=post)
-        except ValueError as exc:
-            raise HTTPException(409, str(exc)) from None
-        version_data.update(result)
-        if sample_result and sample_result.get("status") in ("active", "quarantined", "pending_members", "superseded"):
-            version_data.update(sample_result)
+        # A repeated publish returns the existing version status. In particular,
+        # recovering a lost final-sample ACK must not resend to an active version.
+        if version_data.get("status") == "pending_members":
+            result = await upload_member_chunks(version_id=version_id,
+                members_upload_id=local["version"].members_upload_id, members=local["manifest"]["members"],
+                post=post, checkpoint=checkpoint, start_offset=local.get("offset", 0))
+            version_data.update(result)
+        if version_data.get("status") == "pending_members":
+            try:
+                sample_result = await upload_samples(dataset_id=body.vz_dataset_id, root_path=local["root_path"],
+                    version_id=version_id, members_upload_id=local["version"].members_upload_id,
+                    members=local["manifest"]["members"], post=post)
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from None
+            if sample_result:
+                version_data.update(sample_result)
         _local_progress(body.vz_dataset_id, len(local["manifest"]["members"]), version_data.get("status", "pending_members"))
         data["version"] = version_data
         status = version_data.get("status")

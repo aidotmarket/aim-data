@@ -42,7 +42,10 @@ async def test_chunk_failure_resumes_only_unacknowledged_chunk(monkeypatch):
     monkeypatch.setattr(settings, 'publish_member_chunk', 1000)
     members = [{'index': n} for n in range(2101)]
     seen = []; acknowledged = []
-    async def post(path, body):
+    async def post(path, body, *, action):
+        assert action == "publish_version_members"
+        assert set(body) == {"version_id", "members_upload_id", "members"}
+        assert body["version_id"] == "version"
         seen.append(body['members'][0]['index'])
         assert path == '/api/v1/vz/versions/version/members'
         assert body['members_upload_id'] == 'upload'
@@ -96,13 +99,18 @@ async def test_pending_members_status(local_dataset):
 async def test_sample_upload_original_bytes_only(local_dataset):
     local = publish._local_publish_snapshot(local_dataset)
     calls = []
-    async def post(path, body): calls.append((path, body))
+    async def post(path, body, *, action, content):
+        calls.append((path, body, action, b"".join([chunk async for chunk in content])))
+        return {"version_id": "version", "status": "active", "index": 0}
     await upload_samples(dataset_id=local_dataset, root_path=local['root_path'], version_id='version',
-        manifest_hash=local['manifest']['manifest_hash'], members=local['manifest']['members'], post=post)
-    import base64
+        members_upload_id='upload', members=local['manifest']['members'], post=post)
     assert len(calls) == 1
-    assert base64.b64decode(calls[0][1]['content_base64']) == b'0\n'
-    assert calls[0][1]['manifest_hash'] == local['manifest']['manifest_hash']
+    path, body, action, content = calls[0]
+    assert path == '/api/v1/vz/versions/version/samples/0?members_upload_id=upload'
+    assert action == 'publish_sample_member'
+    assert content == b'0\n'
+    assert body == dict(version_id='version', members_upload_id='upload', index=0,
+                       size_bytes=2, sha256=hashlib.sha256(content).hexdigest())
 
 
 @pytest.mark.asyncio
@@ -112,9 +120,9 @@ async def test_sample_cap_preflights_all_before_upload(local_dataset, monkeypatc
     members[1]['is_sample'] = True; members[1]['size_bytes'] = 11
     monkeypatch.setattr(settings, 'sample_max_file_bytes', 10)
     async def post(*args): pytest.fail('No upload allowed before bounds checked')
-    with pytest.raises(ValueError, match='SAMPLE_MAX_FILE_BYTES=10: 1.csv'):
+    with pytest.raises(ValueError, match='1.csv: SAMPLE_MAX_FILE_BYTES: 10'):
         await upload_samples(dataset_id=local_dataset, root_path=local['root_path'], version_id='v',
-            manifest_hash='hash', members=members, post=post)
+            members_upload_id='upload', members=members, post=post)
 
 
 @pytest.mark.parametrize('bound,value', [('sample_max_files', 1), ('sample_max_total_bytes', 3)])
@@ -133,13 +141,13 @@ async def test_changed_sample_refused(local_dataset):
     async def post(*args): pytest.fail('Changed sample must not upload')
     with pytest.raises(ValueError, match='sample_member_changed: 0.csv'):
         await upload_samples(dataset_id=local_dataset, root_path=local['root_path'], version_id='v',
-            manifest_hash='hash', members=local['manifest']['members'], post=post)
+            members_upload_id='upload', members=local['manifest']['members'], post=post)
 
 
 def test_worst_case_path_chunk_under_receiver_body_limit():
     members = [dict(index=n, relative_path='\u0800' * 340 + f'{n:04}', size_bytes=0,
         sha256='0'*64, detected_type='csv', role='data', is_sample=False) for n in range(1000)]
-    body = {'members_upload_id': str(uuid4()), 'members': members}
+    body = {'version_id': str(uuid4()), 'members_upload_id': str(uuid4()), 'members': members}
     assert len(canonical_json_bytes(body)) < 8 * 1024 * 1024
 
 
@@ -150,3 +158,27 @@ async def test_flag_off_upload_unreachable(monkeypatch):
     with pytest.raises(Exception, match='multi_file_datasets_disabled'):
         await upload_member_chunks(version_id='v', members_upload_id='u', members=[{}], post=post,
             checkpoint=lambda *args: None)
+
+
+@pytest.mark.asyncio
+async def test_sample_stream_is_bounded_and_frozen_before_egress(local_dataset):
+    from pathlib import Path
+    local = publish._local_publish_snapshot(local_dataset)
+    content = b'x' * (1024**2 + 17)  # exercise spool-to-disk and multiple chunks
+    path = Path(local['root_path']) / '0.csv'
+    path.write_bytes(content)
+    members = local['manifest']['members']
+    members[0].update(size_bytes=len(content), sha256=hashlib.sha256(content).hexdigest())
+
+    async def post(url, body, *, action, content):
+        path.write_bytes(b'changed after freeze')
+        chunks = [chunk async for chunk in content]
+        assert len(chunks) > 1 and max(map(len, chunks)) <= 64 * 1024
+        assert b''.join(chunks) == b'x' * (1024**2 + 17)
+        assert body['size_bytes'] == sum(map(len, chunks))
+        assert action == 'publish_sample_member'
+        return {'version_id': 'v', 'status': 'active', 'index': 0}
+
+    result = await upload_samples(dataset_id=local_dataset, root_path=local['root_path'],
+        version_id='v', members_upload_id='u', members=members, post=post)
+    assert result['status'] == 'active'

@@ -435,7 +435,7 @@ async def upload_member_chunks(*, version_id, members_upload_id, members, post, 
                                start_offset=0):
     """Resume at the last acknowledged chunk; a lost ACK replays identical rows.
 
-    ``post`` signs each body using the publish identity. Checkpoints advance only
+    ``post`` signs each body with the publish_version_members install action. Checkpoints advance only
     after a successful response, and are persisted by the caller.
     """
     if not settings.multi_file_datasets_enabled:
@@ -444,7 +444,10 @@ async def upload_member_chunks(*, version_id, members_upload_id, members, post, 
     result = {"status": "pending_members"}
     for offset in range(start_offset, len(members), chunk_size):
         chunk = members[offset:offset + chunk_size]
-        payload = {"members_upload_id": str(members_upload_id), "members": chunk}
-        result = await post(f"/api/v1/vz/versions/{version_id}/members", payload)
+        payload = {"version_id": str(version_id), "members_upload_id": str(members_upload_id), "members": chunk}
+        result = await post(f"/api/v1/vz/versions/{version_id}/members", payload,
+                            action="publish_version_members")
         checkpoint(offset + len(chunk), result)
+        if result.get("status") in ("active", "quarantined", "superseded"):
+            break
     return result
