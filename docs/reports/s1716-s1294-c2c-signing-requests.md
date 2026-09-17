@@ -110,3 +110,5 @@ Review source: DeepSeek `response-20260917-121500-938722`, CC `response-20260917
 DS-F4 corrected review extent: `app/models/dataset_commitment_schemas.py` contains 339 lines; 233 was the diff insertion count, not its full length.
 
 DS-F2 release dependency: Chunk 2d must stop producing the legacy `approved_rows` request before this producer change ships, with an end-to-end seller click-through proving the replacement flow; no UI implementation or release is claimed by this fold.
+
+CC-NIT-1 I.b precondition: enforce URL verb versus signed `binding.decision` agreement before live signing/submission and test approve/withdraw mismatches; both current routes remain unavailable without state change or egress.
