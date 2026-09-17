@@ -243,3 +243,5 @@ D2 (DeepSeek F2): corrected the authorization statement above with the explicit
 admin-mount note allowed by the finding. The gate is unchanged. A production-style
 JWT-cookie mount test is carried with CC NIT-2; the route suite alone does not prove
 that composition.
+
+CC LOW-1 traceability: §H authorizes the Local Job API files `app/services/preview_build_service.py`, `app/routers/preview_builds.py`, `app/models/preview_build_schemas.py` and ownership/router/review wiring in `datasets.py`, `processing_service.py`, `dataset_merkle_service.py`, and `marketplace_publish.py`, beyond the abbreviated §I/2d file list.
