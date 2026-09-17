@@ -635,13 +635,14 @@ const PublishModal = ({ open, onOpenChange, dataset, onPublishSuccess }: Publish
 export default PublishModal;
 
 // Directory publication uses the stored seller-selected members, never row previews.
-export function DirectoryPublishControl({ datasetId, publishPayload, disclosurePayload, disabled, sampleCount, onPublished }: {
+export function DirectoryPublishControl({ datasetId, publishPayload, disclosurePayload, disabled, sampleCount, onPublished, onListingPublished }: {
   datasetId: string;
   publishPayload: Record<string, unknown>;
   disclosurePayload: Record<string, unknown> | null;
   disabled: boolean;
   sampleCount: number;
-  onPublished: () => void;
+  onPublished: (listingId: string) => void;
+  onListingPublished?: (listingId: string) => void;
 }) {
   const { apiKey } = useAuth();
   const [busy, setBusy] = useState(false);
@@ -679,9 +680,10 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
         retry = { listingId: result.listing_id, payload: { ...disclosurePayload,
           dataset_id: datasetId, sample_decision: shareSamples && sampleCount ? "member_files" : "none", approved_sample: null } };
         setSnapshotRetry(retry);
+        onListingPublished?.(retry.listingId);
       }
       await send(`/marketplace/listings/${encodeURIComponent(retry.listingId)}/disclosure-snapshots`, retry.payload);
-      setSnapshotRetry(null); setPublished(true); setStatus("published"); onPublished();
+      setSnapshotRetry(null); setPublished(true); setStatus("published"); onPublished(retry.listingId);
     } catch (e) { setError(e instanceof Error ? e.message : "Publish failed"); }
     finally { setBusy(false); }
   };

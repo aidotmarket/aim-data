@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { useLocation, useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -308,6 +308,7 @@ export function ListingPreparation({
   isDeleting,
   draftListingId: initialDraftListingId,
   onDatasetRefresh,
+  children,
 }: {
   dataset: ApiDataset;
   backPath: string;
@@ -315,6 +316,7 @@ export function ListingPreparation({
   isDeleting: boolean;
   draftListingId: string | null;
   onDatasetRefresh?: (dataset: ApiDataset) => void;
+  children?: ReactNode;
 }) {
   const navigate = useNavigate();
   const { publishDataset } = useMarketplace();
@@ -623,6 +625,10 @@ export function ListingPreparation({
       listingId,
       request
     );
+    await completePublication(listingId, listingUrl);
+  };
+
+  const completePublication = async (listingId: string, listingUrl = publishedListingUrl) => {
     setPublishedListingId(listingId);
     setRetrySnapshotPayload(null);
     setDisclosureFailure(null);
@@ -832,6 +838,8 @@ export function ListingPreparation({
           Review privacy findings, approve allAI metadata, then publish.
         </p>
       </div>
+
+      {children}
 
       <Card>
         <CardHeader className="pb-3">
@@ -1205,7 +1213,8 @@ export function ListingPreparation({
                 ...buildDisclosureSnapshotPayload({ approvedFields: approvedMetadataDraft, sampleDecision: "none",
                   approvedSample: null, confirmed: true, sourcePublishOperationId: newPublishOperationId() }),
               } : null}
-              onPublished={() => { setPublishComplete(true); void datasetsApi.get(dataset.id).then(onDatasetRefresh); }}
+              onListingPublished={setPublishedListingId}
+              onPublished={(listingId) => { void completePublication(listingId); }}
             /> : <Button
               onClick={handlePublish}
               disabled={Boolean(publishedListingId) || publishing || !finalDisclosureConfirmed || !approvedMetadataDraft}
@@ -1454,12 +1463,6 @@ const DatasetDetail = () => {
     }
   };
 
-  if (apiDataset.file_type === "directory") {
-    return <main className="space-y-6 p-6"><Link to={backPath}>Back to datasets</Link>
-      <h1 className="text-2xl font-bold">{apiDataset.original_filename}</h1>
-      <DirectoryMembers dataset={apiDataset} /></main>;
-  }
-
   if (apiDataset.status !== "error" && !apiDataset.listing_id) {
     return (
       <ListingPreparation
@@ -1469,7 +1472,9 @@ const DatasetDetail = () => {
         backPath={backPath}
         onDelete={handleDelete}
         isDeleting={isDeleting}
-      />
+      >
+        {apiDataset.file_type === "directory" && <DirectoryMembers dataset={apiDataset} />}
+      </ListingPreparation>
     );
   }
 
@@ -1547,6 +1552,8 @@ const DatasetDetail = () => {
         <ChevronRightIcon className="w-4 h-4 text-muted-foreground" />
         <span className="text-foreground font-medium">{dataset.name}</span>
       </nav>
+
+      {apiDataset.file_type === "directory" && <DirectoryMembers dataset={apiDataset} />}
 
       {/* Header */}
       <div className="flex flex-col gap-4">

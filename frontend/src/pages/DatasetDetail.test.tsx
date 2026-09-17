@@ -530,3 +530,88 @@ describe("directory profile read states", () => {
     expect(screen.queryByText("Ready to list")).not.toBeInTheDocument();
   });
 });
+
+
+describe("directory detail preparation wiring", () => {
+  async function openDirectory() {
+    const directory: ApiDataset = { ...dataset(), file_type: "directory", metadata: {
+      ...dataset().metadata, directory: { member_count: 2, sample_member_count: 1, data_member_count: 2, total_data_bytes: 8, manifest_hash: "0".repeat(64) },
+      ...{ directory_profile: { status: "completed", summary: "profiled on 1 of 2 files", members: {} } },
+    } };
+    vi.spyOn(datasetsApi, "get").mockResolvedValue(directory);
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [{
+      dataset_id: "ds-1", index: 0, relative_path: "data.csv", size_bytes: 4,
+      sha256: "0".repeat(64), detected_type: "csv", role: "data", is_sample: true,
+      status: "current", reason: null,
+    }], total: 2, page: 1, page_size: 100, editable: true });
+    vi.spyOn(piiApi, "getConfig").mockResolvedValue({
+      dataset_id: "ds-1", column_actions: {}, privacy_attested: false, updated_at: null,
+    });
+    vi.spyOn(piiApi, "getScan").mockResolvedValue(cleanScan);
+    vi.spyOn(datasetsApi, "getListingMetadata").mockResolvedValue(listingMetadata);
+    render(<MemoryRouter initialEntries={["/datasets/ds-1"]}><MarketplaceProvider>
+      <MarketplaceProbe />
+      <Routes><Route path="/datasets/:id" element={<DatasetDetail />} /></Routes>
+    </MarketplaceProvider></MemoryRouter>);
+    expect(await screen.findByText("data.csv")).toBeInTheDocument();
+    const members = screen.getByRole("region", { name: "Directory members" });
+    expect(members.querySelector("table")).toBeInTheDocument();
+    expect(members.compareDocumentPosition(screen.getByText("Listing Flow")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("profiled on 1 of 2 files")).toBeInTheDocument();
+    expect(screen.getByText("Step 1: Privacy Review")).toBeInTheDocument();
+    const next = await screen.findByRole("button", { name: "Continue to metadata" });
+    await waitFor(() => expect(next).toBeEnabled());
+    fireEvent.click(next);
+    expect(await screen.findByText("Step 2: Metadata Review")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Accept all & continue" }));
+    expect(screen.getByText("Step 3: Listing Details and Disclosure")).toBeInTheDocument();
+    expect(screen.getByText("Disclosure summary")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Publish selected sample files for free download" })).toBeChecked();
+    const heading = screen.getByRole("heading", { name: "Optional: add a verified shape label" });
+    expect(heading).toHaveClass("border-t", "pt-6");
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY }));
+    return directory;
+  }
+
+  it("publishes from the page with directory payload and refreshes into the published view", async () => {
+    const directory = await openDirectory();
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-directory" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    vi.mocked(datasetsApi.get).mockResolvedValue({ ...directory, listing_id: "listing-directory" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    await screen.findByRole("tab", { name: "Marketplace" });
+    expect(screen.getByText("Published")).toBeInTheDocument();
+    expect(screen.getByTestId("context-published")).toHaveTextContent("true");
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual(expect.objectContaining({
+      vz_dataset_id: "ds-1", file_format: "directory", title: "Customer Spend",
+    }));
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual(expect.objectContaining({
+      dataset_id: "ds-1", sample_decision: "member_files", approved_sample: null,
+    }));
+    expect(screen.getByRole("region", { name: "Directory members" })).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Marketplace" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("Listing ID: listing-directory")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View Listing" })).toHaveAttribute("href", "https://ai.market/listing/listing-directory");
+  });
+
+  it("retains disclosure retry and does not republish when the snapshot fails", async () => {
+    await openDirectory();
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-directory" }) })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ detail: "Snapshot unavailable" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Snapshot unavailable");
+    expect(screen.getByText("Listing published, disclosure snapshot pending")).toBeInTheDocument();
+    expect(datasetsApi.get).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Retry disclosure" }));
+    expect(await screen.findByRole("button", { name: "Published" })).toBeDisabled();
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher.mock.calls[2]).toEqual(fetcher.mock.calls[1]);
+    expect(screen.getByText("Complete")).toBeInTheDocument();
+  });
+});
