@@ -9,6 +9,7 @@ import asyncio
 import base64
 from dataclasses import dataclass
 import hashlib
+import logging
 import os
 import stat
 from pathlib import Path
@@ -19,6 +20,9 @@ from app.core.database import get_session_context
 from app.models.published_manifest import PublishedManifest
 from app.services.dataset_manifest import build_manifest
 from app.services.fulfillment_service import ACK_TIMEOUT_S, CHUNK_SIZE, WINDOW_SIZE
+
+
+logger = logging.getLogger(__name__)
 
 
 class Refusal(Exception):
@@ -254,7 +258,9 @@ class ManifestSender:
             if member.index in verified:
                 continue
             digest = hashlib.sha256()
-            with open_member(source_path(member, directories)) as stream:
+            # Keep the actual readdir spelling (possibly NFD) for every open.
+            resolved_path = source_path(member, directories)
+            with open_member(resolved_path) as stream:
                 if os.fstat(stream.fileno()).st_size != member.size:
                     raise ValueError("Retained member size changed")
                 for local_index in range(member.chunks):
@@ -303,6 +309,13 @@ class ManifestSender:
                 if data.get('action') == 'vai.fulfillment.ack':
                     if data.get('transfer_id') != self.transfer_id:
                         raise Refusal('wrong_ack_transfer')
+                    acked_index = data.get('acked_through_index')
+                    if type(acked_index) is not int or not 0 <= acked_index < self.total_chunks:
+                        raise Refusal('invalid_ack')
+                    if acked_index < expected:
+                        logger.info('Ignoring stale ACK for transfer %s: %s < %s',
+                                    self.transfer_id, acked_index, expected)
+                        return
                     try:
                         self.service._validate_ack(data, expected, self.transfer_id)
                     except ConnectionError as exc:

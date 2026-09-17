@@ -81,11 +81,12 @@ class WirePeer:
             index = message['chunk_index']
             if self.origin is None:
                 self.origin = index
+            # Shipped listener: own chunk result, then a separate ACK carrier.
+            self.reply(message, {'success': True})
             if (index - self.origin) % 4 == 3 or index == self.total - 1:
-                self.reply(message, dict(action='vai.fulfillment.ack', transfer_id=self.transfer_id,
-                                         acked_through_index=index, status='continue'))
-            else:
-                self.reply(message, {'success': True})
+                self.reply({'request_id': f"ack-{message['request_id']}"},
+                           dict(action='vai.fulfillment.ack', transfer_id=self.transfer_id,
+                                acked_through_index=index, status='continue'))
         elif action == 'complete':
             self.complete_count += 1
             self.reply(message, {'success': True, 'token_id': 'placeholder-grant'})
@@ -643,3 +644,136 @@ async def test_refusal_retry_pacing(retained, monkeypatch, refusal, delay_count)
     peer.hook = hook
     await deliver(peer)
     assert observed == [settings.transfer_retry_after_s] * delay_count
+
+
+@pytest.mark.asyncio
+async def test_standalone_ack_claimed_after_chunk_response():
+    client = TrustChannelClient()
+    client.send_action = AsyncMock()
+    with client.fulfillment_responses('transfer') as inbox:
+        await inbox.send({'action': 'vai.fulfillment.chunk', 'request_id': 'chunk-id'})
+        client._dispatch({'request_id': 'chunk-id', 'success': True,
+                          'data': {'success': True}, 'error': None})
+        await inbox.receive(.1)
+        assert not inbox.pending
+        ack = {'request_id': 'ack-chunk-id', 'success': True, 'error': None,
+               'data': {'action': 'vai.fulfillment.ack', 'transfer_id': 'transfer',
+                        'acked_through_index': 3, 'status': 'continue'}}
+        client._dispatch(ack)
+        assert await inbox.receive(.1) == ack
+
+
+@pytest.mark.asyncio
+async def test_late_duplicate_ack_is_logged_and_ignored(retained, caplog):
+    peer = WirePeer(retained)
+    injected = False
+    async def hook(message):
+        nonlocal injected
+        if message['action'].endswith('.chunk') and message['chunk_index'] == 4:
+            injected = True
+            peer.reply({'request_id': 'ack-previous-window'},
+                       {'action': 'vai.fulfillment.ack', 'transfer_id': peer.transfer_id,
+                        'acked_through_index': 3, 'status': 'continue'})
+        return False
+    peer.hook = hook
+    with caplog.at_level('INFO', logger='app.services.manifest_fulfillment'):
+        service = await deliver(peer)
+    assert injected and 'Ignoring stale ACK' in caplog.text
+    assert actions(peer)[-1] == 'complete'
+    assert service._update_log.call_args.args[1] == 'completed'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('bad', ['ahead', 'unknown-transfer'])
+async def test_ack_outside_plan_or_transfer_aborts(retained, bad):
+    peer = WirePeer(retained)
+    async def hook(message):
+        if message['action'].endswith('.chunk') and message['chunk_index'] == 3:
+            peer.reply(message, {'action': 'vai.fulfillment.ack',
+                'transfer_id': 'unknown' if bad == 'unknown-transfer' else peer.transfer_id,
+                'acked_through_index': peer.total if bad == 'ahead' else 3, 'status': 'continue'})
+            return True
+        return False
+    peer.hook = hook
+    service = await deliver(peer)
+    assert actions(peer)[-1] == 'error' and 'complete' not in actions(peer)
+    assert peer.messages[-1]['parameters']['error_code'] == 'TRANSFER_ABORTED'
+    assert service._update_log.call_args.args[1] == 'failed'
+
+
+def retain_rows(retained, rows):
+    retained.version = str(uuid.uuid4())
+    retained.hash = build_manifest(rows)['manifest_hash']
+    with get_session_context() as db:
+        db.add(PublishedManifest(listing_version_id=retained.version, manifest_hash=retained.hash,
+            dataset_id='deleted-registration', root_path=str(retained.root), members=rows,
+            registration_to_published_index={str(2*i): i for i in range(len(rows))}))
+        db.commit()
+
+
+@pytest.mark.asyncio
+async def test_decomposed_source_entries_open_actual_spelling(retained, monkeypatch):
+    import os
+    import unicodedata
+    import app.services.manifest_fulfillment as module
+    nfc_dir, nfc_file = 'café', 'résumé.csv'
+    nfd_dir, nfd_file = [unicodedata.normalize('NFD', name) for name in (nfc_dir, nfc_file)]
+    actual_dir = retained.root / nfd_dir
+    actual_dir.mkdir()
+    (retained.root / '0.csv').rename(actual_dir / nfd_file)
+    rows = [dict(retained.rows[0], relative_path=f'{nfc_dir}/{nfc_file}'), *retained.rows[1:]]
+    retain_rows(retained, rows)
+    real_iterdir, real_open = Path.iterdir, os.open
+    opened = []
+    def iterdir(path):
+        # Emulate raw NFD readdir on filesystems that normalize stored names.
+        for entry in real_iterdir(path):
+            yield path / unicodedata.normalize('NFD', entry.name)
+    def open_actual(path, flags, *args, **kwargs):
+        if path in (nfc_dir, nfc_file):
+            raise FileNotFoundError('NFC spelling absent on NFD-storing filesystem')
+        opened.append(path)
+        return real_open(path, flags, *args, **kwargs)
+    monkeypatch.setattr(Path, 'iterdir', iterdir)
+    monkeypatch.setattr(module.os, 'open', open_actual)
+    peer = WirePeer(retained)
+    service = await deliver(peer)
+    assert nfd_dir in opened and nfd_file in opened
+    assert service._update_log.call_args.args[1] == 'completed'
+    assert b''.join(base64.b64decode(m['payload']) for m in chunks(peer)
+                    if m['member_index'] == 0) == retained.content[0]
+
+
+@pytest.mark.parametrize('setting,limit,reason', [
+    ('transfer_max_member_bytes', CHUNK_SIZE, 'TRANSFER_MAX_MEMBER_BYTES'),
+    ('dataset_max_bytes', CHUNK_SIZE * 7 + 2, 'DATASET_MAX_BYTES'),
+    ('dataset_max_members', 2, 'DATASET_MAX_MEMBERS'),
+])
+def test_load_plan_bound_refusals(retained, monkeypatch, setting, limit, reason):
+    monkeypatch.setattr(settings, setting, limit)
+    with pytest.raises(ValueError, match=reason):
+        load_plan(retained.version, retained.hash)
+
+
+def test_load_plan_refuses_non_dense_retained_manifest(retained):
+    rows = [dict(row, index=2*i) for i, row in enumerate(retained.rows)]
+    retain_rows(retained, rows)
+    with pytest.raises(ValueError, match='published indices are not dense'):
+        load_plan(retained.version, retained.hash)
+
+
+def test_mapping_is_bijection_check_and_paths_are_frozen_published_rows(retained):
+    with get_session_context() as db:
+        record = db.get(PublishedManifest, (retained.version, retained.hash))
+        record.registration_to_published_index = {'19': 0, '2': 1, '8': 2}
+        db.add(record)
+        db.commit()
+    _, plan, _, _ = load_plan(retained.version, retained.hash)
+    assert [p.path for p in plan] == [retained.root / row['relative_path'] for row in retained.rows]
+    with get_session_context() as db:
+        record = db.get(PublishedManifest, (retained.version, retained.hash))
+        record.registration_to_published_index = {'19': 0, '2': 0, '8': 2}
+        db.add(record)
+        db.commit()
+    with pytest.raises(ValueError, match='registration mapping is invalid'):
+        load_plan(retained.version, retained.hash)

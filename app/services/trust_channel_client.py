@@ -97,7 +97,7 @@ class FulfillmentInbox:
         action = data if isinstance(data, dict) else message
         if request_id in self.pending:
             self.pending.discard(request_id)
-        elif (request_id or action.get("action") != "vai.fulfillment.ack"
+        elif (action.get("action") != "vai.fulfillment.ack"
               or action.get("transfer_id") != self.transfer_id):
             return False
         self.queue.put_nowait(message)
