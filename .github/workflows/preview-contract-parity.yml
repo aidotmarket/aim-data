@@ -48,6 +48,8 @@ jobs:
           tests/test_preview_origin_service.py tests/test_preview_signing_service.py
           tests/test_preview_disclosure_schemas.py tests/test_marketplace_commitment_push.py
           tests/test_preview_lifecycle.py tests/test_preview_build_routes.py
+          tests/test_vz_publish_proxy.py tests/test_dataset_publish_signed_proxy.py
+          tests/test_s804_disclosure_dataset_detail.py
           tests/test_preview_fixture_parity.py tests/test_preview_producer_evidence.py
           --junitxml=/tmp/preview-contract/focused.xml
       - name: Build synthetic producer bundle through real services
