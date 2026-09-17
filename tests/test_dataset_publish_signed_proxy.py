@@ -260,3 +260,81 @@ async def test_dataset_publish_honors_metadata_override(monkeypatch):
     assert body.tags == ["one", "two"]
     assert body.price_cents == 2500
     assert body.schema_info["row_count"] == 1200
+
+# S1717 local sender cases. The S3 byte golden intentionally omits all additions.
+from tests.test_member_upload_client import local_dataset
+from app.routers import marketplace_publish as mp
+from app.models.dataset import DatasetMember
+from app.config import settings
+from app.services.marketplace_action_signer import canonical_json_bytes
+from app.services.s3_publish_source_resolver import NotS3PublishSource
+
+
+def test_s3_version_bytes_identical_with_explicit_new_defaults(monkeypatch):
+    fields = dict(version_label='v1', object_count=1, total_size_bytes=42, manifest_hash='a'*64)
+    expected = canonical_json_bytes(fields)
+    for flag in (False, True):
+        monkeypatch.setattr(settings, 'multi_file_datasets_enabled', flag)
+        for version in (mp.VersionPublishEmit(**fields), mp.VersionPublishEmit(**fields, source_kind='s3', members_total=None, members_upload_id=None)):
+            assert canonical_json_bytes(mp._build_version_emit(version)) == expected
+
+
+def test_directory_wire_has_exact_manifest_and_agent_version(local_dataset, monkeypatch):
+    monkeypatch.setattr(settings, 'app_version', '1.24.0')
+    local = mp._local_publish_snapshot(local_dataset, 'v1')
+    body = mp.MarketplacePublishRequest(title='Test', description='Test set', price_cents=2500, vz_dataset_id=local_dataset)
+    payload = mp._build_publish_payload(body, None, [local['version']])
+    assert payload['agent_version'] == '1.24.0'
+    version = payload['versions'][0]
+    assert version['source_kind'] == 'aim_data_local'
+    assert version['members_total'] == 3
+    assert version['object_count'] == 3
+    assert version['total_size_bytes'] == 6
+    assert version['manifest_hash'] == local['manifest']['manifest_hash']
+    assert version['members_upload_id'] == str(local['version'].members_upload_id)
+    assert 'root_path' not in str(payload) and 'verification' not in str(payload)
+    assert 's3_connection' not in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['all_sample', 'all_documentation', 'sample_cap'])
+async def test_local_refusal_before_any_signing(local_dataset, monkeypatch, kind):
+    with get_session_context() as session:
+        from sqlmodel import select
+        for row in session.exec(select(DatasetMember).where(DatasetMember.dataset_id == local_dataset)).all():
+            if kind == 'all_sample': row.is_sample = True
+            elif kind == 'all_documentation': row.role = 'documentation'; row.is_sample = False
+            elif row.index == 0: row.size_bytes = settings.sample_max_file_bytes + 1
+            session.add(row)
+        session.commit()
+    monkeypatch.setattr(mp, '_get_crypto', lambda: pytest.fail('Refuse before crypto or signing'))
+    body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id=local_dataset)
+    with pytest.raises(HTTPException) as exc:
+        await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    assert exc.value.status_code == 409
+    assert ('SAMPLE_MAX_FILE_BYTES' in exc.value.detail and '0.csv' in exc.value.detail) if kind == 'sample_cap' else 'paid_set_required' in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_missing_version_id_retries_and_never_records_publish(local_dataset, monkeypatch):
+    calls = []
+    monkeypatch.setattr(mp, '_get_crypto', lambda: SimpleNamespace(get_or_create_keypairs=lambda: (None, None, None, None)))
+    monkeypatch.setattr(mp, 'get_serial_store', lambda: SimpleNamespace(state=SimpleNamespace(last_status_cache={}, ai_market_seller_id='seller', ai_market_access_token='token')))
+    async def register(*args, **kwargs): return 'install'
+    monkeypatch.setattr(mp, 'ensure_vz_install_registered', register)
+    monkeypatch.setattr(mp, 'resolve_s3_publish_source', lambda *args: None)
+    monkeypatch.setattr(mp, '_build_jwt', lambda *args: 'signed')
+    class Client:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, url, **kwargs):
+            calls.append(kwargs['json'])
+            return SimpleNamespace(status_code=200, json=lambda: {'listing_id': 'listing', 'versions': []})
+    monkeypatch.setattr(mp.httpx, 'AsyncClient', Client)
+    body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id=local_dataset)
+    with pytest.raises(HTTPException, match='local_publish_missing_version_id'):
+        await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    assert len(calls) == 3 and calls[0] == calls[1] == calls[2]
+    with get_session_context() as session:
+        assert session.get(DBDatasetRecord, local_dataset).listing_id is None

@@ -429,3 +429,22 @@ def prepare_preview_request(request):
     """Shared closed egress boundary; no 409-to-PATCH fallback for previews."""
     from app.services.preview_signing_service import submit_preview_request
     return submit_preview_request(request)
+
+
+async def upload_member_chunks(*, version_id, members_upload_id, members, post, checkpoint,
+                               start_offset=0):
+    """Resume at the last acknowledged chunk; a lost ACK replays identical rows.
+
+    ``post`` signs each body using the publish identity. Checkpoints advance only
+    after a successful response, and are persisted by the caller.
+    """
+    if not settings.multi_file_datasets_enabled:
+        raise MarketplacePushError("multi_file_datasets_disabled")
+    chunk_size = min(settings.publish_member_chunk, 1000)
+    result = {"status": "pending_members"}
+    for offset in range(start_offset, len(members), chunk_size):
+        chunk = members[offset:offset + chunk_size]
+        payload = {"members_upload_id": str(members_upload_id), "members": chunk}
+        result = await post(f"/api/v1/vz/versions/{version_id}/members", payload)
+        checkpoint(offset + len(chunk), result)
+    return result
