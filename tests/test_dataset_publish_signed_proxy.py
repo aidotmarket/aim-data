@@ -280,11 +280,11 @@ def test_s3_version_bytes_identical_with_explicit_new_defaults(monkeypatch):
 
 
 def test_directory_wire_has_exact_manifest_and_agent_version(local_dataset, monkeypatch):
-    monkeypatch.setattr(settings, 'app_version', '1.24.0')
+    monkeypatch.setattr(settings, 'app_version', '1.25.0')
     local = mp._local_publish_snapshot(local_dataset, 'v1')
     body = mp.MarketplacePublishRequest(title='Test', description='Test set', price_cents=2500, vz_dataset_id=local_dataset)
     payload = mp._build_publish_payload(body, None, [local['version']])
-    assert payload['agent_version'] == '1.24.0'
+    assert payload['agent_version'] == '1.25.0'
     version = payload['versions'][0]
     assert version['source_kind'] == 'aim_data_local'
     assert version['sample_members_total'] == 1
@@ -346,7 +346,7 @@ def _signed_local_client(monkeypatch, handler):
     key = Ed25519PrivateKey.from_private_bytes(bytes([9]) * 32)
     seller_id, install_id = str(uuid4()), str(uuid4())
     monkeypatch.setattr(settings, 'publish_member_chunk', 2)
-    monkeypatch.setattr(settings, 'app_version', '1.24.0')
+    monkeypatch.setattr(settings, 'app_version', '1.25.0')
     monkeypatch.setattr(mp, '_get_crypto', lambda: SimpleNamespace(get_or_create_keypairs=lambda: (key, None, None, None)))
     monkeypatch.setattr(mp, 'get_serial_store', lambda: SimpleNamespace(state=SimpleNamespace(last_status_cache={}, ai_market_seller_id=seller_id, ai_market_access_token='token')))
     async def register(*args, **kwargs): return install_id
@@ -414,7 +414,7 @@ async def test_local_publish_round_trip_signs_chunks_and_retains_before_upload(l
         assert claims['metadata_hash'] == _receiver_hash(payload)
         if path.endswith('/publish'):
             assert claims['action'] == 'publish_listing'
-            assert payload['agent_version'] == '1.24.0'
+            assert payload['agent_version'] == '1.25.0'
             assert payload['versions'][0] == mp._build_version_emit(local['version'])
             return httpx.Response(200, json={'listing_id': 'listing', 'versions': [dict(version_id=version_id,
                 version_label=local['version'].version_label, status='pending_members', quarantine_reason=None)]})
@@ -454,7 +454,7 @@ def test_full_s3_payload_golden_is_independent_of_flag_and_app_version(monkeypat
     assert hashlib.sha256(golden).hexdigest() == '7a9ca30f3ff128453ca0d2cabc1deeda74be071de04ebb21acf86037e9ff087e'
     for flag in (False, True):
         monkeypatch.setattr(settings, 'multi_file_datasets_enabled', flag)
-        monkeypatch.setattr(settings, 'app_version', '1.24.0' if flag else 'dev')
+        monkeypatch.setattr(settings, 'app_version', '1.25.0' if flag else 'dev')
         assert canonical_json_bytes(mp._build_publish_payload(body, source, [mp.VersionPublishEmit(**fields)])) == golden
 
 

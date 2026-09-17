@@ -127,6 +127,11 @@ class FulfillmentService:
         self._save_log(log_entry)
 
         try:
+            if settings.multi_file_datasets_enabled and params.get("manifest_hash"):
+                from app.services.manifest_fulfillment import deliver_manifest
+                await deliver_manifest(self, log_entry, params)
+                return
+
             # 1. Resolve through the same listing-to-artifact path used by verification.
             try:
                 artifact = resolve_source_artifact(
