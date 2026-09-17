@@ -43,3 +43,22 @@ def test_single_file_original_bytes(monkeypatch, enabled, route):
             assert not members and dataset.root_path is None and dataset.file_type == 'csv'
             assert (Path(settings.upload_directory) / dataset.storage_filename).read_bytes() == body
             submit.assert_awaited_once_with(dataset_id)
+
+
+def test_delete_uploaded_directory(monkeypatch):
+    monkeypatch.setattr(settings, 'multi_file_datasets_enabled', True)
+    client = TestClient(app)
+    response = client.post('/api/datasets/upload',
+                           files={'file': (f'{uuid4()}.csv', b'x\n1\n', 'text/csv')})
+    assert response.status_code == 202, response.text
+    dataset_id = response.json()['dataset_id']
+    with get_session_context() as session:
+        root = Path(session.get(DatasetRecord, dataset_id).root_path)
+        assert root.is_dir()
+        assert session.get(DatasetMember, (dataset_id, 0)) is not None
+    response = client.delete(f'/api/datasets/{dataset_id}')
+    assert response.status_code == 200, response.text
+    assert not root.exists()
+    with get_session_context() as session:
+        assert session.get(DatasetRecord, dataset_id) is None
+        assert not session.exec(select(DatasetMember).where(DatasetMember.dataset_id == dataset_id)).all()

@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 import json
 import csv
+import shutil
 
 import os, psutil
 
@@ -381,6 +382,23 @@ class ProcessingService:
         record = self.get_dataset(dataset_id)
         if not record:
             return False
+
+        if record.file_type == "directory":
+            from app.models.dataset import DatasetMember, DatasetRecord as DBDatasetRecord
+            from sqlalchemy import delete
+
+            with self._get_session() as session:
+                db_row = session.get(DBDatasetRecord, dataset_id)
+                if db_row:
+                    if db_row.root_path:
+                        root = Path(db_row.root_path).resolve()
+                        uploads = Path(settings.upload_directory).resolve()
+                        if root != uploads and root.is_relative_to(uploads) and root.exists():
+                            shutil.rmtree(root)
+                    session.exec(delete(DatasetMember).where(DatasetMember.dataset_id == dataset_id))
+                    session.delete(db_row)
+                    session.commit()
+            return True
 
         # Delete files
         if record.upload_path and record.upload_path.exists():

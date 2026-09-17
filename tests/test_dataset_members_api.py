@@ -97,3 +97,19 @@ def test_non_utf8_refused_whole_and_named(client, tmp_path, monkeypatch):
 @pytest.mark.parametrize('patch', [{}, {'role': None}, {'is_sample': None}, {'is_sample': 'true'}, {'role': 'bad'}])
 def test_invalid_patch(client, patch):
     assert client.patch('/datasets/missing/members/0', json=patch).status_code == 422
+
+
+def test_delete_external_directory_preserves_files(client, tmp_path):
+    root = tmp_path / 'external'
+    root.mkdir()
+    source = root / 'data.csv'
+    source.write_bytes(b'x\n1\n')
+    dataset_id = register(client, root)
+    with get_session_context() as session:
+        assert session.get(DatasetMember, (dataset_id, 0)) is not None
+    response = client.delete(f'/datasets/{dataset_id}')
+    assert response.status_code == 200, response.text
+    assert root.is_dir() and source.read_bytes() == b'x\n1\n'
+    with get_session_context() as session:
+        assert session.get(DatasetRecord, dataset_id) is None
+        assert not session.exec(select(DatasetMember).where(DatasetMember.dataset_id == dataset_id)).all()
