@@ -20,7 +20,7 @@ Milestones committed and pushed separately:
 ## Routes
 
 All routes below are relative to **`/api/marketplace/preview-builds`**, mounted
-under the existing marketplace router. They require authenticated write/admin
+under the existing marketplace router. The production mount intentionally retains the existing `require_admin` gate: non-admin JWT-cookie sessions receive 403 `Insufficient permissions`; authenticated Bearer/API-key callers inherit the appliance admin role. Route-level checks additionally require authenticated write/admin
 scope, verified dataset ownership and, for existing jobs, matching job ownership.
 Auth-disabled debug identities are refused. Missing resources return 404;
 known resources owned by another account return 403. Closed bounded request
@@ -238,3 +238,8 @@ per-finding commits and verification receipts are recorded below after validatio
 | Candidate prepared / submit | 200 / `signed_candidate` (submit adds local outcome) | Released; metadata/proofs suffice, no index rebuild |
 | Cancel | 200 / `cancelled`; published job: 409 / `withdraw_required` | Cancelled build/review released and index deleted before return |
 | Withdraw | `withdrawn` / `external_retirement_pending`, then `retired` / null | Released and index deleted, including pending external retirement |
+
+D2 (DeepSeek F2): corrected the authorization statement above with the explicit
+admin-mount note allowed by the finding. The gate is unchanged. A production-style
+JWT-cookie mount test is carried with CC NIT-2; the route suite alone does not prove
+that composition.
