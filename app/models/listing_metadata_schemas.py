@@ -34,4 +34,4 @@ class ListingMetadata(BaseModel):
 
 def marketplace_column_metadata(column: ColumnSummary) -> dict:
     """Explicit metadata projection: sample_values cannot enter the wire path."""
-    return column.model_dump(exclude={"sample_values"})
+    return column.model_dump(include={"name", "type", "null_percentage", "uniqueness_ratio"})

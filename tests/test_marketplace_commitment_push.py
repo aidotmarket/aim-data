@@ -69,7 +69,7 @@ def test_router_closed_and_gated():
 def test_legacy_rows_not_in_model():
     assert "DisclosureApprovedSample" not in vars(route)
     with pytest.raises(ValueError):
-        route.DisclosureSnapshotProxyRequest(
+        route.DisclosureSnapshotProxyRequest.model_validate(dict(
             dataset_id="fixture",
             approved_fields={},
             sample_decision="approved_rows",
@@ -83,7 +83,7 @@ def test_legacy_rows_not_in_model():
             license="fixture",
             approval_source="aim_channel",
             source_publish_operation_id="fixture",
-        )
+        ))
 
 
 @pytest.mark.asyncio
@@ -115,21 +115,35 @@ async def test_row_replay_is_refused_before_network_or_local_persistence():
         processing.get_dataset.assert_not_called()
 
 
-def test_column_export_has_no_local_values():
-    from app.models.listing_metadata_schemas import (
-        ColumnSummary,
-        marketplace_column_metadata,
-    )
+@pytest.mark.asyncio
+async def test_column_export_has_no_local_values(monkeypatch):
+    import json
+    import httpx
+    from unittest.mock import AsyncMock, Mock
+    from app.models.listing_metadata_schemas import ColumnSummary, ListingMetadata
+    from app.services.marketplace_push_service import MarketplacePushService
 
-    column = ColumnSummary(
-        name="field",
-        type="string",
-        sample_values=["unique_synthetic_cell_marker_failure"],
-    )
-    assert "sample_values" not in marketplace_column_metadata(column)
-    assert "unique_synthetic_cell_marker_failure" not in str(
-        marketplace_column_metadata(column)
-    )
+    marker = "unique_synthetic_cell_marker_failure"
+    column = ColumnSummary(name="field", type="string", sample_values=[marker])
+    metadata = ListingMetadata(title="Synthetic", description="Synthetic", column_summary=[column],
+                               freshness_score=0.0, privacy_score=None)
+    service = MarketplacePushService()
+    service.api_key = "synthetic-test-key"
+    monkeypatch.setattr(service, "_load_compliance_report", lambda path: None)
+    monkeypatch.setattr(service, "_load_attestation", lambda path: None)
+    monkeypatch.setattr(service, "_save_publish_result", Mock())
+    response = httpx.Response(201, json={"id": "synthetic-listing"},
+                              request=httpx.Request("POST", "https://market.example"))
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=response) as post:
+        await service.push_to_marketplace("synthetic", listing_metadata_override=metadata)
+    post.assert_awaited_once()
+    payload = post.call_args.kwargs["json"]
+    assert payload["schema_info"]["columns"] == [{
+        "name": "field", "type": "string", "null_percentage": 0.0, "uniqueness_ratio": 0.0,
+    }]
+    assert "sample_values" not in json.dumps(payload)
+    assert marker not in json.dumps(payload)
+    assert column.sample_values == [marker]  # seller-local values preserved
 
 
 def test_manifest_budget_counts_duplicated_signed_evidence(monkeypatch):

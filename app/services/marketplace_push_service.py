@@ -21,7 +21,7 @@ from typing import Optional, Dict, Any
 import httpx
 
 from app.config import settings
-from app.models.listing_metadata_schemas import ListingMetadata
+from app.models.listing_metadata_schemas import ListingMetadata, marketplace_column_metadata
 from app.models.compliance_schemas import ComplianceReport
 from app.models.attestation_schemas import QualityAttestation
 
@@ -178,12 +178,7 @@ class MarketplacePushService:
         # Build schema_info from column summaries (no actual data)
         schema_info: Dict[str, Any] = {
             "columns": [
-                {
-                    "name": col.name,
-                    "type": col.type,
-                    "null_percentage": col.null_percentage,
-                    "uniqueness_ratio": col.uniqueness_ratio,
-                }
+                marketplace_column_metadata(col)
                 for col in listing_metadata.column_summary
             ],
             "row_count": listing_metadata.row_count,
