@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import os
+import zipfile
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from math import ceil
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from uuid import UUID, uuid4
@@ -46,9 +49,68 @@ from app.services.data_verification_client import DataVerificationClient
 from app.services.data_verification.connectors.eolymp_v1 import (
     probe_object_count,
     validate_artifact_schema,
+    UnsupportedConnectorShape,
 )
 from app.services.marketplace_action_signer import canonical_json_bytes, sign_receipt_payload
-from app.services.source_artifact_resolver import resolve_source_artifact
+from app.services.source_artifact_resolver import (
+    ArtifactResolutionError, ResolvedArtifact,
+    resolve_source_artifact as resolve_legacy_source_artifact,
+)
+from app.models.published_manifest import PublishedManifest
+from app.services.dataset_manifest import build_manifest, directory_locator_bytes
+
+
+@dataclass(frozen=True)
+class ResolvedDirectoryArtifact(ResolvedArtifact):
+    dataset: DatasetRecord | None
+    kind: Literal["local_directory"]
+    root_path: str = ""
+    listing_version_id: str = ""
+    manifest_hash: str = ""
+    members: tuple[dict[str, Any], ...] = ()
+    data_member_count: int = 0
+    total_data_bytes: int = 0
+
+    def resolved_object_count(self) -> int:
+        return self.data_member_count
+
+    def canonical_locator_bytes(self) -> bytes:
+        return directory_locator_bytes(self.root_path, self.manifest_hash)
+
+
+def resolve_source_artifact(
+    listing_id: str, listing_version_id: str | None = None,
+    manifest_hash: str | None = None,
+) -> ResolvedArtifact | None:
+    """Resolve directory authority only from the exact retained composite key."""
+    if listing_version_id is None and manifest_hash is None:
+        return resolve_legacy_source_artifact(listing_id)
+    if not settings.multi_file_datasets_enabled:
+        raise ArtifactResolutionError("directory verification is disabled")
+    if not listing_version_id or not manifest_hash:
+        raise ArtifactResolutionError("directory version binding is incomplete")
+    with get_session_context() as session:
+        retained = session.get(PublishedManifest, (listing_version_id, manifest_hash))
+        if retained is None:
+            raise ArtifactResolutionError(f"retained manifest unavailable for version {listing_version_id}")
+        try:
+            manifest = build_manifest(retained.members)
+            if manifest["manifest_hash"] != manifest_hash or any(m["index"] != i for i, m in enumerate(manifest["members"])):
+                raise ValueError
+        except (TypeError, KeyError, ValueError):
+            raise ArtifactResolutionError("retained manifest is invalid") from None
+        dataset = session.get(DatasetRecord, retained.dataset_id)
+        if dataset is not None and dataset.listing_id != listing_id:
+            raise ArtifactResolutionError("retained version does not match the listing")
+        if dataset is not None:
+            session.expunge(dataset)
+        return ResolvedDirectoryArtifact(
+            listing_id=listing_id, source_handle_id=retained.dataset_id,
+            dataset=dataset, kind="local_directory", root_path=retained.root_path,
+            listing_version_id=listing_version_id, manifest_hash=manifest_hash,
+            members=tuple(manifest["members"]), data_member_count=manifest["data_member_count"],
+            total_data_bytes=manifest["total_data_bytes"],
+        )
 
 
 SUPPORTED_SUFFIXES = (".csv", ".tsv", ".json", ".jsonl", ".parquet", ".zip")
@@ -139,7 +201,8 @@ def _view(
     *,
     payment_setup_state: str | None = None,
 ) -> DataVerificationView:
-    supported = dataset.status == "preview_ready" and dataset.original_filename.lower().endswith(SUPPORTED_SUFFIXES)
+    directory = settings.multi_file_datasets_enabled and dataset.file_type == "directory"
+    supported = dataset.status == "preview_ready" and (directory or dataset.original_filename.lower().endswith(SUPPORTED_SUFFIXES))
     unavailable = None
     if not data_verification_enabled():
         return DataVerificationView(
@@ -149,7 +212,7 @@ def _view(
         )
     elif dataset.status != "preview_ready":
         unavailable = "Finish processing this dataset before starting data verification."
-    elif not dataset.original_filename.lower().endswith(SUPPORTED_SUFFIXES):
+    elif not directory and not dataset.original_filename.lower().endswith(SUPPORTED_SUFFIXES):
         unavailable = "This source is not supported by the eolymp verification connector."
     elif not dataset.listing_id:
         unavailable = "Save this dataset as an ai.market listing before starting data verification."
@@ -206,12 +269,39 @@ def _probe(
     except ValueError as exc:
         raise DataVerificationLocalError("listing registration is invalid") from exc
     try:
-        artifact = resolve_source_artifact(dataset.listing_id)
+        if dataset.file_type == "directory":
+            progress = json.loads(dataset.metadata_json or "{}").get("local_publish", {})
+            if progress.get("status") != "active" or not progress.get("version_id") or not progress.get("manifest_hash"):
+                raise DataVerificationLocalError("active published directory version is unavailable")
+            artifact = resolve_source_artifact(dataset.listing_id, progress["version_id"], progress["manifest_hash"])
+        else:
+            artifact = resolve_source_artifact(dataset.listing_id)
     except Exception as exc:
         raise DataVerificationLocalError("registered listing source is unavailable") from exc
     if artifact is None:
         raise DataVerificationLocalError("registered listing source is unavailable")
-    if artifact.kind == "local" and artifact.local_path:
+    fixed_reason_skips = {}
+    if artifact.kind == "local_directory":
+        try:
+            objects_discovered = DataVerificationScanner._directory_pre_read(artifact)
+            size_bytes = artifact.total_data_bytes
+            for member in artifact.members:
+                if member["role"] != "data":
+                    continue
+                unsupported = member["detected_type"] == "unsupported" or member["size_bytes"] > settings.scan_max_member_bytes
+                if not unsupported:
+                    payload = DataVerificationScanner._read_directory_member(artifact, member, buffer=True)
+                    unsupported = zipfile.is_zipfile(io.BytesIO(payload))
+                    if not unsupported:
+                        try:
+                            validate_artifact_schema(member["relative_path"], payload)
+                        except UnsupportedConnectorShape:
+                            unsupported = True
+                if unsupported:
+                    fixed_reason_skips["unsupported_type"] = fixed_reason_skips.get("unsupported_type", 0) + 1
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise DataVerificationLocalError("registered directory source is unavailable") from exc
+    elif artifact.kind == "local" and artifact.local_path:
         try:
             path = Path(artifact.local_path)
             payload = path.read_bytes()
@@ -255,7 +345,7 @@ def _probe(
     view = QuoteProbeView(
         source_reachable=probe.source_reachable,
         objects_discovered=probe.objects_discovered,
-        fixed_reason_skips={},
+        fixed_reason_skips=fixed_reason_skips,
         size_class=probe.size_class,
     )
     return probe, view
