@@ -13,7 +13,7 @@ from typing import Any, Literal, MutableSet, Optional
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator, model_serializer
 
 from app.core.structured_logging import correlation_id_var
 from app.services.marketplace_action_signer import canonical_json_bytes
@@ -98,6 +98,8 @@ class ScanSpecPayload(StrictModel):
     spec_version: Literal["1"]
     verification_id: str = Field(min_length=1, max_length=128)
     listing_id: str = Field(min_length=1, max_length=255)
+    listing_version_id: str | None = Field(default=None, strict=True, min_length=1, max_length=128)
+    manifest_hash: str | None = Field(default=None, strict=True, pattern=r"^[0-9a-f]{64}$")
     owner_authorization_id: str = Field(min_length=1, max_length=128)
     quote_id: str = Field(min_length=1, max_length=128)
     idempotency_key: str = Field(min_length=1, max_length=128)
@@ -133,6 +135,23 @@ class ScanSpecPayload(StrictModel):
     cancellation_signal: CancellationSignal
     nonce: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
     platform_key_id: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _directory_binding(cls, value):
+        if isinstance(value, dict):
+            fields = ("listing_version_id", "manifest_hash")
+            if any(k in value for k in fields) and not all(k in value and value[k] is not None for k in fields):
+                raise ValueError("directory scan requires both version and manifest hash")
+        return value
+
+    @model_serializer(mode="wrap")
+    def _wire_fields(self, handler):
+        value = handler(self)
+        if self.listing_version_id is None:
+            value.pop("listing_version_id", None)
+            value.pop("manifest_hash", None)
+        return value
 
     @field_validator("field_contract")
     @classmethod
