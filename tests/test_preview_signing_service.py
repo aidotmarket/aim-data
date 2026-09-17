@@ -147,9 +147,9 @@ def mutations(value, path=()):
             yield path, ["mutation"]
         for i, child in enumerate(value):
             for subpath, replacement in mutations(child, path + (i,)):
-                changed = copy.deepcopy(value)
-                changed[i] = replacement
-                yield subpath, changed
+                changed_list = copy.deepcopy(value)
+                changed_list[i] = replacement
+                yield subpath, changed_list
     else:
         replacement = (
             (not value)
@@ -383,3 +383,31 @@ console.log(corpus.signatures.length+' F2 fixtures independently reconstructed a
     result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert "10 F2 fixtures" in result.stdout
+
+
+def test_pinned_differential_corpus_python_and_node():
+    import hashlib
+    import subprocess
+    from app.services.dataset_merkle_service import CommitmentValidationError
+    from tests.preview_differential_corpus import FIXTURE, differential_corpus, preimage
+
+    raw = FIXTURE.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == FIXTURE.with_suffix(".sha256").read_text().split()[0]
+    corpus = json.loads(raw)
+    assert differential_corpus() == corpus
+    digests = {}
+    for vector in corpus["valid"]:
+        message = preimage(vector)
+        assert message.hex() == vector["signed_bytes_hex"]
+        digest = __import__("hashlib").sha256(message).hexdigest()
+        assert digest == vector["signed_bytes_sha256"]
+        assert verify_bytes(decode_base64url(vector["public_key"]), vector["signature"], message)
+        digests[vector["name"]] = digest
+    for vector in corpus["must_reject"]:
+        with pytest.raises(CommitmentValidationError, match="^" + vector["error"] + "$"):
+            preimage(vector)
+    result = subprocess.run(["node", "tests/preview_differential_check.cjs"], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    node = json.loads(result.stdout)
+    assert node["digests"] == digests, "BLOCKER: Python/Node differential disagreement"
+    assert node["rejected"] == [v["name"] for v in corpus["must_reject"]]
