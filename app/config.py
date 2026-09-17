@@ -123,6 +123,7 @@ class Settings(BaseSettings):
     profile_timeout_s: int = Field(default=900, ge=1, validation_alias=_env_alias("profile_timeout_s"))
     publish_member_chunk: int = Field(default=1000, ge=1, validation_alias=_env_alias("publish_member_chunk"))
     scan_max_member_bytes: int = Field(default=2147483648, ge=1, validation_alias=_env_alias("scan_max_member_bytes"))
+    sample_upload_timeout_s: int = Field(default=900, ge=1, validation_alias=_env_alias("sample_upload_timeout_s"))
     sample_max_files: int = Field(default=10, ge=1, validation_alias=_env_alias("sample_max_files"))
     sample_max_total_bytes: int = Field(default=268435456, ge=1, validation_alias=_env_alias("sample_max_total_bytes"))
     sample_max_file_bytes: int = Field(default=67108864, ge=1, validation_alias=_env_alias("sample_max_file_bytes"))

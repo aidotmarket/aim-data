@@ -441,14 +441,17 @@ async def test_local_publish_round_trip_signs_chunks_and_retains_before_upload(l
 
 
 def test_full_s3_payload_golden_is_independent_of_flag_and_app_version(monkeypatch):
-    from app.core.channel_config import CHANNEL
+    import hashlib
+    monkeypatch.setattr(mp, "CHANNEL", SimpleNamespace(value="direct"))
     body = mp.MarketplacePublishRequest(title='Test', description='Test', price_cents=2500, vz_dataset_id='dataset')
     fields = dict(version_label='v1', object_count=1, total_size_bytes=42, manifest_hash='a'*64)
     source_fields = dict(bucket='example-bucket', region='us-east-1', role_arn='arn:aws:iam::123456789012:role/example', prefix='datasets/', serial_id='example-serial')
     from app.services.s3_publish_source_resolver import S3PublishSourceResolution
     source = S3PublishSourceResolution(**source_fields)
     golden = canonical_json_bytes(dict(title='Test', description='Test', tags=[], pricing_type='one_time',
-        price_cents=2500, vz_raw_listing_id='dataset', download_channel=CHANNEL.value, versions=[fields], s3_connection=source_fields))
+        price_cents=2500, vz_raw_listing_id='dataset', download_channel='direct', versions=[fields], s3_connection=source_fields))
+    # Captured from _build_publish_payload at base 97da3f09, direct channel.
+    assert hashlib.sha256(golden).hexdigest() == '7a9ca30f3ff128453ca0d2cabc1deeda74be071de04ebb21acf86037e9ff087e'
     for flag in (False, True):
         monkeypatch.setattr(settings, 'multi_file_datasets_enabled', flag)
         monkeypatch.setattr(settings, 'app_version', '1.24.0' if flag else 'dev')
@@ -723,3 +726,136 @@ def test_sample_count_refused_on_s3_and_paid_set_checked_on_local(monkeypatch):
     with pytest.raises(HTTPException, match="paid_set_required"):
         mp._build_version_emit(mp.VersionPublishEmit(**fields, source_kind="aim_data_local",
             members_total=1, sample_members_total=1, members_upload_id=uuid4()))
+
+
+@pytest.mark.asyncio
+async def test_removed_middle_member_publishes_dense_indices_and_source_sample(local_dataset, monkeypatch):
+    import json
+    import httpx
+    from app.models.published_manifest import PublishedManifest
+    monkeypatch.setattr(settings, "sample_upload_timeout_s", 1200)
+    with get_session_context() as session:
+        for index in range(3):
+            member = session.get(DatasetMember, (local_dataset, index))
+            member.is_sample = index == 2
+            if index == 1:
+                member.status = "removed"
+            session.add(member)
+        record = session.get(DBDatasetRecord, local_dataset)
+        record.metadata_json = json.dumps({"directory_profile": {"members": {
+            "2": {"status": "profiled", "profile": {"columns": [{"name": "sample", "type": "INT"}]}}
+        }}})
+        session.add(record)
+        session.commit()
+    local = mp._local_publish_snapshot(local_dataset)
+    assert local["registration_to_published_index"] == {"0": 0, "2": 1}
+    assert local["member_profiles"] == [{"index": 1, "columns": [{"name": "sample", "type": "INT"}]}]
+    version_id = str(uuid4())
+    samples = []
+    async def receive(request, claims):
+        version = {"version_id": version_id, "version_label": local["version"].version_label,
+                   "status": "pending_members"}
+        if request.url.path.endswith("/publish"):
+            payload = json.loads(request.content)
+            assert payload["versions"][0]["members_total"] == 2
+            assert payload["versions"][0]["sample_members_total"] == 1
+            return httpx.Response(200, json={"listing_id": "listing", "versions": [version]})
+        if request.url.path.endswith("/members"):
+            members = json.loads(request.content)["members"]
+            assert [m["index"] for m in members] == [0, 1]
+            assert [m["relative_path"] for m in members] == ["0.csv", "2.csv"]
+            with get_session_context() as session:
+                retained = session.get(PublishedManifest, (version_id, local["manifest"]["manifest_hash"]))
+                assert retained.members == members
+                assert retained.registration_to_published_index == {"0": 0, "2": 1}
+            resumed = mp._local_publish_snapshot(local_dataset)
+            assert resumed["registration_to_published_index"] == local["registration_to_published_index"]
+            assert resumed["manifest"] == local["manifest"]
+            return httpx.Response(200, json=version)
+        assert request.url.path.endswith("/samples/1")
+        assert all(value >= settings.sample_upload_timeout_s for value in request.extensions["timeout"].values())
+        samples.append(request.content)
+        signed = dict(version_id=version_id, members_upload_id=str(local["version"].members_upload_id),
+                      index=1, size_bytes=2, sha256=local["manifest"]["members"][1]["sha256"])
+        assert claims["metadata_hash"] == _receiver_hash(signed)
+        return httpx.Response(200, json={**version, "status": "active", "index": 1})
+    _signed_local_client(monkeypatch, receive)
+    body = mp.MarketplacePublishRequest(title="Test", description="Test", price_cents=2500, vz_dataset_id=local_dataset)
+    assert (await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace()))["status"] == "published"
+    assert samples == [b"2\n"]
+    with get_session_context() as session:
+        assert session.get(DatasetMember, (local_dataset, 2)).index == 2
+
+
+@pytest.mark.parametrize("file_type", ["directory", "csv"])
+def test_patch_sample_refreshes_directory_count(local_dataset, file_type):
+    import json
+    with get_session_context() as session:
+        record = session.get(DBDatasetRecord, local_dataset)
+        record.file_type = file_type
+        session.add(record)
+        session.commit()
+    for selected, count in [(True, 2), (False, 1)]:
+        datasets.patch_dataset_member(local_dataset, 2, datasets.MemberPatch(is_sample=selected), user=None)
+        with get_session_context() as session:
+            metadata = json.loads(session.get(DBDatasetRecord, local_dataset).metadata_json)
+            assert metadata["directory"]["sample_member_count"] == count
+
+
+@pytest.mark.asyncio
+async def test_deleted_dataset_during_upload_is_named_conflict(local_dataset, monkeypatch):
+    import json
+    import httpx
+    local = mp._local_publish_snapshot(local_dataset)
+    async def receive(request, claims):
+        version = dict(version_id=str(uuid4()), version_label=local["version"].version_label, status="pending_members")
+        if request.url.path.endswith("/publish"):
+            return httpx.Response(200, json=dict(listing_id="listing", versions=[version]))
+        with get_session_context() as session:
+            session.delete(session.get(DBDatasetRecord, local_dataset))
+            session.commit()
+        return httpx.Response(200, json=version)
+    _signed_local_client(monkeypatch, receive)
+    body = mp.MarketplacePublishRequest(title="Test", description="Test", price_cents=2500, vz_dataset_id=local_dataset)
+    with pytest.raises(HTTPException) as exc:
+        await mp.publish_via_signed_proxy(body, _request(), SimpleNamespace())
+    assert (exc.value.status_code, exc.value.detail) == (409, "dataset_removed_during_publish")
+    with pytest.raises(HTTPException, match="dataset_removed_during_publish"):
+        await mp.publish_status(dataset_id=local_dataset, user=None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("metadata", [None, "{}", "null", "[]", "invalid", '{"local_publish": null}'])
+async def test_local_helpers_guard_metadata(local_dataset, metadata):
+    with get_session_context() as session:
+        record = session.get(DBDatasetRecord, local_dataset)
+        record.metadata_json = metadata
+        session.add(record)
+        session.commit()
+    with pytest.raises(HTTPException) as exc:
+        mp._local_progress(local_dataset, 1, "pending_members")
+    assert exc.value.status_code == 409
+    assert exc.value.detail in ("local_publish_metadata_invalid", "local_publish_progress_missing")
+    if metadata not in (None, "{}"):
+        with pytest.raises(HTTPException, match="local_publish_metadata_invalid"):
+            mp._local_publish_snapshot(local_dataset)
+        with pytest.raises(HTTPException, match="local_publish_metadata_invalid"):
+            await mp.publish_status(dataset_id=local_dataset, user=None)
+
+
+@pytest.mark.asyncio
+async def test_pending_status_requires_keystore(local_dataset, monkeypatch):
+    local = mp._local_publish_snapshot(local_dataset)
+    mp._record_local_publish(local, "listing", str(uuid4()), "pending_members")
+    monkeypatch.setattr(settings, "keystore_passphrase", "")
+    result = await mp.publish_status(dataset_id=local_dataset, user=None)
+    assert result["can_publish"] is False
+    assert result["status"] == "pending_members"
+    assert "Keystore" in result["reason"]
+
+
+def test_sample_timeout_setting_alias(monkeypatch):
+    from app.config import Settings
+    assert Settings.model_fields["sample_upload_timeout_s"].default == 900
+    monkeypatch.setenv("AIM_DATA_SAMPLE_UPLOAD_TIMEOUT_S", "1200")
+    assert Settings(_env_file=None).sample_upload_timeout_s == 1200

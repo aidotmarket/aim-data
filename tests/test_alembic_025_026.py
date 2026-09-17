@@ -16,7 +16,7 @@ def test_025_chain_and_upgrade_copy(tmp_path):
     module = module_from_spec(spec); spec.loader.exec_module(module)
     assert module.down_revision == '024_bq_data_verification_s1590'
     scripts = ScriptDirectory.from_config(Config('alembic.ini'))
-    assert scripts.get_heads() == ["026_bq_published_manifests_s1717"]
+    assert scripts.get_heads() == ["027_bq_published_indices_s1717"]
     source = sa.create_engine(f'sqlite:///{tmp_path}/install.db')
     with source.begin() as connection:
         connection.exec_driver_sql('CREATE TABLE dataset_records (id VARCHAR(36) PRIMARY KEY, original_filename TEXT, storage_filename TEXT, processed_path TEXT, status TEXT, listing_id TEXT, batch_id TEXT)')
@@ -58,3 +58,26 @@ def test_026_retains_snapshots_without_changing_legacy_rows(tmp_path):
         with Operations.context(MigrationContext.configure(connection)):
             module.downgrade()
         assert connection.exec_driver_sql('SELECT * FROM dataset_records').all() == before
+
+
+def test_027_mapping_upgrade_preserves_retained_rows(tmp_path):
+    engine = sa.create_engine(f'sqlite:///{tmp_path}/retained.db')
+    modules = []
+    for number, filename in [(26, "026_bq_published_manifests_s1717.py"), (27, "027_bq_published_indices_s1717.py")]:
+        spec = spec_from_file_location(f"migration{number}", Path("alembic/versions") / filename)
+        module = module_from_spec(spec); spec.loader.exec_module(module)
+        modules.append(module)
+    assert modules[1].down_revision == modules[0].revision
+    with engine.begin() as connection:
+        with Operations.context(MigrationContext.configure(connection)):
+            modules[0].upgrade()
+        connection.exec_driver_sql("INSERT INTO published_manifests VALUES ('version', 'hash', 'dataset', '/root', '[]', CURRENT_TIMESTAMP)")
+        before = connection.exec_driver_sql("SELECT * FROM published_manifests").all()
+        with Operations.context(MigrationContext.configure(connection)):
+            modules[1].upgrade()
+        after = connection.exec_driver_sql("SELECT * FROM published_manifests").all()
+        assert [tuple(row[:-1]) for row in after] == [tuple(row) for row in before]
+        assert after[0][-1] == '{}'
+        with Operations.context(MigrationContext.configure(connection)):
+            modules[1].downgrade()
+        assert connection.exec_driver_sql("SELECT * FROM published_manifests").all() == before

@@ -289,17 +289,19 @@ def _response_version(data, label):
     return next((v for v in data.get("versions", []) if v.get("version_label") == label), {})
 
 
-def _local_member_profiles(metadata, members):
+def _local_member_profiles(metadata, members, registration_to_published_index=None):
     """Project chunk B's stored outcomes onto the Gate 2 section 3a carrier."""
     directory = metadata.get("directory_profile")
     outcomes = directory.get("members") if isinstance(directory, dict) else None
     if not isinstance(outcomes, dict):
         return []
+    source_indices = {published: int(registration) for registration, published in
+                      (registration_to_published_index or {}).items()}
     profiles = []
     for member in members:
         if member["role"] != "data":
             continue
-        outcome = outcomes.get(str(member["index"]))
+        outcome = outcomes.get(str(source_indices.get(member["index"], member["index"])))
         if not isinstance(outcome, dict) or outcome.get("status") != "profiled":
             continue
         profile = outcome.get("profile")
@@ -317,21 +319,35 @@ def _local_member_profiles(metadata, members):
     return profiles
 
 
+def _local_metadata(record):
+    if record is None:
+        raise HTTPException(409, "dataset_removed_during_publish")
+    try:
+        metadata = json.loads(record.metadata_json or "{}")
+    except (TypeError, ValueError):
+        raise HTTPException(409, "local_publish_metadata_invalid") from None
+    if not isinstance(metadata, dict) or not isinstance(metadata.get("local_publish", {}), dict):
+        raise HTTPException(409, "local_publish_metadata_invalid")
+    return metadata
+
+
 def _local_publish_snapshot(dataset_id, version_label=None):
     if not settings.multi_file_datasets_enabled:
         return None
     with get_session_context() as session:
         record = session.get(DatasetRecord, dataset_id)
-        if record is None or not record.root_path:
+        metadata = _local_metadata(record)
+        if not record.root_path:
             return None
-        if json.loads(record.metadata_json).get("source_type") == "s3":
+        if metadata.get("source_type") == "s3":
             return None
         if session.exec(select(S3ObjectMetadata).where(S3ObjectMetadata.dataset_id == dataset_id)).first():
             return None
-        progress = json.loads(record.metadata_json).get("local_publish", {})
+        progress = metadata.get("local_publish", {})
         retained = session.get(PublishedManifest, (progress.get("version_id", ""), progress.get("manifest_hash", ""))) if progress else None
         if retained and progress.get("status") == "pending_members":
             manifest = build_manifest(retained.members)
+            index_mapping = retained.registration_to_published_index or {str(m["index"]): m["index"] for m in retained.members}
             root = retained.root_path
             label = progress["version_label"]
             offset = progress.get("offset", 0)
@@ -341,7 +357,9 @@ def _local_publish_snapshot(dataset_id, version_label=None):
             try:
                 if any(m.status == "missing" for m in rows):
                     raise ValueError("missing dataset member; re-register before publish")
-                manifest = build_manifest(rows)
+                index_mapping = {str(row.index): position for position, row in enumerate(rows)}
+                manifest = build_manifest([dict(row.model_dump(), index=position)
+                                           for position, row in enumerate(rows)])
             except ValueError as exc:
                 raise HTTPException(409, str(exc)) from None
             root = str(Path(record.root_path).resolve())
@@ -355,7 +373,8 @@ def _local_publish_snapshot(dataset_id, version_label=None):
             raise HTTPException(409, str(exc)) from None
         upload_id = uuid5(NAMESPACE_URL, canonical_json_bytes([dataset_id, root, label, manifest["manifest_hash"]]).decode())
         return {"dataset_id": dataset_id, "root_path": root, "manifest": manifest, "offset": offset,
-            "member_profiles": _local_member_profiles(json.loads(record.metadata_json), manifest["members"]),
+            "registration_to_published_index": index_mapping,
+            "member_profiles": _local_member_profiles(metadata, manifest["members"], index_mapping),
             "retained_version_id": progress.get("version_id") if retained and progress.get("status") == "pending_members" else None,
             "version": VersionPublishEmit(version_label=label, object_count=manifest["data_member_count"],
                 total_size_bytes=manifest["total_data_bytes"], manifest_hash=manifest["manifest_hash"],
@@ -375,8 +394,9 @@ def _record_local_publish(local, listing_id, version_id, status):
             raise HTTPException(409, "published_manifest_conflict")
         if not existing:
             session.add(PublishedManifest(listing_version_id=version_id, manifest_hash=key[1],
-                dataset_id=record.id, root_path=local["root_path"], members=local["manifest"]["members"]))
-        metadata = json.loads(record.metadata_json)
+                dataset_id=record.id, root_path=local["root_path"], members=local["manifest"]["members"],
+                registration_to_published_index=local["registration_to_published_index"]))
+        metadata = _local_metadata(record)
         metadata["local_publish"] = {"version_id": version_id, "manifest_hash": key[1],
             "version_label": local["version"].version_label, "status": status,
             "offset": local.get("offset", 0)}
@@ -389,7 +409,9 @@ def _record_local_publish(local, listing_id, version_id, status):
 def _local_progress(dataset_id, offset, status):
     with get_session_context() as session:
         record = session.get(DatasetRecord, dataset_id)
-        metadata = json.loads(record.metadata_json)
+        metadata = _local_metadata(record)
+        if not metadata.get("local_publish"):
+            raise HTTPException(409, "local_publish_progress_missing")
         metadata["local_publish"].update(offset=offset, status=status)
         record.metadata_json = json.dumps(metadata)
         session.add(record)
@@ -519,7 +541,7 @@ def _persist_disclosure_decision(
     if settings.multi_file_datasets_enabled:
         with get_session_context() as session:
             current = session.get(DatasetRecord, record.id)
-            progress = json.loads(current.metadata_json).get("local_publish") if current else None
+            progress = _local_metadata(current).get("local_publish")
             if progress:
                 record.metadata["local_publish"] = progress
     existing = record.metadata.get("disclosure_decision")
@@ -890,7 +912,7 @@ async def publish_via_signed_proxy(
                                 "Content-Length": str(signed_payload["size_bytes"])})
                 transport = {"content": content}
             try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                async with httpx.AsyncClient(timeout=settings.sample_upload_timeout_s if content is not None else 30.0) as client:
                     response = await client.post(settings.ai_market_url.rstrip("/") + path,
                         headers=headers, **transport)
             except httpx.RequestError as exc:
@@ -942,28 +964,29 @@ async def publish_via_signed_proxy(
 @router.get("/marketplace/publish-status")
 async def publish_status(dataset_id: Optional[str] = None, user=Depends(get_current_user)):
     """Check if this AIM Data installation is ready to publish to ai.market."""
+    progress = {}
     if settings.multi_file_datasets_enabled and dataset_id:
         with get_session_context() as session:
             record = session.get(DatasetRecord, dataset_id)
-            progress = json.loads(record.metadata_json).get("local_publish", {}) if record else {}
-            if progress.get("status") == "pending_members":
-                return {"can_publish": True, "reason": None, "status": "pending_members", **progress}
+            progress = _local_metadata(record).get("local_publish", {})
+            if progress.get("status") != "pending_members":
+                progress = {}
     # Must have keystore passphrase
     if not settings.keystore_passphrase:
-        return {"can_publish": False, "reason": "Keystore passphrase not configured"}
+        return {**progress, "can_publish": False, "reason": "Keystore passphrase not configured"}
 
     # Must have keypairs
     try:
         crypto = _get_crypto()
         crypto.get_or_create_keypairs()
     except Exception as e:
-        return {"can_publish": False, "reason": f"Keypair error: {e}"}
+        return {**progress, "can_publish": False, "reason": f"Keypair error: {e}"}
 
     # Must have device registration (platform keys)
     if not crypto.has_platform_keys():
-        return {"can_publish": False, "reason": "Device not registered with ai.market"}
+        return {**progress, "can_publish": False, "reason": "Device not registered with ai.market"}
 
-    return {"can_publish": True, "reason": None}
+    return {**progress, "can_publish": True, "reason": None}
 
 
 @router.post("/marketplace/listings/{listing_id}/at-a-glance/approve")
