@@ -4,7 +4,10 @@ import { importApi } from "@/lib/api";
 import { toast } from "sonner";
 import { LocalImportBrowser } from "./LocalImportBrowser";
 
-vi.mock("@/contexts/BrandContext", () => ({ useBrand: () => ({ importDir: "/import", importDirEnvVar: "IMPORT_DIR" }) }));
+vi.mock("@/contexts/BrandContext", async () => {
+  const { AIM_DATA_BRAND } = await import("@/lib/brandConfig");
+  return { useBrand: () => AIM_DATA_BRAND };
+});
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 beforeEach(() => {
@@ -28,6 +31,16 @@ async function startImport(beforeStart = () => {}) {
 }
 
 describe("folder import response wiring", () => {
+  it("shows the compose host directory and environment variable when empty", async () => {
+    vi.mocked(importApi.browse).mockResolvedValue({ path: "/data/import/", entries: [], total: 0, limit: 500, offset: 0 });
+    render(<LocalImportBrowser />);
+
+    expect(await screen.findByText("No files found in import directory.")).toBeInTheDocument();
+    expect(screen.getByText(/Add files to/)).toHaveTextContent(
+      "Add files to ./import (next to your compose file) on your machine,or set HOST_IMPORT_DIR in your .env file."
+    );
+  });
+
   it("completes a direct directory response without polling and triggers card refresh", async () => {
     vi.spyOn(importApi, "start").mockResolvedValue({ dataset_id: "directory-1", status: "complete", total_files: 2, total_bytes: 8 });
     const interval = vi.spyOn(globalThis, "setInterval");

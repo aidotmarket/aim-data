@@ -199,3 +199,25 @@ rtk proxy npx tsc --noEmit -p tsconfig.app.json > /tmp/s1717-r1-base-tsc.log 2>&
 
 Lint and typecheck intentionally retain their inherited nonzero exits (1 and
 2 respectively); parity is not a claim that the repository is lint/type clean.
+
+## Install fixes
+
+Starting head: `188248012afa26cdb9cd048ea9b6d59a70cc4ea0`; existing
+`build/bq-multi-file-datasets-s1717-ui-wiring` branch.
+
+- Customer compose now forwards `AIM_DATA_MULTI_FILE_DATASETS_ENABLED` immediately
+  after the connectivity flag, defaulting to `false`. Runtime field inspection
+  confirms aliases `AIM_DATA_MULTI_FILE_DATASETS_ENABLED` and
+  `VECTORAIZ_MULTI_FILE_DATASETS_ENABLED`.
+- Local Import now shows `./import (next to your compose file)` and
+  `HOST_IMPORT_DIR`, matching the host mount into backend `/data/import`.
+  Repository search found no remaining occurrences of the old variable or path.
+- Validation: `rtk proxy npm test -- src/components/LocalImportBrowser.test.tsx`
+  from `frontend`: **6 passed**, including real-brand empty-state guidance.
+  `rtk proxy /tmp/s1717-ui-backend-venv/bin/python -m pytest tests/test_aim_data_deployment.py -k compose -q --tb=short --show-capture=no`:
+  **2 passed, 1 pre-existing failure**. The new default-off flag assertion and
+  YAML parsing pass; the older shape test expects an unbound port while compose
+  binds `127.0.0.1`. Both mismatched lines were verified at the starting head and
+  left unchanged to preserve scope. Missing `sqlglot` and Pillow dependencies
+  were installed only in the temporary test environment.
+- `rtk git diff --check` passed. No README/INSTALL edits, new branch, rebase, or PR.
