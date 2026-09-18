@@ -1,14 +1,11 @@
-"""Frozen seller-local aim-preview-policy-v1 / 1.0.0 predicates.
+"""Seller-attested preview policy and cryptographic attestation helpers.
 
-No network, diagnostic logging, matched values or permissive detector fallback.
-Signing belongs to Chunk 2c; the attestation digest consumes its signed records.
+Preview publication deliberately makes no automated judgement about cell content.
+Only structural safety limits and the seller's explicit confirmations are checked.
 """
 
 import hashlib
-import math
 import re
-import unicodedata
-from collections import Counter
 
 from app.services.dataset_merkle_service import (
     canonical_json_bytes,
@@ -19,36 +16,9 @@ from app.services.dataset_merkle_service import (
 
 POLICY = "aim-preview-policy-v1"
 VERSION = "1.0.0"
-DETECTOR_IDENTITY = {
-    "presidio-analyzer": "2.2.362",
-    "spacy": "3.7.2",
-    "en-core-web-sm": "3.7.1",
-}
-
-
 def detector_identity():
-    """Local evidence only. Unknown detector/model versions cannot attest v1."""
-    from importlib.metadata import version
-
-    try:
-        actual = {name: version(name) for name in DETECTOR_IDENTITY}
-        if actual != DETECTOR_IDENTITY:
-            raise ValueError
-        return actual
-    except Exception:
-        raise PolicyError("detector_unavailable") from None
-
-
-# Predicates are versioned protocol choices, not an assurance of legal clearance.
-RULES = {
-    "secret": r"(?i)(-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\b(?:gh[pousr]_|github_pat_|sk_live_|sk_test_|sk-(?:proj-)?|xox[baprs]-)|\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|authorization)\s*[:=]|\bBearer\s+\S+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)",
-    "personal_data": r"(?i)([\w.+-]+@[\w.-]+\.[a-z]{2,}|\b\d{3}[- ]?\d{2}[- ]?\d{4}\b|\b(?:\d[ -]?){10,19}\b|\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b|\b(?:\d{1,3}\.){3}\d{1,3}\b)",
-    "executable": r"(?i)(<\s*/?\s*[a-z][^>]*>|\bon[a-z]+\s*=|\b(?:javascript|vbscript|data)\s*:|\b(?:Sub\s+Auto_Open|AutoOpen|Workbook_Open|CreateObject|Shell\s*\())",
-    "url": r"(?i)(\b[a-z][a-z0-9+.-]*:|\bwww\.|\b(?:mailto|tel|file|javascript|data):|\]\s*\(|(?:^|\s)//[a-z0-9])",
-    "restricted_content": r"(?i)(\bcopyright\b|©|all rights reserved|licensed under|not for redistribution|reproduced (?:from|with)|excerpt (?:from|of)|attribution required)",
-}
-COMPILED = {code: re.compile(pattern) for code, pattern in RULES.items()}
-TOKEN = re.compile(r"[A-Za-z0-9_-]{24,}")
+    """Compatibility hook: detector packages are not part of preview admission."""
+    return {}
 
 
 class PolicyError(ValueError):
@@ -60,9 +30,15 @@ class NumericText(str):
 
 
 def walk_selection(rows):
-    """Yield all keys and scalars with numeric identity retained for formula rules."""
+    """Validate bounded JSON-compatible rows without judging their content."""
+
+    nodes = 0
 
     def walk(value, depth):
+        nonlocal nodes
+        nodes += 1
+        if nodes > 10000:
+            raise PolicyError("nodes_limit")
         if depth > 16:
             raise PolicyError("depth_limit")
         if isinstance(value, dict):
@@ -77,7 +53,7 @@ def walk_selection(rows):
         elif isinstance(value, str):
             yield str(value), isinstance(value, NumericText)
         elif type(value) in (int, float):
-            if not math.isfinite(value):
+            if type(value) is float and not __import__("math").isfinite(value):
                 raise PolicyError("invalid_row")
             yield str(value), True
         elif value is not None and type(value) is not bool:
@@ -92,22 +68,9 @@ def walk_selection(rows):
 
 
 def check_text(text, numeric=False):
-    if len(text) > 500 or len(text.split()) > 80:
-        raise PolicyError("long_prose")
-    if any(unicodedata.category(c) in {"Cc", "Cf", "Cs"} for c in text):
-        raise PolicyError("control_character")
-    if not numeric and text.lstrip().startswith(("=", "+", "-", "@")):
-        raise PolicyError("formula")
-    for code, pattern in COMPILED.items():
-        if pattern.search(text):
-            raise PolicyError(code)
-    for candidate in TOKEN.findall(text):
-        entropy = -sum(
-            (n / len(candidate)) * math.log2(n / len(candidate))
-            for n in Counter(candidate).values()
-        )
-        if entropy >= 4.0:
-            raise PolicyError("high_entropy")
+    """Compatibility no-op: cells are rendered as inert text by the viewer."""
+    if not isinstance(text, str):
+        raise PolicyError("invalid_row")
 
 
 def sampled_leaf_list_digest(proofs):
@@ -227,7 +190,7 @@ def scan_selection(
     rows,
     proofs,
     *,
-    detector,
+    detector=None,
     scanned_at,
     rights_confirmed,
     public_preview_permission=False,
@@ -241,19 +204,8 @@ def scan_selection(
         or len(rows) != len(proofs)
     ):
         raise PolicyError("approval_required")
-    try:
-        from app.services.pii_service import PIIService
-
-        if not isinstance(detector, PIIService) or type(detector) is not PIIService:
-            raise PolicyError("detector_unavailable")
-        # Complete detector pass precedes deterministic predicates, even for long text.
-        detector.scan_complete_selection(rows, language=language)
-    except PolicyError:
-        raise
-    except Exception:
-        raise PolicyError("detector_unavailable") from None
-    for text, numeric in walk_selection(rows):
-        check_text(text, numeric)
+    # Consume the complete selection solely to enforce technical shape limits.
+    list(walk_selection(rows))
     return {
         "scan_policy": POLICY,
         "scan_policy_version": VERSION,

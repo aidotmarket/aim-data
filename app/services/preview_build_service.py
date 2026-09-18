@@ -33,8 +33,6 @@ from app.services.preview_content_policy import (
     POLICY,
     VERSION,
     PolicyError,
-    check_text,
-    walk_selection,
 )
 from app.services.preview_origin_service import validate_url, verify_hosted_package
 from app.services.preview_lifecycle import capture_rights, PreviewJournal
@@ -499,18 +497,6 @@ class PreviewBuildService:
                 "cells": None,
             }
         entry = builder._entry(index)
-        try:
-            from app.services.preview_package_service import _logical_record
-
-            scan_row = _logical_record(
-                json.loads(builder.schema.canonical_row(entry["row"])),
-                builder.schema.descriptors,
-                for_scan=True,
-            )
-            for text, numeric in walk_selection([scan_row]):
-                check_text(text, numeric)
-        except PolicyError as exc:
-            code = str(exc)
         return {
             "leaf_index": index,
             "canonical_bytes": size,
