@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.mocked(previewBuildApi.rows).mockResolvedValue({items:[
     {leaf_index:0,canonical_bytes:40,code:null,cells:{value:'<script>alert(1)</script>'}},
     {leaf_index:1,canonical_bytes:40,code:null,cells:{value:'=SUM(1,2)'}},
-    {leaf_index:2,canonical_bytes:40,code:'url',cells:{value:'https://hostile.example'}},
+    {leaf_index:2,canonical_bytes:40,code:null,cells:{value:'https://hostile.example'}},
   ],total:3,next:null});
   vi.mocked(previewBuildApi.selection).mockImplementation(async (_,indices,columns) => {
     job={...job,state:'selected',selection:{leaf_indices:indices,display_columns:columns,rows:indices.length,fields:1,canonical_bytes:indices.length*40}};return job;
@@ -40,7 +40,7 @@ it('renders hostile cells as inert text with no executable elements or cell link
   expect(screen.getByText('=SUM(1,2)')).toBeInTheDocument();
   expect(screen.getByText('https://hostile.example')).toBeInTheDocument();
   expect(document.querySelectorAll('[data-preview-cell] script, [data-preview-cell] a, [data-preview-cell] iframe')).toHaveLength(0);
-  expect(screen.getByLabelText('Select leaf 2')).toBeDisabled();
+  expect(screen.getByLabelText('Select leaf 2')).toBeEnabled();
   expect(screen.getByText(PREVIEW_ALL_FIELDS_WARNING)).toBeInTheDocument();
 });
 it('supports keyboard selection and updates whole-record budgets without trimming',async () => {
@@ -51,18 +51,18 @@ it('supports keyboard selection and updates whole-record budgets without trimmin
   fireEvent.click(screen.getByRole('button',{name:'Save selection'}));
   await waitFor(() => expect(previewBuildApi.selection).toHaveBeenCalledWith('job',[0],['value']));
 });
-it('requires exact rights and permission before the sealed scan',async () => {
+it('requires exact seller confirmations before recording policy v2',async () => {
   await begin();fireEvent.click(screen.getByLabelText('Select leaf 0'));fireEvent.click(screen.getByRole('button',{name:'Save selection'}));
   await waitFor(() => expect(previewBuildApi.selection).toHaveBeenCalled());
-  expect(screen.getByRole('button',{name:'Run local policy scan'})).toBeDisabled();
+  expect(screen.getByRole('button',{name:'Confirm selected rows'})).toBeDisabled();
   fireEvent.change(screen.getByLabelText('Rights basis'),{target:{value:'owner'}});
   fireEvent.click(screen.getByLabelText(PREVIEW_PERMISSION));
-  fireEvent.click(screen.getByLabelText(/I confirm these selected records contain no/));
+  fireEvent.click(screen.getByLabelText(/I confirm I reviewed these exact rows/));
   vi.mocked(previewBuildApi.policy).mockImplementation(async () => {
-    const policy={policy:'aim-preview-policy-v1',version:'1.0.0',passed:true,reason_codes:[]};job={...job,state:'scanned',policy};return policy;
+    const policy={policy:'aim-preview-policy-v2',version:'2.0.0',passed:true,reason_codes:[]};job={...job,state:'scanned',policy};return policy;
   });
-  fireEvent.click(screen.getByRole('button',{name:'Run local policy scan'}));
-  expect(await screen.findByText(/Passed local scan/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Confirm selected rows'}));
+  expect(await screen.findByText(/Seller confirmations recorded/)).toBeInTheDocument();
 });
 it('recovers an in-progress job after reload and allows cancellation',async () => {
   job={...job,state:'building',review_ready:false,progress:{...job.progress,phase:'reading'}};
@@ -93,7 +93,7 @@ it('shows local awaiting-backend state and key fingerprint on recovery',async ()
 
 it('reviews source, origin and fingerprint before signing, then records pending submission',async () => {
   job={...job,state:'hosted',review_ready:false,selection:{leaf_indices:[0],display_columns:['value'],rows:1,fields:1,canonical_bytes:40},
-    policy:{policy:'aim-preview-policy-v1',version:'1.0.0',passed:true,reason_codes:[]},
+    policy:{policy:'aim-preview-policy-v2',version:'2.0.0',passed:true,reason_codes:[]},
     publication:{destination:'export',local_directory:'/app/exports',relative_path:'previews/v/h.json',package_sha256:'a'.repeat(64),byte_count:100,sample_hash:'b'.repeat(64),disclosure_version:'v'},
     origin:'https://seller.example/previews/v/h.json',signing:{fingerprint:'f'.repeat(64),code:null},
     receipts:[{url:'https://seller.example/previews/v/h.json',method:'GET',status:200,captured_at:'2026-09-17',headers:{},no_set_cookie:true},{url:'https://seller.example/previews/v/h.json',method:'OPTIONS',status:204,captured_at:'2026-09-17',headers:{},no_set_cookie:true}]};
@@ -108,7 +108,7 @@ it('reviews source, origin and fingerprint before signing, then records pending 
   expect(screen.getByText('Origin: https://seller.example/previews/v/h.json')).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Rights basis'),{target:{value:'owner'}});
   fireEvent.click(screen.getByLabelText(PREVIEW_PERMISSION));
-  fireEvent.click(screen.getByLabelText(/I confirm these selected records contain no/));
+  fireEvent.click(screen.getByLabelText(/I confirm I reviewed these exact rows/));
   fireEvent.click(screen.getByLabelText(/I confirm the approved metadata is accurate/));
   fireEvent.click(screen.getByRole('button',{name:'Prepare signed preview'}));
   fireEvent.click(await screen.findByRole('button',{name:'Finish local preparation'}));

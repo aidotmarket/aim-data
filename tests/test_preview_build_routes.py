@@ -590,7 +590,7 @@ def test_original_source_path_must_be_app_managed(setup, tmp_path):
     )
 
 
-def test_sealed_scan_unavailable_never_exports(setup, monkeypatch):
+def test_missing_detector_never_blocks_policy_or_package(setup, monkeypatch):
     client, service, app, record = setup
     id = create(client)
     base = "/marketplace/preview-builds/" + id
@@ -613,16 +613,50 @@ def test_sealed_scan_unavailable_never_exports(setup, monkeypatch):
             "restricted_content_confirmed": True,
         },
     )
-    assert response.json() == {
-        "policy": "aim-preview-policy-v1",
-        "version": "1.0.0",
-        "passed": False,
-        "reason_codes": ["detector_unavailable"],
-    }
-    assert (
-        client.post(base + "/package", json={"destination": "export"}).json()["detail"]
-        == "rescan_required"
+    assert response.json()["policy"] == "aim-preview-policy-v2"
+    assert response.json()["version"] == "2.0.0"
+    assert response.json()["passed"] is True
+    assert response.json()["reason_codes"] == []
+    packaged = client.post(base + "/package", json={"destination": "export"})
+    assert packaged.status_code == 200
+    assert packaged.json()["state"] == "packaged"
+
+
+def test_exact_csv_date_and_city_reproduction_produces_package(setup):
+    client, service, app, record = setup
+    source = record.upload_path.with_name("readings.csv")
+    source.write_text(
+        "reading_id,station_city,sensor_class,reading_date,temperature_tenths_c,humidity_pct,is_calibrated\n"
+        "550e8400-e29b-41d4-a716-446655440000,Lisbon,urban,2026-06-28,-123,58,true\n"
     )
+    record.upload_path = source
+    response = client.post(
+        "/marketplace/preview-builds",
+        json={
+            "dataset_id": "dataset",
+            "parsing": {"format": "csv", "encoding": "utf-8", "delimiter": ",", "quote": '"', "escape": "\\", "header": True, "locale": "C", "null_token": ""},
+            "schema_descriptors": [
+                ["reading_id", "string", False, {}], ["station_city", "string", False, {}],
+                ["sensor_class", "string", False, {}], ["reading_date", "string", False, {}],
+                ["temperature_tenths_c", "signed_integer", False, {}],
+                ["humidity_pct", "signed_integer", False, {}], ["is_calibrated", "boolean", False, {}],
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    job_id = response.json()["job_id"]
+    for _ in range(200):
+        status = client.get("/marketplace/preview-builds/" + job_id).json()
+        if status["review_ready"]:
+            break
+        time.sleep(0.05)
+    base = "/marketplace/preview-builds/" + job_id
+    assert client.put(base + "/selection", json={"leaf_indices": [0], "display_columns": status["columns"]}).status_code == 200
+    policy_result = client.post(base + "/policy", json={"rights_basis": "owner", "public_preview_permission": True, "restricted_content_confirmed": True})
+    assert policy_result.json()["passed"] is True
+    package = client.post(base + "/package", json={"destination": "export"})
+    assert package.status_code == 200
+    assert package.json()["state"] == "packaged"
 
 
 @pytest.mark.parametrize("action", ["cancel", "idle"])

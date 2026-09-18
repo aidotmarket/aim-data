@@ -161,9 +161,9 @@ def capture_receipt(
     values = {}
     for key in HEADER_KEYS:
         items = headers.get_all(key)
-        if items is not None and len(items) != 1:
-            raise OriginError("ambiguous_headers")
-        values[key] = items[0] if items else None
+        if items is not None and len(items) != 1 and key == "access-control-allow-origin":
+            raise OriginError("cors_origin")
+        values[key] = ", ".join(items) if items else None
     receipt = {
         "url": url,
         "method": method,

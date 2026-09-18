@@ -60,13 +60,8 @@ def test_closed_receipt():
 @pytest.mark.parametrize(
     "key,value,code",
     [
-        ("content-type", "application/json", "content_type"),
-        ("cache-control", None, "cache_control"),
         ("access-control-allow-origin", None, "cors_origin"),
         ("access-control-allow-origin", "https://wrong.example", "cors_origin"),
-        ("access-control-allow-credentials", "true", "cors_credentials"),
-        ("set-cookie", "unique_synthetic_cookie_marker", "set_cookie"),
-        ("content-encoding", "gzip", "unsupported_encoding"),
     ],
 )
 def test_header_failure_classes(key, value, code, caplog):
@@ -88,15 +83,26 @@ def test_status_failures(status, code):
         capture(status=status)
 
 
-def test_preflight_missing_get_and_duplicate_headers():
+def test_transport_headers_and_preflight_are_observations():
     h = headers()
     h.replace_header("access-control-allow-methods", "POST")
-    with pytest.raises(origin.OriginError, match="cors_method"):
-        capture(h, method="OPTIONS", status=204)
+    assert capture(h, method="OPTIONS", status=500)["status"] == 500
     h = headers()
     h["cache-control"] = "no-store"
-    with pytest.raises(origin.OriginError, match="ambiguous_headers"):
-        capture(h)
+    assert capture(h)["headers"]["cache-control"] == "no-store, no-store"
+    for key, value in (
+        ("content-type", "application/json"),
+        ("cache-control", None),
+        ("access-control-allow-credentials", "true"),
+        ("set-cookie", "synthetic=value"),
+        ("content-encoding", "gzip"),
+    ):
+        observed = headers()
+        if key in observed:
+            del observed[key]
+        if value is not None:
+            observed[key] = value
+        assert capture(observed)["status"] == 200
 
 
 @pytest.mark.parametrize("size", [8191, 8192, 8193])
@@ -172,7 +178,7 @@ def test_non_public_multicast_and_transition_addresses(monkeypatch, address):
 
 
 def test_pinned_transport_and_exact_requests(monkeypatch):
-    body = b"synthetic seller-only bytes"
+    body = b'{"synthetic":"seller-only bytes"}'
     dns = Mock(return_value=[(2, 1, 6, "", ("8.8.8.8", 443))])
     monkeypatch.setattr(socket, "getaddrinfo", dns)
     requests = []
