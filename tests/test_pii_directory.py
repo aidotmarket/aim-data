@@ -66,6 +66,7 @@ def test_directory_failure_preserves_reason_and_scope(scan_client, status):
         assert response.status_code == 200
         body = response.json()
         assert body["scan_status"] == status
+        assert "status" not in body
         assert body["reason"] == "PII scan unavailable"
         assert body["scope"] == "Bounded member previews only; not a whole-set clearance"
         assert body["privacy_score"] is None

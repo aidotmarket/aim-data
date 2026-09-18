@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   AlertTriangle,
   Check,
@@ -651,7 +651,13 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
   const [error, setError] = useState("");
   const [published, setPublished] = useState(false);
   const [shareSamples, setShareSamples] = useState(sampleCount > 0);
+  const previousSampleCount = useRef(sampleCount);
   const [snapshotRetry, setSnapshotRetry] = useState<{ listingId: string; marketplaceUrl?: string; payload: Record<string, unknown> } | null>(null);
+  useEffect(() => {
+    const previous = previousSampleCount.current;
+    setShareSamples(current => sampleCount === 0 ? false : previous === 0 ? true : current);
+    previousSampleCount.current = sampleCount;
+  }, [sampleCount]);
   const send = async (path: string, payload: Record<string, unknown>) => {
     const response = await fetch(`${getApiUrl()}/api${path}`, {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: apiKey ? `Bearer ${apiKey}` : "" },

@@ -92,7 +92,7 @@ def _directory_pii_result(record, dataset_id: str):
         )
     status = pii.get("status", pii.get("scan_status", "completed"))
     return {
-        **pii,
+        **{key: value for key, value in pii.items() if key != "status"},
         "dataset_id": dataset_id,
         "filename": record.original_filename,
         "scan_status": status,
