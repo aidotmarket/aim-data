@@ -643,7 +643,7 @@ class PreviewBuildService:
                 return self.status(job_id, owner)
             live = self.active(job)
             if not live["package"]:
-                raise BuildError("rescan_required")
+                raise BuildError("policy_confirmation_required")
             store = self.store(job, destination)
             result = store.export(live["package"])
             relative = store.path(result["disclosure_version"], result["sample_hash"])
@@ -788,7 +788,7 @@ class PreviewBuildService:
                 not job.get("rights")
                 or job["rights"]["rights_basis_code"] != consent.rights_basis
             ):
-                raise BuildError("rescan_required")
+                raise BuildError("confirmation_changed")
             if (
                 job["state"] not in {"hosted", "signed_candidate"}
                 or not job["receipts"]

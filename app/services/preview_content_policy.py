@@ -14,8 +14,8 @@ from app.services.dataset_merkle_service import (
     encode_base64url,
 )
 
-POLICY = "aim-preview-policy-v1"
-VERSION = "1.0.0"
+POLICY = "aim-preview-policy-v2"
+VERSION = "2.0.0"
 def detector_identity():
     """Compatibility hook: detector packages are not part of preview admission."""
     return {}

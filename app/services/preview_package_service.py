@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.models.dataset_commitment_schemas import CommitmentProof
+from app.services import preview_content_policy
 from app.services.dataset_canonicalization import CanonicalSchema
 from app.services.dataset_merkle_service import (
     canonical_json_bytes,
@@ -134,8 +135,8 @@ def expected_manifest_fixture(envelope, descriptors, package_url):
                 "package_media_type": MEDIA_TYPE,
                 "package_profile": PROFILE,
                 "package_byte_ceiling": CAPS["envelope_bytes"],
-                "scan_policy": "aim-preview-policy-v1",
-                "scan_policy_version": "1.0.0",
+                "scan_policy": preview_content_policy.POLICY,
+                "scan_policy_version": preview_content_policy.VERSION,
                 "scan_verdict": "passed",
                 "scanned_at": timestamp,
                 "sampled_leaf_list_digest": digest,
