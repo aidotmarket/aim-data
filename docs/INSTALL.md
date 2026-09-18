@@ -93,8 +93,9 @@ Once green, you can point AIM Data at any bucket and prefix you have read access
 
 ## Datasets with many files
 
-Put the folder in your install's import directory, which the **Local Import** screen browses.
-To set that directory, use the import-directory environment variable shown on that screen in your `.env` file.
+Put the folder in the `import` directory next to your compose file (or the directory you set as `HOST_IMPORT_DIR` in `.env`); it is mounted read-only into the app.
+In the upload dialog choose **Or import files from server directory** to open **Server directory**.
+Folder datasets are off by default; enable them with `AIM_DATA_MULTI_FILE_DATASETS_ENABLED=true` in `.env`, and ai.market must also have the feature enabled for your account.
 Import from there with **Import Selected**; with folder datasets enabled, the import creates **one dataset for the folder**.
 Dragging a folder into the upload box still creates one dataset per file.
 
