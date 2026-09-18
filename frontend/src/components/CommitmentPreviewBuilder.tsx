@@ -145,7 +145,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
               <td><label><input type="checkbox" aria-label={`Select leaf ${row.leaf_index}`} checked={selected.includes(row.leaf_index)} disabled={busy || fixed || !!row.code}
                 onChange={() => toggle(row.leaf_index)} onKeyDown={e => { if (e.key === ' ') { e.preventDefault(); toggle(row.leaf_index); } }} /> {row.leaf_index}</label></td>
               {job.columns.map(column => <td key={column} className="max-w-xs break-words whitespace-pre-wrap" data-preview-cell><span>{inertPreviewText(row.cells?.[column])}</span></td>)}
-              <td>{row.code || 'Eligible for local scan'}</td>
+              <td>{row.code || 'Within technical limits'}</td>
             </tr>)}</tbody>
           </table>
         </div>
@@ -159,17 +159,18 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
       </>}
       {active && (job.review_ready || !!job.publication) && <>
         <fieldset disabled={busy} className="space-y-3">
-          <legend className="font-medium">Rights and local policy review</legend>
+          <legend className="font-medium">Seller publication confirmation</legend>
+          <p>You are responsible for what you publish. Confirm that you have the right to show these exact selected rows publicly.</p>
           <label className="block">Rights basis <select aria-label="Rights basis" value={rights} onChange={e => { setRights(e.target.value as typeof rights); setPermission(false); setAccuracy(false); }}>
             <option value="">Choose rights basis</option><option value="owner">I own the rights</option><option value="licensed">Licensed for public preview</option><option value="public_domain">Public domain</option><option value="other_authorized">Other authorization</option>
           </select></label>
           <label className="flex items-start gap-2"><input type="checkbox" checked={permission} onChange={e => setPermission(e.target.checked)} />{PREVIEW_PERMISSION}</label>
-          <label className="flex items-start gap-2"><input type="checkbox" checked={restricted} onChange={e => setRestricted(e.target.checked)} />I confirm these selected records contain no prohibited or third-party restricted content.</label>
+          <label className="flex items-start gap-2"><input type="checkbox" checked={restricted} onChange={e => setRestricted(e.target.checked)} />I confirm I reviewed these exact rows for restricted or third-party content.</label>
           <Button type="button" disabled={busy || fixed || selectionChanged || !job.selection.rows || !readyConsent} onClick={() => run(async () => {
             await previewBuildApi.policy(job.job_id,consent); setJob(await previewBuildApi.status(job.job_id));
-          })}>Run local policy scan</Button>
+          })}>Confirm selected rows</Button>
         </fieldset>
-        {job.policy && <p role="status">{job.policy.policy} / {job.policy.version}: {job.policy.passed ? 'Passed local scan; this is not clearance.' : job.policy.reason_codes.join(', ')}</p>}
+        {job.policy?.passed && <p role="status">Seller confirmations recorded for these exact selected rows.</p>}
         {job.policy?.passed && originReview?.(job,setJob)}
         {job.receipts.length === 2 && job.state !== 'retired' && <div className="space-y-3">
           <h4 className="font-medium">Confirm preview</h4>
