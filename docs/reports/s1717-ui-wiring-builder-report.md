@@ -128,8 +128,8 @@ Implementation commits: `4895bc3` (stored PII routes), `effa371` (folder import)
 This run used **Node v25.3.0**, Vitest 3.2.4 and Python 3.12.12 (the initial
 report's Node v25.6.0 describes the earlier run, not this fold).
 
-The historical R1 counts are superseded by the single consolidated final table
-in the R3 fold section below. R1 also covered 12 directory-registration tests,
+The historical R1 counts are reconciled once in the final round-count table in
+the R4 fold section below. R1 also covered 12 directory-registration tests,
 which were outside the narrower R2/R3 command and are not added to those totals.
 
 The earlier **15 passed** backend result was **3 import + 12 registration**,
@@ -244,8 +244,7 @@ Implementation commits: `217be08` (directory publication/privacy state) and
 ### R2 validation
 
 The R2 snapshot was 42 focused frontend tests and 14 focused backend tests.
-Those historical counts are superseded by the single consolidated final table
-in the R3 fold section below.
+It is reconciled once in the final round-count table in the R4 fold section.
 
 The authoritative backend run used the report's existing isolated Python 3.12
 environment at `/tmp/s1717-ui-backend-venv`. The ambient Python 3.13 environment
@@ -293,20 +292,11 @@ rebase, spec reading, PR, deployment, or unrelated changes.
 Implementation commits: `9f30d06` (publication refresh and typed disclosure)
 and `576bbe7` (privacy flag parity and folder import).
 
-### Consolidated final validation
+### R3 validation snapshot
 
-| Check | Final R3 result |
-| --- | --- |
-| `DatasetDetail.test.tsx` | **38 passed** |
-| `LocalImportBrowser.test.tsx` | **7 passed** |
-| Focused frontend combined | **45 passed** across 2 files; existing React `act(...)` warnings only |
-| `tests/test_pii_directory.py` | **12 passed** |
-| `tests/test_directory_import.py` | **3 passed** |
-| Focused backend combined | **15 passed**; 4 dependency/deprecation warnings |
-| Frontend build | Passed; inherited Browserslist freshness and bundle-size warnings |
-| Lint versus untouched base `119f643b5fd25dc8fd61557649371c9832ca33c5` | Exact parity: **10 errors, 25 warnings** |
-| Typecheck versus the same base | Exact normalized parity: **36 inherited diagnostics**, SHA-256 `215dc15a921a5a63e5ae5e0da74fc58d08a9a5b65548f307389a3ba3e93fce2b` |
-| `git diff --check` | Passed |
+R3 passed 45 focused frontend tests and 15 focused backend tests. Its build,
+lint/typecheck parity, and whitespace checks passed as recorded in the durable
+artifact below. The historical test counts are reconciled once in the R4 table.
 
 Durable artifact and exact reproducible commands:
 `docs/reports/artifacts/s1717-r3-validation.txt`.
@@ -317,3 +307,69 @@ rtk npm test -- src/pages/DatasetDetail.test.tsx src/components/LocalImportBrows
 # Run from the checkout root:
 rtk proxy /tmp/s1717-ui-backend-venv/bin/python -m pytest -q tests/test_pii_directory.py tests/test_directory_import.py --tb=short --show-capture=no
 ```
+
+## R4 fold
+
+Starting head: `60755c38dcd0da8ef23f5920fded68c390140861`; existing
+`build/bq-multi-file-datasets-s1717-ui-wiring` branch. No branch creation,
+rebase, spec reading, PR, deployment, flag change, or unrelated change.
+
+Implementation commits: `d1a668e` (default-root browse and explicit import
+selection) and `3d69c21` (fail-closed member edits and privacy copy).
+
+- **GLM HIGH:** `app/routers/imports.py:10-18`, `:28-37`, and `:44-51` now map
+  absent, empty, or whitespace-only browse/scan paths to `/imports/`.
+  `frontend/src/lib/api.ts:1563-1567` omits the query parameter for an empty
+  path, so the existing initial-load and upload-modal calls reach that default.
+  HTTP regressions cover absent/empty browse plus absent/blank scan; frontend
+  regressions cover the initial request URL and a successful UploadContext
+  probe setting `hasImportFiles` true.
+- **CC LOW-1 / DeepSeek LOW-1:** `frontend/src/pages/DatasetDetail.tsx:1293-1338`
+  tracks stale member state through a ref. Every rejected PATCH now leaves
+  publication blocked and exposes refresh recovery; only a successful dataset
+  GET clears stale state and unblocks. Successful retry also clears the prior
+  member-save error. Tests cover PATCH-success/GET-failure followed by a second
+  rejected PATCH, and a single rejected PATCH followed by successful refresh.
+- **DeepSeek LOW-2:** `frontend/src/components/LocalImportBrowser.tsx:180-191`
+  again requires an explicit selection. The action at `:435-452` is disabled
+  at zero and reads `Import selected (N)`; the existing Select All affordance
+  at `:331-345` makes whole-folder intent explicit. The flag-on direct response
+  remains covered after selection, while zero selection makes no request.
+- **CC NIT-2 / DeepSeek NIT-1 and NIT-2:** successful refresh clears the old
+  error at `frontend/src/pages/DatasetDetail.tsx:1331-1335`; directory privacy
+  actions now say `Refresh privacy result` at `:925-929`. The timeout and failed
+  cases separately assert `PROFILE_TIMEOUT_S=30` and `PII scan unavailable`.
+
+### Dispositions retained for Max
+
+- **DeepSeek NIT-3 and NIT-4 / CC NIT-4:** no product behavior changed. Sample
+  sharing remains auto-checked on first mount with samples but remains unchecked
+  after a zero-to-positive refresh, and `0 of N` profiled members continues to
+  permit progression. Both are recorded as product decisions for Max.
+- The double `HOST_IMPORT_DIR` mount is pre-existing and harmless. The backend
+  setting reads `/data/import` at `app/config.py:244`; the `/imports` mount at
+  `docker-compose.aim-data.yml:22` is the legacy mount, alongside the active
+  `/data/import` mount at line 23.
+
+### Final round counts
+
+This is the single reconciliation of the historical round counts. Different
+backend suite scopes are stated explicitly instead of being added as though
+they were identical.
+
+| Round | Focused frontend | Focused backend | Backend scope |
+| --- | ---: | ---: | --- |
+| Initial | 30 passed | 15 passed | directory import 3 + directory registration 12 |
+| R1 | 35 passed | 26 passed | PII, directory import, and directory registration |
+| R2 | 42 passed | 14 passed | PII and directory import |
+| R3 | 45 passed | 15 passed | PII 12 + directory import 3 |
+| R4 | **48 passed** | **39 passed** | PII 12 + directory import/router 7 + import service 20 |
+
+R4 validation: `DatasetDetail.test.tsx` **39 passed** and
+`LocalImportBrowser.test.tsx` **9 passed**. The three backend files passed with
+4 dependency/deprecation warnings. The frontend build passed with only the
+inherited Browserslist freshness and bundle-size warnings. Lint matches the
+untouched base exactly at **10 errors and 25 warnings**. Typecheck matches it at
+**36 inherited diagnostics**, normalized SHA-256
+`23ea33576f3e88a72222cb89ab804356f949fbb278d9203a92eb47b7e0caf5a8`.
+`git diff --check` passed.
