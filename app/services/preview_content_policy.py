@@ -16,6 +16,12 @@ from app.services.dataset_merkle_service import (
 
 POLICY = "aim-preview-policy-v2"
 VERSION = "2.0.0"
+ACCEPTED_POLICY_IDENTITIES = {
+    ("aim-preview-policy-v1", "1.0.0"),
+    (POLICY, VERSION),
+}
+
+
 def detector_identity():
     """Compatibility hook: detector packages are not part of preview admission."""
     return {}
@@ -158,8 +164,11 @@ def scan_attestation_digest(signed_proof_records):
                 or proof["package_profile"] != PROFILE
                 or type(proof["package_byte_ceiling"]) is not int
                 or not 0 < proof["package_byte_ceiling"] <= 1048576
-                or proof["scan_policy"] != POLICY
-                or proof["scan_policy_version"] != VERSION
+                or (
+                    proof["scan_policy"],
+                    proof["scan_policy_version"],
+                )
+                not in ACCEPTED_POLICY_IDENTITIES
                 or proof["scan_verdict"] != "passed"
                 or proof["signature_algorithm"] != "ed25519"
                 or canonical_rfc3339_utc(proof["scanned_at"]) != proof["scanned_at"]

@@ -8,7 +8,6 @@ import os
 from pathlib import Path
 import sqlite3
 import unicodedata
-from uuid import uuid4
 from email.message import Message
 
 from app.services.preview_signing_service import (
@@ -215,8 +214,7 @@ def validate_retirement_receipts(receipts, *, url, origin):
 class PreviewJournal:
     """SQLite transactions retain exact bytes; no retry rebuilt from UI state.
 
-    This chunk admits only fixture_candidate. Submitted/submission_unknown are
-    represented for recovery inspection but cannot be reached by fixture events.
+    Marketplace candidate bytes and requests survive retries and process restarts.
     """
 
     def __init__(self, path):
@@ -237,13 +235,6 @@ class PreviewJournal:
                   PRIMARY KEY(seller,listing,request_id));
                 CREATE TABLE IF NOT EXISTS transitions (
                   seller TEXT, listing TEXT, request_id TEXT, old_state TEXT, new_state TEXT);
-                CREATE TABLE IF NOT EXISTS fixture_heads (
-                  seller TEXT, listing TEXT, head TEXT, PRIMARY KEY(seller,listing));
-                CREATE TABLE IF NOT EXISTS fixture_results (
-                  seller TEXT, listing TEXT, request_id TEXT, digest TEXT, result BLOB,
-                  PRIMARY KEY(seller,listing,request_id));
-                CREATE TABLE IF NOT EXISTS fixture_allocations (
-                  facts_digest TEXT PRIMARY KEY, candidate BLOB NOT NULL);
             """)
             # Preserve existing local journals; old receipts lack exact-origin
             # evidence and fail closed on idempotent retries.
@@ -265,28 +256,6 @@ class PreviewJournal:
             raise
         finally:
             db.close()
-
-    def allocate_fixture(self, binding, *, id_factory=lambda: str(uuid4())):
-        """Only local fixture allocation; identical facts retain both UUIDs."""
-        b = closed(DisclosureBinding, binding)
-        facts = {
-            k: v for k, v in b.items() if k not in {"request_id", "disclosure_version"}
-        }
-        digest = hashlib.sha256(canonical_json_bytes(facts)).hexdigest()
-        with self._db() as db:
-            row = db.execute(
-                "SELECT candidate FROM fixture_allocations WHERE facts_digest=?",
-                (digest,),
-            ).fetchone()
-            if row:
-                return LocalCandidate(bytes(row[0]))
-            b.update(request_id=id_factory(), disclosure_version=id_factory())
-            candidate = LocalCandidate.validate(b)
-            db.execute(
-                "INSERT INTO fixture_allocations VALUES (?,?)",
-                (digest, candidate.binding_bytes),
-            )
-            return candidate
 
     def start(self, candidate):
         b = candidate.binding()
@@ -313,8 +282,6 @@ class PreviewJournal:
         ).fetchone()
         if not row or new not in TRANSITIONS.get(row[0], set()):
             raise LifecycleError("invalid_transition")
-        if row[1] == "fixture_candidate" and new in {"submitted", "submission_unknown"}:
-            raise LifecycleError("fixture_not_submittable")
         if new == "signed_candidate" and row[2] is None:
             raise LifecycleError("request_missing")
         db.execute(
@@ -377,18 +344,13 @@ class PreviewJournal:
         # records retirement success; an idempotent retry can finish recovery.
         record = self.read(key)
         b = json.loads(record["candidate"])
-        if disclosure_version not in {b["disclosure_version"], b["supersedes"]}:
-            raise LifecycleError("retirement_identity_mismatch")
         from urllib.parse import urlsplit
 
         if urlsplit(url).path.lstrip("/") != publication_store.path(
             disclosure_version, sample_hash
         ):
             raise LifecycleError("retirement_url_mismatch")
-        if (
-            disclosure_version == b["disclosure_version"]
-            and sample_hash != b["sample_hash"]
-        ):
+        if b["decision"] != "approve" or sample_hash != b["sample_hash"]:
             raise LifecycleError("retirement_sample_mismatch")
         if record["state"] == "retired":
             if record["retirement_origin"] != origin:
@@ -409,55 +371,3 @@ class PreviewJournal:
             )
             self._transition(db, key, "retired")
         return receipts
-
-    def apply_fixture(self, request):
-        """Executable expected T replay/head results; NOT a live submission.
-
-        Separate fixture tables cannot update production state or make a local
-        candidate submitted. No HTTP call or platform-verification claim.
-        """
-        digest = request_digest(request)
-        b = request["binding"]
-        key = (b["seller_id"], b["listing_id"], b["request_id"])
-        with self._db() as db:
-            row = db.execute(
-                "SELECT digest,result FROM fixture_results WHERE seller=? AND listing=? AND request_id=?",
-                key,
-            ).fetchone()
-            if row:
-                if row[0] != digest:
-                    raise LifecycleError("409_request_id_conflict")
-                return json.loads(row[1])
-            head = db.execute(
-                "SELECT head FROM fixture_heads WHERE seller=? AND listing=?", key[:2]
-            ).fetchone()
-            if b["expected_current_disclosure_id"] != (head[0] if head else None):
-                raise LifecycleError("409_stale_expected_head")
-            result = dict(
-                decision_id=b["request_id"],
-                disclosure_version=b["disclosure_version"],
-                decision=b["decision"],
-            )
-            db.execute(
-                "INSERT INTO fixture_results VALUES (?,?,?,?,?)",
-                (*key, digest, canonical_json_bytes(result)),
-            )
-            db.execute(
-                "INSERT OR REPLACE INTO fixture_heads VALUES (?,?,?)",
-                (*key[:2], b["disclosure_version"]),
-            )
-            return result
-
-    def fixture_current(self, binding):
-        b = closed(DisclosureBinding, binding)
-        with self._db() as db:
-            row = db.execute(
-                "SELECT head FROM fixture_heads WHERE seller=? AND listing=?",
-                (b["seller_id"], b["listing_id"]),
-            ).fetchone()
-        return bool(
-            row
-            and row[0] == b["disclosure_version"]
-            and b["decision"] == "approve"
-            and b["sample_decision"] == "approved"
-        )

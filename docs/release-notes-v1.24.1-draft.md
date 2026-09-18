@@ -16,6 +16,18 @@ Draft only. Do not tag, promote, or release from this document.
 - Reduces seller-origin admission to credential-free browser GET essentials;
   media type, no-store, OPTIONS, cookies, and compression are observations.
 - Updates UI copy to make seller responsibility for the exact public rows clear.
+- Removes the impossible operator-supplied registration-evidence file. AIM Data
+  signs from its registered install state; ai.market validates current key status.
+- Completes live At a glance review/approval, backend candidate allocation,
+  signed disclosure submission, live manifest status, withdrawal and refresh.
+- Lets packaged or hosted v1 jobs already in progress complete after upgrade;
+  every newly created job emits v2.
+- Removes the impossible operator-supplied registration-evidence file. AIM Data
+  signs from its registered install state; ai.market validates current key status.
+- Completes live At a glance review/approval, backend candidate allocation,
+  signed disclosure submission, live manifest status, withdrawal and refresh.
+- Lets packaged or hosted v1 jobs already in progress complete after upgrade;
+  every newly created job emits v2.
 
 ## Coordinated release requirement
 

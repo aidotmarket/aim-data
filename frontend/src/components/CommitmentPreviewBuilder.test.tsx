@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CommitmentPreviewBuilder } from './CommitmentPreviewBuilder';
 import { previewBuildApi, type PreviewBuildStatus } from '@/lib/api';
 import { PREVIEW_PERMISSION, PREVIEW_MEMBERSHIP_DISCLAIMER, PREVIEW_ALL_FIELDS_WARNING } from '@/lib/disclosure';
-vi.mock('@/lib/api', () => ({ previewBuildApi: { latest: vi.fn(),create: vi.fn(),status: vi.fn(),rows: vi.fn(),selection:vi.fn(),cancel:vi.fn(),policy:vi.fn(),candidate:vi.fn(),submit:vi.fn(),withdraw:vi.fn() } }));
+vi.mock('@/lib/api', () => ({ previewBuildApi: { latest: vi.fn(),create: vi.fn(),status: vi.fn(),rows: vi.fn(),selection:vi.fn(),cancel:vi.fn(),policy:vi.fn(),candidate:vi.fn(),submit:vi.fn(),withdraw:vi.fn(),refresh:vi.fn(),marketplaceSummary:vi.fn() } }));
 import { fixture } from '@/test/previewFixture';
 let job: PreviewBuildStatus;
 beforeEach(() => {
@@ -20,6 +20,7 @@ beforeEach(() => {
     job={...job,state:'selected',selection:{leaf_indices:indices,display_columns:columns,rows:indices.length,fields:1,canonical_bytes:indices.length*40}};return job;
   });
   vi.mocked(previewBuildApi.cancel).mockImplementation(async () => ({...job,state:'cancelled',review_ready:false}));
+  vi.mocked(previewBuildApi.marketplaceSummary).mockResolvedValue({summary_id:'summary',state:'approved',status:'approved',at_a_glance:{profile:'aim-listing-enrichment-profile-v2'},approval_text:'Approve current At a glance.'});
 });
 afterEach(cleanup);
 async function begin() {
@@ -34,13 +35,28 @@ it('defaults to no sample and never creates a job on mount',async () => {
   expect(previewBuildApi.create).not.toHaveBeenCalled();
   expect(screen.getByText(PREVIEW_MEMBERSHIP_DISCLAIMER)).toBeInTheDocument();
 });
-it('renders hostile cells as inert text with no executable elements or cell links',async () => {
+it('neutralises scalar and nested controls at render time without changing selection or hashes',async () => {
+  const scalar='<script>alert(1)</script> https://hostile.example \u0000\u007f\u202e\u200b\ud800';
+  const nested={
+    ['key\u0000\u202e\ud800']:'</style><style>bad</style> https://nested.example \u007f\u200b\ud800',
+    child:'<script>nested</script>\u0000',
+  };
+  const rows={items:[
+    {leaf_index:0,canonical_bytes:40,code:null,cells:{value:scalar}},
+    {leaf_index:1,canonical_bytes:40,code:null,cells:{value:nested}},
+  ],total:2,next:null};
+  vi.mocked(previewBuildApi.rows).mockResolvedValue(rows);
+  const sourceRows=structuredClone(rows);
+  const commitment=structuredClone(job.commitment);
   await begin();
-  expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocument();
-  expect(screen.getByText('=SUM(1,2)')).toBeInTheDocument();
-  expect(screen.getByText('https://hostile.example')).toBeInTheDocument();
-  expect(document.querySelectorAll('[data-preview-cell] script, [data-preview-cell] a, [data-preview-cell] iframe')).toHaveLength(0);
-  expect(screen.getByLabelText('Select leaf 2')).toBeEnabled();
+  expect(screen.getByText('<script>alert(1)</script> https://hostile.example �����')).toBeInTheDocument();
+  expect(screen.getByText('{"key���":"</style><style>bad</style> https://nested.example ���","child":"<script>nested</script>�"}')).toBeInTheDocument();
+  expect(document.querySelectorAll('[data-preview-cell] script, [data-preview-cell] a, [data-preview-cell] iframe, [data-preview-cell] style, [data-preview-cell] [style]')).toHaveLength(0);
+  fireEvent.click(screen.getByLabelText('Select leaf 1'));
+  fireEvent.click(screen.getByRole('button',{name:'Save selection'}));
+  await waitFor(() => expect(previewBuildApi.selection).toHaveBeenCalledWith('job',[1],['value']));
+  expect(rows).toEqual(sourceRows);
+  expect(job.commitment).toEqual(commitment);
   expect(screen.getByText(PREVIEW_ALL_FIELDS_WARNING)).toBeInTheDocument();
 });
 it('supports keyboard selection and updates whole-record budgets without trimming',async () => {
@@ -82,8 +98,8 @@ it('announces errors, focuses the message and offers retry',async () => {
   expect(screen.getByRole('alert')).toHaveFocus();
   expect(screen.getByLabelText('Missing parsing declarations')).toBeInTheDocument();
 });
-it('shows local awaiting-backend state and key fingerprint on recovery',async () => {
-  job={...job,candidate:{kind:'fixture_candidate',request_digest:'d'.repeat(64),key_fingerprint:'f'.repeat(64),sample_hash:'s'.repeat(64),disclosure_version:'v'},outcome:'Prepared locally; marketplace preview submission awaits backend support'};
+it('shows a submitted marketplace state and key fingerprint on recovery',async () => {
+  job={...job,state:'submitted',candidate:{kind:'marketplace_candidate',request_digest:'d'.repeat(64),key_fingerprint:'f'.repeat(64),sample_hash:'s'.repeat(64),disclosure_version:'v'},outcome:'Verified preview is visible on ai.market.',marketplace:{state:'visible',listing_url:'https://ai.market/listings/synthetic'}};
   vi.mocked(previewBuildApi.latest).mockResolvedValue(job);
   render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
   expect(await screen.findByText(job.outcome!)).toBeInTheDocument();
@@ -99,20 +115,22 @@ it('reviews source, origin and fingerprint before signing, then records pending 
     receipts:[{url:'https://seller.example/previews/v/h.json',method:'GET',status:200,captured_at:'2026-09-17',headers:{},no_set_cookie:true},{url:'https://seller.example/previews/v/h.json',method:'OPTIONS',status:204,captured_at:'2026-09-17',headers:{},no_set_cookie:true}]};
   vi.mocked(previewBuildApi.latest).mockResolvedValue(job);
   vi.mocked(previewBuildApi.candidate).mockImplementation(async()=>{
-    job={...job,state:'signed_candidate',candidate:{kind:'fixture_candidate',key_fingerprint:'f'.repeat(64),request_digest:'d'.repeat(64),sample_hash:'b'.repeat(64),disclosure_version:'v'}};return job;
+    job={...job,state:'signed_candidate',candidate:{kind:'marketplace_candidate',key_fingerprint:'f'.repeat(64),request_digest:'d'.repeat(64),sample_hash:'b'.repeat(64),disclosure_version:'v'}};return job;
   });
-  vi.mocked(previewBuildApi.submit).mockImplementation(async()=>({...job,outcome:'Prepared locally; marketplace preview submission awaits backend support'}));
+  vi.mocked(previewBuildApi.submit).mockImplementation(async()=>({...job,state:'submitted',outcome:'Verified preview is visible on ai.market.',marketplace:{state:'visible',listing_url:'https://ai.market/listings/synthetic'}}));
   render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
-  expect(await screen.findByRole('button',{name:'Prepare signed preview'})).toBeDisabled();
+  expect(await screen.findByRole('button',{name:'Approve At a glance and prepare signed preview'})).toBeDisabled();
+  expect(await screen.findByText(/Current ai.market At a glance/)).toBeInTheDocument();
   expect(screen.getByText(/Registered key fingerprint:/)).toHaveTextContent('f'.repeat(64));
   expect(screen.getByText('Origin: https://seller.example/previews/v/h.json')).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Rights basis'),{target:{value:'owner'}});
   fireEvent.click(screen.getByLabelText(PREVIEW_PERMISSION));
   fireEvent.click(screen.getByLabelText(/I confirm I reviewed these exact rows/));
   fireEvent.click(screen.getByLabelText(/I confirm the approved metadata is accurate/));
-  fireEvent.click(screen.getByRole('button',{name:'Prepare signed preview'}));
-  fireEvent.click(await screen.findByRole('button',{name:'Finish local preparation'}));
-  expect(await screen.findByText('Prepared locally; marketplace preview submission awaits backend support')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Approve At a glance and prepare signed preview'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Submit verified preview to ai.market'}));
+  expect(await screen.findByText('Verified preview is visible on ai.market.')).toBeInTheDocument();
+  expect(screen.getByRole('link',{name:'https://ai.market/listings/synthetic'})).toBeInTheDocument();
   expect(previewBuildApi.candidate).toHaveBeenCalledWith('job',{rights_basis:'owner',public_preview_permission:true,restricted_content_confirmed:true,metadata_accuracy_confirmed:true});
 });
 

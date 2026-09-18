@@ -53,6 +53,6 @@ export function PreviewOriginReview({ job, onChange }: { job: PreviewBuildStatus
       <dl>{Object.entries(receipt.headers).map(([key,value]) => <div key={key}><dt className="inline font-medium">{key}: </dt><dd className="inline">{value ?? '(absent)'}</dd></div>)}</dl>
       <p>No Set-Cookie: {receipt.no_set_cookie ? 'confirmed' : 'not confirmed'}</p>
     </div>)}
-    {job.receipts.length === 2 && <p role="status">GET and OPTIONS receipts recorded for {job.origin}. Marketplace preview submission still awaits backend support.</p>}
+    {job.receipts.length === 2 && <p role="status">GET and OPTIONS receipts recorded for {job.origin}. The package is ready for signed marketplace submission.</p>}
   </section>;
 }

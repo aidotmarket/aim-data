@@ -22,7 +22,6 @@ from app.models.preview_build_schemas import (
     OriginOptions,
     CandidateOptions,
     EmptyOptions,
-    MetadataApproval,
 )
 from app.services.dataset_canonicalization import _pairs
 
@@ -65,7 +64,13 @@ async def invoke(fn, *args):
     try:
         return await run_in_threadpool(fn, *args)
     except BuildError as exc:
-        detail = {"code": exc.code, "job_id": exc.job_id} if exc.job_id else exc.code
+        if not exc.job_id and not exc.message:
+            raise HTTPException(exc.status, exc.code) from None
+        detail = {"code": exc.code}
+        if exc.job_id:
+            detail["job_id"] = exc.job_id
+        if exc.message:
+            detail["message"] = exc.message
         raise HTTPException(exc.status, detail) from None
     except (
         CommitmentValidationError,
@@ -99,22 +104,18 @@ async def latest(
     return await invoke(service.latest, dataset_id, owner)
 
 
-@router.post("/metadata-approval")
-async def metadata_approval(
-    request: Request,
-    owner=Depends(authenticated_owner),
-    service=Depends(get_build_service),
-):
-    return await invoke(
-        service.approve_metadata, await options(request, MetadataApproval), owner
-    )
-
-
 @router.get("/{job_id}")
 async def status(
     job_id: str, owner=Depends(authenticated_owner), service=Depends(get_build_service)
 ):
     return await invoke(service.status, job_id, owner)
+
+
+@router.get("/{job_id}/marketplace-summary")
+async def marketplace_summary(
+    job_id: str, owner=Depends(authenticated_owner), service=Depends(get_build_service)
+):
+    return await invoke(service.marketplace_summary, job_id, owner)
 
 
 @router.get("/{job_id}/rows")

@@ -1,7 +1,9 @@
 """Synthetic local source and authenticated identities; never real data or egress."""
 
+from datetime import datetime, timezone
 import time
 from types import SimpleNamespace
+from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -9,9 +11,79 @@ from app.auth.api_key_auth import get_current_user, AuthenticatedUser
 from app.routers.preview_builds import get_build_service
 from app.routers.marketplace_publish import router
 from app.services.preview_build_service import PreviewBuildService
+from app.services.dataset_merkle_service import canonical_rfc3339_utc
 
 OWNER = "00000000-0000-4000-8000-000000000002"
 OTHER = "00000000-0000-4000-8000-000000000003"
+LISTING = "00000000-0000-4000-8000-000000000004"
+
+
+class FakePreviewBackend:
+    def __init__(self):
+        self.requests = []
+        self.head = None
+        self.results = {}
+
+    def preview_summary(self, listing_id):
+        return self.ensure_summary(listing_id)
+
+    def ensure_summary(self, listing_id):
+        return {
+            "summary_id": "00000000-0000-4000-8000-000000000005",
+            "source_revision": "e" * 64,
+            "summary_hash": "a" * 64,
+            "render_hash": "b" * 64,
+            "state": "approved",
+            "status": "approved",
+            "at_a_glance": {
+                "profile": "aim-listing-enrichment-profile-v2",
+                "key_fields": {"value": [{"name": "color", "type": "string"}]},
+            },
+            "approval_text": "Approve this current At a glance summary.",
+        }
+
+    def allocate(self, listing_id, binding):
+        self.requests.append(("allocate", listing_id, binding))
+        assert binding["expected_current_disclosure_id"] == self.head
+        return {
+            **binding,
+            "summary_id": "00000000-0000-4000-8000-000000000005",
+            "summary_approval_id": "00000000-0000-4000-8000-000000000006",
+            "summary_hash": "a" * 64,
+            "render_hash": "b" * 64,
+            "aggregate_hash": "c" * 64,
+            "content_revision": "00000000-0000-4000-8000-000000000007",
+            "source_revision": "e" * 64,
+            "listing_id": listing_id,
+            "listing_version_id": None,
+            "seller_id": OWNER,
+            "approved_by": OWNER,
+            "disclosure_version": str(uuid4()),
+            "approved_at": canonical_rfc3339_utc(datetime.now(timezone.utc)),
+        }
+
+    def submit(self, listing_id, request, *, withdraw=False):
+        self.requests.append(("withdraw" if withdraw else "submit", listing_id, request))
+        binding = request["binding"]
+        if binding["request_id"] in self.results:
+            return self.results[binding["request_id"]]
+        assert binding["expected_current_disclosure_id"] == self.head
+        result = {
+            "decision_id": request["binding"]["request_id"],
+            "disclosure_version": request["binding"]["disclosure_version"],
+            "decision": "withdraw" if withdraw else "approve",
+        }
+        self.head = binding["disclosure_version"]
+        self.results[binding["request_id"]] = result
+        return result
+
+    def live_state(self, listing_id):
+        return {
+            "state": "visible",
+            "listing_url": "https://ai.market/listings/synthetic",
+            "manifest_url": "https://api.ai.market/api/v1/public/listings/synthetic/preview-manifest",
+            "disclosure_version": None,
+        }
 
 
 @pytest.fixture
@@ -20,13 +92,16 @@ def setup(tmp_path):
     source = root / "source.ndjson"
     source.write_text('{"color":"blue"}\n{"color":"green"}\n')
     record = SimpleNamespace(
-        id="dataset", upload_path=source, metadata={"preview_owner_id": OWNER}
+        id="dataset", listing_id=LISTING, upload_path=source,
+        metadata={"preview_owner_id": OWNER}
     )
     processing = SimpleNamespace(
         get_dataset=lambda id: record if id == "dataset" else None,
         _save_record=lambda *args: None,
     )
-    service = PreviewBuildService(root / "jobs", processing, root)
+    backend = FakePreviewBackend()
+    service = PreviewBuildService(root / "jobs", processing, root, transport_factory=lambda: backend)
+    service.fake_backend = backend
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_build_service] = lambda: service
@@ -331,59 +406,26 @@ def test_idle_expiry_cleans_index_without_polling(setup):
 
 
 def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
-    from datetime import datetime, timezone, timedelta
     from app.services import preview_content_policy as policy
     from app.core.crypto import DeviceCrypto
     from app.services.preview_signing_service import (
         PreviewSigningService,
-        fingerprint,
-        public_bytes,
     )
 
     client, service, app, record = setup
     monkeypatch.setattr(policy, "detector_identity", lambda: policy.DETECTOR_IDENTITY)
     crypto = DeviceCrypto(str(tmp_path.resolve() / "key.json"), "synthetic-passphrase")
     crypto._pbkdf2_iterations = 1
-    keys = crypto.get_or_create_keypairs()
+    crypto.get_or_create_keypairs()
     install = "00000000-0000-4000-8000-000000000001"
     signer = PreviewSigningService(
         crypto,
         install_id=install,
         seller_id=OWNER,
-        evidence_reader=lambda: dict(
-            install_id=install,
-            seller_id=OWNER,
-            fingerprint=fingerprint(public_bytes(keys[1])),
-            status="active",
-            observed_at=datetime.now(timezone.utc),
-        ),
-        evidence_max_age=timedelta(hours=1),
     )
     monkeypatch.setattr(service, "signer", lambda job: signer)
-    p1 = {
-        k: "00000000-0000-4000-8000-000000000004"
-        for k in ("summary_id", "summary_approval_id", "content_revision", "listing_id")
-    }
-    p1.update(
-        {
-            k: "a" * 64
-            for k in (
-                "summary_hash",
-                "render_hash",
-                "aggregate_hash",
-                "source_revision",
-            )
-        },
-        listing_version_id=None,
-    )
-    record.metadata["preview_local_approval"] = {
-        "owner": OWNER,
-        "references": p1,
-        "digest": "b" * 64,
-    }
     id = create(client)
     base = "/marketplace/preview-builds/" + id
-    p1["source_revision"] = client.get(base).json()["source_version"]
     assert (
         client.put(
             base + "/selection",
@@ -459,35 +501,21 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
         base + "/candidate", json={**consent, "metadata_accuracy_confirmed": True}
     )
     assert signed.status_code == 200, signed.text
-    assert signed.json()["candidate"]["kind"] == "fixture_candidate"
+    assert signed.json()["candidate"]["kind"] == "marketplace_candidate"
+    approved_disclosure = signed.json()["candidate"]["disclosure_version"]
+    assert approved_disclosure != pub["disclosure_version"]
     assert id not in service.live and not signed.json()["review_ready"]
 
-    def outbound(*args, **kwargs):
-        pytest.fail("outbound call during submit")
-
-    import httpx
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", outbound)
-    monkeypatch.setattr("socket.socket.connect", outbound)
-    reopen_legacy_review()
     response = client.post(base + "/submit", json={})
     assert response.status_code == 200, response.text
-    assert (
-        response.json()["outcome"]
-        == "Prepared locally; marketplace preview submission awaits backend support"
-    )
+    assert response.json()["outcome"] == "Verified preview is visible on ai.market."
+    assert response.json()["marketplace"]["state"] == "visible"
     assert "blue" not in response.text and "green" not in response.text
     assert id not in service.live and not response.json()["review_ready"]
     assert (
         client.post(base + "/submit", json={}).json()["candidate"]
         == signed.json()["candidate"]
     )
-    record.metadata["preview_local_approval"]["digest"] = "c" * 64
-    assert (
-        client.post(base + "/submit", json={}).json()["detail"]
-        == "metadata_approval_changed"
-    )
-    record.metadata["preview_local_approval"]["digest"] = "b" * 64
     refreshed = client.post(
         base + "/refresh", json={**consent, "metadata_accuracy_confirmed": True}
     )
@@ -524,39 +552,25 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
 
     saved = service.load(refreshed.json()["job_id"], OWNER)
     binding = json.loads(service.journal.read(tuple(saved["journal_key"]))["candidate"])
-    assert binding["supersedes"] == pub["disclosure_version"]
+    assert binding["supersedes"] == approved_disclosure
     assert binding["sample_hash"] == pub["sample_hash"]
-    reopen_legacy_review()
     assert client.post(base + "/withdraw", json={}).json()["state"] == "retired"
+    assert [entry[0] for entry in service.fake_backend.requests].count("submit") >= 1
+    assert "withdraw" in [entry[0] for entry in service.fake_backend.requests]
     assert client.get(base + "/package").status_code == 409
     assert client.post(base + "/submit", json={}).json()["detail"] == "job_inactive"
     assert not service.live
     assert not list((service.root / "worker").rglob("job-*"))
 
 
-def test_approval_digest_is_owner_scoped_local_and_idempotent(setup):
+def test_local_metadata_approval_route_is_removed(setup):
     client, service, app, record = setup
-    body = {"dataset_id": "dataset", "approved_metadata_digest": "a" * 64}
-    first = client.post("/marketplace/preview-builds/metadata-approval", json=body)
-    assert first.status_code == 200
-    assert first.json()["kind"] == "local_metadata_approval"
-    assert (
-        client.post("/marketplace/preview-builds/metadata-approval", json=body).json()
-        == first.json()
-    )
-    assert client.post(
+    response = client.post(
         "/marketplace/preview-builds/metadata-approval",
-        json={**body, "rows": [{"secret": "synthetic-marker"}]},
-    ).json() == {"detail": "invalid_options"}
-    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(
-        user_id=OTHER, key_id="authenticated-test", scopes=["write"]
+        json={"dataset_id": "dataset", "approved_metadata_digest": "a" * 64},
     )
-    assert (
-        client.post(
-            "/marketplace/preview-builds/metadata-approval", json=body
-        ).status_code
-        == 403
-    )
+    assert response.status_code == 405
+    assert "preview_local_approval" not in record.metadata
 
 
 def test_missing_authentication_is_rejected(setup, monkeypatch):
@@ -709,6 +723,198 @@ def test_idle_timeout_configuration(setup, monkeypatch, tmp_path):
             PreviewBuildService(
                 tmp_path.resolve() / "invalid", service.processing, service.upload_root
             )
+
+
+@pytest.mark.parametrize("persisted_state", ["packaged", "hosted"])
+def test_upgrade_keeps_policy_v1_job_completable(
+    setup, monkeypatch, tmp_path, persisted_state
+):
+    import json
+    from email.message import Message
+
+    from app.core.crypto import DeviceCrypto
+    from app.models.preview_disclosure_schemas import PreviewDisclosureRequest
+    from app.services.preview_content_policy import scan_attestation_digest
+    from app.services.preview_origin_service import capture_receipt
+    from app.services.preview_signing_service import PreviewSigningService
+
+    client, service, app, record = setup
+    crypto = DeviceCrypto(str(tmp_path.resolve() / "legacy-key.json"), "synthetic-passphrase")
+    crypto._pbkdf2_iterations = 1
+    crypto.get_or_create_keypairs()
+    signer = PreviewSigningService(
+        crypto,
+        install_id="00000000-0000-4000-8000-000000000001",
+        seller_id=OWNER,
+    )
+    monkeypatch.setattr(service, "signer", lambda job: signer)
+
+    job_id = create(client)
+    base = "/marketplace/preview-builds/" + job_id
+    assert client.put(
+        base + "/selection",
+        json={"leaf_indices": [0], "display_columns": ["color"]},
+    ).status_code == 200
+    consent = {
+        "rights_basis": "owner",
+        "public_preview_permission": True,
+        "restricted_content_confirmed": True,
+    }
+    assert client.post(base + "/policy", json=consent).status_code == 200
+    packaged = client.post(base + "/package", json={"destination": "export"})
+    assert packaged.status_code == 200, packaged.text
+    publication = packaged.json()["publication"]
+
+    def receipts(url, **opts):
+        headers = Message()
+        for key, value in {
+            "Content-Type": "application/vnd.aim.preview+json",
+            "Cache-Control": "no-store",
+            "Access-Control-Allow-Origin": "https://ai.market",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+        }.items():
+            headers[key] = value
+        return [
+            capture_receipt(
+                url,
+                method,
+                200,
+                headers,
+                captured_at=datetime.now(timezone.utc),
+                origin="https://ai.market",
+            )
+            for method in ["GET", "OPTIONS"]
+        ]
+
+    monkeypatch.setattr(
+        "app.services.preview_build_service.verify_hosted_package", receipts
+    )
+    origin = "https://seller.example/" + publication["relative_path"]
+    if persisted_state == "hosted":
+        assert client.post(base + "/origin-check", json={"url": origin}).status_code == 200
+
+    job = service.load(job_id, OWNER)
+    job["scan"].update(
+        scan_policy="aim-preview-policy-v1", scan_policy_version="1.0.0"
+    )
+    service.save(job)
+    recovered = service.load(job_id, OWNER)
+    assert recovered["state"] == persisted_state
+    assert recovered["scan"]["scan_policy"] == "aim-preview-policy-v1"
+    assert recovered["policy_compatibility"] == "legacy_v1_completion"
+    if persisted_state == "packaged":
+        checked = client.post(base + "/origin-check", json={"url": origin})
+        assert checked.status_code == 200, checked.text
+
+    signed = client.post(
+        base + "/candidate", json={**consent, "metadata_accuracy_confirmed": True}
+    )
+    assert signed.status_code == 200, signed.text
+    saved = service.load(job_id, OWNER)
+    frozen = json.loads(service.journal.read(tuple(saved["journal_key"]))["request"])
+    assert {
+        (proof["scan_policy"], proof["scan_policy_version"])
+        for proof in frozen["proofs"]
+    } == {("aim-preview-policy-v1", "1.0.0")}
+    assert frozen["binding"]["scan_attestation_digest"] == scan_attestation_digest(
+        frozen["proofs"]
+    )
+    assert PreviewDisclosureRequest.model_validate(frozen).model_dump(mode="json") == frozen
+
+    first = client.post(base + "/submit", json={})
+    second = client.post(base + "/submit", json={})
+    assert first.status_code == second.status_code == 200
+    submitted = [
+        request
+        for action, listing_id, request in service.fake_backend.requests
+        if action == "submit"
+    ]
+    assert len(submitted) == 2
+    assert submitted[0] == submitted[1] == frozen
+
+
+def test_marketplace_auth_failures_do_not_become_local_401(
+    setup, monkeypatch
+):
+    import httpx
+
+    from app.services.preview_marketplace_transport import PreviewMarketplaceTransport
+    from app.services.preview_origin_service import capture_receipt
+    from email.message import Message
+
+    client, service, app, record = setup
+    missing = PreviewMarketplaceTransport(
+        base_url="https://api.ai.market", token="", client=None
+    )
+    missing.token = None
+    service.transport_factory = lambda: missing
+    summary = client.get(
+        "/marketplace/preview-builds/missing/marketplace-summary"
+    )
+    assert summary.status_code == 404
+
+    job_id = create(client)
+    base = "/marketplace/preview-builds/" + job_id
+    required = client.get(base + "/marketplace-summary")
+    assert required.status_code == 409
+    assert required.json()["detail"] == {
+        "code": "seller_session_required",
+        "message": "Sign in to ai.market in AIM Data, then try again.",
+    }
+    assert client.put(
+        base + "/selection",
+        json={"leaf_indices": [0], "display_columns": ["color"]},
+    ).status_code == 200
+    consent = {
+        "rights_basis": "owner",
+        "public_preview_permission": True,
+        "restricted_content_confirmed": True,
+    }
+    assert client.post(base + "/policy", json=consent).status_code == 200
+    packaged = client.post(base + "/package", json={"destination": "export"}).json()
+
+    def receipts(url, **opts):
+        headers = Message()
+        for key, value in {
+            "Content-Type": "application/vnd.aim.preview+json",
+            "Cache-Control": "no-store",
+            "Access-Control-Allow-Origin": "https://ai.market",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+        }.items():
+            headers[key] = value
+        return [
+            capture_receipt(
+                url,
+                method,
+                200,
+                headers,
+                captured_at=datetime.now(timezone.utc),
+                origin="https://ai.market",
+            )
+            for method in ["GET", "OPTIONS"]
+        ]
+
+    monkeypatch.setattr(
+        "app.services.preview_build_service.verify_hosted_package", receipts
+    )
+    origin = "https://seller.example/" + packaged["publication"]["relative_path"]
+    assert client.post(base + "/origin-check", json={"url": origin}).status_code == 200
+
+    transport = PreviewMarketplaceTransport(
+        base_url="https://api.ai.market",
+        token="seller-token",
+        client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(401, json={"detail": "expired"})
+            )
+        ),
+    )
+    service.transport_factory = lambda: transport
+    expired = client.post(
+        base + "/candidate", json={**consent, "metadata_accuracy_confirmed": True}
+    )
+    assert expired.status_code == 409
+    assert expired.json()["detail"]["code"] == "seller_session_expired"
 
 
 def test_production_mount_requires_authentication(monkeypatch):

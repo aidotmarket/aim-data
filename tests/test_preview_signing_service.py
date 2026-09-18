@@ -70,6 +70,14 @@ def test_existing_install_key_only(signer):
     assert not s.crypto.keystore_path.exists()
 
 
+def test_existing_install_key_signs_without_operator_evidence_file(tmp_path):
+    crypto = DeviceCrypto(str(tmp_path / "keystore.json"), "synthetic-test-passphrase")
+    crypto._pbkdf2_iterations = 1
+    crypto.get_or_create_keypairs()
+    service = PreviewSigningService(crypto, install_id=INSTALL, seller_id=SELLER)
+    assert service.signer_reference.startswith(INSTALL + ":")
+
+
 @pytest.mark.parametrize(
     "field,value",
     [

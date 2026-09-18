@@ -1006,7 +1006,7 @@ async def publish_status(dataset_id: Optional[str] = None, user=Depends(get_curr
 @router.post("/marketplace/listings/{listing_id}/at-a-glance/approve")
 @router.post("/marketplace/listings/{listing_id}/at-a-glance/withdraw")
 async def prepare_preview_disclosure(listing_id: str, request: Request, user=Depends(get_current_user)):
-    """Closed new contract; live submission is explicitly deferred to I.b."""
+    """Validate locally, then forward the signed metadata-only disclosure."""
     from app.services.preview_signing_service import request_bytes, SigningError
     try:
         raw = await request.body()
@@ -1020,9 +1020,31 @@ async def prepare_preview_disclosure(listing_id: str, request: Request, user=Dep
             raise SigningError("listing_mismatch")
     except Exception:
         raise HTTPException(status_code=422, detail="preview_contract_invalid") from None
-    raise HTTPException(status_code=409, detail="preview_integration_not_yet_available")
+    action = "withdraw" if request.url.path.endswith("/withdraw") else "approve"
+    headers = _seller_auth_headers(request)
+    if not headers:
+        raise HTTPException(status_code=401, detail="seller_session_required")
+    headers["Content-Type"] = "application/json"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{settings.ai_market_url.rstrip('/')}/api/v1/listings/{listing_id}/at-a-glance/{action}",
+                content=raw,
+                headers=headers,
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="marketplace_timeout") from None
+    except httpx.RequestError:
+        raise HTTPException(status_code=502, detail="marketplace_unreachable") from None
+    if not 200 <= response.status_code < 300:
+        try:
+            detail = response.json().get("detail", "marketplace_preview_refused")
+        except ValueError:
+            detail = "marketplace_preview_refused"
+        raise HTTPException(status_code=response.status_code, detail=detail)
+    return response.json()
 
 
 # Seller-local preview jobs share the authenticated marketplace namespace.
-from app.routers.preview_builds import router as preview_builds_router
+from app.routers.preview_builds import router as preview_builds_router  # noqa: E402
 router.include_router(preview_builds_router, prefix="/marketplace")

@@ -23,7 +23,8 @@ def test_dataset_detail_avoids_unredacted_preview_and_retries_without_republish(
     source = DATASET_DETAIL.read_text()
 
     assert "datasetsApi.getDisclosureSample(dataset.id, 100)" not in source
-    assert "metadataApproved={metadataApproved}" in source
+    assert "<CommitmentPreviewBuilder datasetId={dataset.id}" in source
+    assert "metadataApproved={metadataApproved}" not in source
     assert "submitDisclosureSnapshot(publishedListingId, retrySnapshotPayload)" in source
     retry_block = source[source.index("const handleRetryDisclosureSnapshot"):source.index("const handleReviewDisclosureDecision")]
     assert "marketplaceApi.publish" not in retry_block

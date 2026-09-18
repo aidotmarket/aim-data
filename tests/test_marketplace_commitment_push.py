@@ -3,7 +3,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 from app.routers import marketplace_publish as route
-from app.services.marketplace_push_service import prepare_preview_request
 from app.services.preview_signing_service import (
     SigningError,
     construct_request,
@@ -38,32 +37,35 @@ def test_constructor_uses_loaded_registered_key(signer):
         )
 
 
-def test_new_arm_never_submits():
-    with patch("httpx.AsyncClient") as net:
-        with pytest.raises(SigningError, match="preview_integration_not_yet_available"):
-            prepare_preview_request(request_fixture())
-        net.assert_not_called()
+def test_router_forwards_closed_signed_request():
+    import httpx
+    from unittest.mock import AsyncMock
 
-
-def test_router_closed_and_gated():
     app = FastAPI()
     app.include_router(route.router, prefix="/api")
     app.dependency_overrides[route.get_current_user] = lambda: {"id": "fixture"}
-    with TestClient(app) as client, patch("httpx.AsyncClient") as net:
+    response = httpx.Response(
+        200,
+        json={"decision_id": "00000000-0000-4000-8000-000000000033", "decision": "approve"},
+        request=httpx.Request("POST", "https://api.ai.market"),
+    )
+    with TestClient(app) as client, patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=response) as post:
         r = request_fixture()
         url = (
             "/api/marketplace/listings/"
             + r["binding"]["listing_id"]
             + "/at-a-glance/approve"
         )
-        assert client.post(url, json=r).json() == {
-            "detail": "preview_integration_not_yet_available"
-        }
+        result = client.post(url, json=r, headers={"Authorization": "Bearer seller-token"})
+        assert result.status_code == 200
+        assert result.json()["decision"] == "approve"
+        assert post.await_args.kwargs["content"]
+        assert post.await_args.kwargs["headers"]["Authorization"] == "Bearer seller-token"
         r["binding"]["raw_marker"] = "ZERO_INGRESS_SYNTHETIC_MARKER"
-        response = client.post(url, json=r)
-        assert response.status_code == 422
-        assert "ZERO_INGRESS" not in response.text
-        net.assert_not_called()
+        rejected = client.post(url, json=r, headers={"Authorization": "Bearer seller-token"})
+        assert rejected.status_code == 422
+        assert "ZERO_INGRESS" not in rejected.text
+        assert post.await_count == 1
 
 
 def test_legacy_rows_not_in_model():

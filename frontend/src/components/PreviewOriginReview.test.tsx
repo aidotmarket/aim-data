@@ -32,7 +32,7 @@ it('checks seller URL and displays GET and OPTIONS receipts',async()=>{
   await waitFor(()=>expect(changed).toHaveBeenCalledWith(checked));
   rerender(<PreviewOriginReview job={checked} onChange={changed} />);
   expect(screen.getByText(/GET: 200/)).toBeInTheDocument();expect(screen.getByText(/OPTIONS: 204/)).toBeInTheDocument();
-  expect(screen.getByText(/Marketplace preview submission still awaits backend support/)).toBeInTheDocument();
+  expect(screen.getByText(/ready for signed marketplace submission/)).toBeInTheDocument();
 });
 it('announces origin failure and keeps retry available',async()=>{
   vi.mocked(previewBuildApi.originCheck).mockRejectedValue(new Error('cors_origin'));

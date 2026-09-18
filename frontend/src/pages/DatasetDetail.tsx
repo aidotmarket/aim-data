@@ -354,7 +354,6 @@ export function ListingPreparation({
     tags: persistedListingMetadata?.tags || [],
   });
   const [approvedMetadataDraft, setApprovedMetadataDraft] = useState<ApprovedMetadataDraft | null>(null);
-  const [previewMetadataDigest, setPreviewMetadataDigest] = useState<string>();
   const [previewStatus, setPreviewStatus] = useState("No sample");
   const [finalDisclosureConfirmed, setFinalDisclosureConfirmed] = useState(false);
   const [disclosureFailure, setDisclosureFailure] = useState<DisclosureSnapshotFailure | null>(null);
@@ -362,16 +361,6 @@ export function ListingPreparation({
   const [publishComplete, setPublishComplete] = useState(false);
   const [publishedListingUrl, setPublishedListingUrl] = useState<string | null>(null);
   const [retrySnapshotPayload, setRetrySnapshotPayload] = useState<DisclosureSnapshotPayload | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setPreviewMetadataDigest(undefined);
-    if (approvedMetadataDraft && metadataApproved) {
-      crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(approvedMetadataDraft)))
-        .then(buffer => { if (active) setPreviewMetadataDigest(Array.from(new Uint8Array(buffer), b => b.toString(16).padStart(2,'0')).join('')); });
-    }
-    return () => { active = false; };
-  }, [approvedMetadataDraft, metadataApproved]);
 
   const datasetReady = dataset.status === "preview_ready";
   const flaggedColumns = piiScan?.column_results ?? [];
@@ -1184,8 +1173,8 @@ export function ListingPreparation({
               previewStatus={previewStatus}
             />
 
-            <CommitmentPreviewBuilder datasetId={dataset.id} metadataApproved={metadataApproved}
-              approvedMetadataDigest={previewMetadataDigest} onStatus={setPreviewStatus}
+            <CommitmentPreviewBuilder datasetId={dataset.id}
+              onStatus={setPreviewStatus}
               originReview={(job, onChange) => <PreviewOriginReview job={job} onChange={onChange} />} />
 
             <div className="rounded-md border p-3 text-sm">

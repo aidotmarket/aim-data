@@ -1,7 +1,7 @@
 # Decision: verified previews have no automated content gate
 
-Date: 2026-09-18  
-Owner: Max  
+Date: 2026-09-18
+Owner: Max
 Status: binding
 
 “I am not building a police state. I want to remove things that stand in the

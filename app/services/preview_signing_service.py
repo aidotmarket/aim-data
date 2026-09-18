@@ -268,14 +268,14 @@ class PreviewSigningService:
         return self._sign(disclosure_bytes(b), b["signer_reference"])
 
 
-# Candidate bytes are immutable and labelled fixture-only until I.b supplies an
-# authenticated platform allocation. No mutable UI object is retained for retry.
+# Candidate bytes are the immutable binding allocated by ai.market. No mutable
+# UI object is retained for retry.
 
 
 @dataclass(frozen=True)
 class LocalCandidate:
     binding_bytes: bytes
-    kind: Literal["fixture_candidate"] = "fixture_candidate"
+    kind: Literal["marketplace_candidate"] = "marketplace_candidate"
 
     @classmethod
     def validate(cls, binding):
@@ -286,8 +286,8 @@ class LocalCandidate:
     def binding(self):
         from app.models.preview_disclosure_schemas import DisclosureBinding
 
-        if self.kind != "fixture_candidate":
-            raise SigningError("integration_not_yet_available")
+        if self.kind != "marketplace_candidate":
+            raise SigningError("candidate_invalid")
         data = closed(DisclosureBinding, json.loads(self.binding_bytes))
         if serialize(DisclosureBinding, data) != self.binding_bytes:
             raise SigningError("candidate_changed")
@@ -381,11 +381,6 @@ def verify_request(request, *, evidence, raw_key, now, max_age):
             if not verify_bytes(raw_key, p["signature"], proof_bytes(c, p)):
                 raise SigningError("proof_signature_invalid")
     return r
-
-
-def submit_preview_request(request):
-    request_bytes(request)
-    raise SigningError("preview_integration_not_yet_available")
 
 
 def verify_authenticated_request(envelope, request, trusted_keys, *, now):
