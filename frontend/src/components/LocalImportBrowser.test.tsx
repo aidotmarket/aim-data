@@ -24,6 +24,7 @@ async function startImport(beforeStart = () => {}) {
   const onImportingChange = vi.fn();
   const onClose = vi.fn();
   render(<LocalImportBrowser onSuccess={onSuccess} onImportingChange={onImportingChange} onClose={onClose} />);
+  expect(await screen.findByText("With folder datasets enabled, the whole current folder becomes one dataset (selection is ignored)")).toBeInTheDocument();
   fireEvent.click(await screen.findByRole("button", { name: "Select All" }));
   beforeStart();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import Selected (2)" })); });
@@ -48,7 +49,7 @@ describe("folder import response wiring", () => {
     expect(importApi.getStatus).not.toHaveBeenCalled();
     expect(interval).not.toHaveBeenCalled();
     expect(screen.getByText("Successfully imported 1 dataset")).toBeInTheDocument();
-    expect(toast.success).toHaveBeenCalledWith("Imported /import/ as 1 dataset (2 files)");
+    expect(toast.success).toHaveBeenCalledWith("Imported folder import as one dataset (2 files)");
     expect(callbacks.onSuccess).toHaveBeenCalledTimes(1);
     expect(callbacks.onImportingChange.mock.calls).toEqual([[true], [false]]);
 
@@ -71,7 +72,7 @@ describe("folder import response wiring", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import Selected (1)" })); });
     expect(importApi.start).toHaveBeenCalledWith("/import/subset/", ["a.csv"]);
     if (mode === "directory") {
-      expect(toast.success).toHaveBeenCalledWith("Imported /import/subset/ as 1 dataset (1 files)");
+      expect(toast.success).toHaveBeenCalledWith("Imported folder subset as one dataset (1 file)");
     }
   });
 

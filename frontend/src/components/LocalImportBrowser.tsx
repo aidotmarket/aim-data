@@ -193,7 +193,8 @@ export function LocalImportBrowser({
         setResults([{ file: currentPath, dataset_id: res.dataset_id, status: res.status }]);
         setPhase("complete");
         onImportingChange?.(false);
-        toast.success(`Imported ${currentPath} as 1 dataset (${res.total_files} files)`);
+        const folderName = currentPath.replace(/\/$/, "").split("/").pop() || currentPath;
+        toast.success(`Imported folder ${folderName} as one dataset (${res.total_files} ${res.total_files === 1 ? "file" : "files"})`);
         onSuccess?.();
         return;
       }
@@ -432,19 +433,24 @@ export function LocalImportBrowser({
         )}
 
         {/* Footer actions */}
-        <div className="flex items-center justify-between pt-1">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            disabled={selectedFiles.size === 0}
-            onClick={handleImport}
-            className="gap-2"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Import Selected ({selectedFiles.size})
-          </Button>
+        <div className="space-y-2 pt-1">
+          <p className="text-xs text-muted-foreground">
+            With folder datasets enabled, the whole current folder becomes one dataset (selection is ignored)
+          </p>
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={selectedFiles.size === 0}
+              onClick={handleImport}
+              className="gap-2"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Import Selected ({selectedFiles.size})
+            </Button>
+          </div>
         </div>
       </div>
     );
