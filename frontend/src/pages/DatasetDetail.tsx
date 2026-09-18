@@ -316,7 +316,7 @@ export function ListingPreparation({
   isDeleting: boolean;
   draftListingId: string | null;
   onDatasetRefresh?: (dataset: ApiDataset) => void;
-  children?: ReactNode | ((publishing: boolean) => ReactNode);
+  children?: ReactNode | ((publishing: boolean, onMemberStateBlockedChange: (blocked: boolean) => void) => ReactNode);
 }) {
   const navigate = useNavigate();
   const { publishDataset } = useMarketplace();
@@ -341,6 +341,7 @@ export function ListingPreparation({
   const [metadataApproved, setMetadataApproved] = useState(false);
   const [activeMetadataField, setActiveMetadataField] = useState<GuidedMetadataField>("title");
   const [publishing, setPublishing] = useState(false);
+  const [memberStateBlocked, setMemberStateBlocked] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const autoPiiScanDatasetRef = useRef<string | null>(null);
   const autoMetadataDatasetRef = useRef<string | null>(persistedListingMetadata ? dataset.id : null);
@@ -378,7 +379,8 @@ export function ListingPreparation({
   const directoryScanCompleted = dataset.file_type !== "directory" || piiScan?.scan_status === "completed";
   const directoryScanFailed = dataset.file_type === "directory" && Boolean(piiScan) && !directoryScanCompleted;
   const scanFailed = piiFailed || directoryScanFailed || Boolean(directoryPiiNotReadyReason);
-  const piiState = piiScanState === "running" ? "running" : getPiiSignal(piiScan, scanFailed);
+  const privacyNotAssessed = dataset.file_type === "directory" && piiScan?.privacy_score === null && !scanFailed;
+  const piiState = piiScanState === "running" ? "running" : privacyNotAssessed ? "not_run" : getPiiSignal(piiScan, scanFailed);
   const canContinuePrivacy = directoryScanCompleted && Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
   const persistedPrivacySatisfied = directoryScanCompleted && (privacyAttested || (Boolean(piiScan) && allFlaggedColumnsSaved));
   const draftListingId = initialDraftListingId ?? metadata?.listing_id ?? null;
@@ -396,6 +398,7 @@ export function ListingPreparation({
     try {
       const scan = await piiApi.scan(dataset.id);
       setPiiScan(scan);
+      setDirectoryPiiNotReadyReason("");
       setPiiScanState("passed");
     } catch (e) {
       setPiiFailed(true);
@@ -409,6 +412,10 @@ export function ListingPreparation({
       }
     }
   }, [dataset.id, datasetReady]);
+
+  useEffect(() => {
+    setDirectoryPiiNotReadyReason("");
+  }, [dataset.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -428,6 +435,7 @@ export function ListingPreparation({
         const scan = await piiApi.getScan(dataset.id);
         if (!cancelled) {
           setPiiScan(scan);
+          setDirectoryPiiNotReadyReason("");
           autoPiiScanDatasetRef.current = dataset.id;
           autoPiiScanAttemptedDatasetIds.add(dataset.id);
           setPiiScanState("passed");
@@ -436,7 +444,7 @@ export function ListingPreparation({
         if (cancelled) return;
         const detail = error instanceof Error ? error.message : "";
         if (dataset.file_type === "directory" && detail.startsWith("directory_pii_not_ready:")) {
-          setDirectoryPiiNotReadyReason(detail);
+          setDirectoryPiiNotReadyReason("Privacy profiling has not run for this folder yet. Re-run processing, then return here. (directory_pii_not_ready)");
           setPiiScanState("failed");
           if (!cancelled) setPrivacyStateHydrated(true);
           return;
@@ -851,7 +859,7 @@ export function ListingPreparation({
         </p>
       </div>
 
-      {typeof children === "function" ? children(publishing) : children}
+      {typeof children === "function" ? children(publishing, setMemberStateBlocked) : children}
 
       <Card>
         <CardHeader className="pb-3">
@@ -868,7 +876,7 @@ export function ListingPreparation({
               {!datasetReady && "Waiting for dataset preview"}
               {piiState === "passed" && "Passed"}
               {piiState === "flagged" && `${piiScan?.columns_with_pii ?? 0} column${piiScan?.columns_with_pii === 1 ? "" : "s"} flagged`}
-              {piiState === "not_run" && "Not run"}
+              {piiState === "not_run" && (privacyNotAssessed ? "Not assessed" : "Not run")}
               {piiState === "pending" && datasetReady && "Preparing scan"}
               {piiState === "running" && "Scanning"}
             </p>
@@ -930,7 +938,7 @@ export function ListingPreparation({
               {piiScan && !directoryScanFailed && flaggedColumns.length === 0 &&
                 (dataset.file_type !== "directory" || piiScan.privacy_score !== null) &&
                 <Badge className="bg-haven-success/20 text-haven-success border-haven-success/30">No personal data detected</Badge>}
-              {dataset.file_type === "directory" && piiScan?.privacy_score === null && (
+              {dataset.file_type === "directory" && piiScan?.privacy_score === null && !directoryScanFailed && (
                 <Badge variant="secondary">Privacy scan covered 0 of {(dataset.metadata as { directory_profile?: DirectoryProfile })?.directory_profile?.total_data_members ?? dataset.metadata?.directory?.data_member_count ?? 0} members — not assessed</Badge>
               )}
             </div>
@@ -1227,7 +1235,7 @@ export function ListingPreparation({
             {dataset.file_type === "directory" ? <DirectoryPublishControl
               datasetId={dataset.id}
               sampleCount={dataset.metadata?.directory?.sample_member_count ?? 0}
-              disabled={publishing || !finalDisclosureConfirmed || !approvedMetadataDraft}
+              disabled={publishing || memberStateBlocked || !finalDisclosureConfirmed || !approvedMetadataDraft}
               publishPayload={{ title: form.title.trim(), description: form.description.trim(), tags: form.tags,
                 category: form.category, price_cents: Math.round(Number.parseFloat(form.priceUsd) * 100), file_format: "directory" }}
               disclosurePayload={approvedMetadataDraft && finalDisclosureConfirmed ? {
@@ -1267,10 +1275,11 @@ type DirectoryProfile = {
   members: Record<string, { status: string; reason?: string }>;
 };
 
-export function DirectoryMembers({ dataset, disabled = false, onDatasetRefresh }: {
+export function DirectoryMembers({ dataset, disabled = false, onDatasetRefresh, onPublishBlockedChange }: {
   dataset: ApiDataset;
   disabled?: boolean;
   onDatasetRefresh?: (dataset: ApiDataset) => void;
+  onPublishBlockedChange?: (blocked: boolean) => void;
 }) {
   const profile = (dataset.metadata as unknown as { directory_profile?: DirectoryProfile })?.directory_profile;
 
@@ -1281,6 +1290,7 @@ export function DirectoryMembers({ dataset, disabled = false, onDatasetRefresh }
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [memberStateStale, setMemberStateStale] = useState(false);
   useEffect(() => {
     let active = true;
     setResult(null);
@@ -1291,15 +1301,35 @@ export function DirectoryMembers({ dataset, disabled = false, onDatasetRefresh }
   }, [dataset.id, page, role, status, revision]);
   const edit = async (index: number, patch: Parameters<typeof datasetsApi.patchMember>[2]) => {
     setSaving(true);
+    setError("");
+    onPublishBlockedChange?.(true);
     try {
       await datasetsApi.patchMember(dataset.id, index, patch);
-      if (onDatasetRefresh) {
-        const refreshed = await datasetsApi.get(dataset.id);
-        onDatasetRefresh(refreshed);
-      }
       setRevision(value => value + 1);
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not save member"); }
-    finally { setSaving(false); }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save member");
+      onPublishBlockedChange?.(false);
+      setSaving(false);
+      return;
+    }
+    try {
+      if (onDatasetRefresh) onDatasetRefresh(await datasetsApi.get(dataset.id));
+      setMemberStateStale(false);
+      onPublishBlockedChange?.(false);
+    } catch {
+      setMemberStateStale(true);
+    } finally { setSaving(false); }
+  };
+  const retryDatasetRefresh = async () => {
+    setSaving(true);
+    onPublishBlockedChange?.(true);
+    try {
+      if (onDatasetRefresh) onDatasetRefresh(await datasetsApi.get(dataset.id));
+      setMemberStateStale(false);
+      onPublishBlockedChange?.(false);
+    } catch {
+      setMemberStateStale(true);
+    } finally { setSaving(false); }
   };
   return <section className="space-y-4" aria-label="Directory members">
     <p>{dataset.metadata?.directory?.member_count ?? result?.total ?? 0} files</p>
@@ -1311,6 +1341,7 @@ export function DirectoryMembers({ dataset, disabled = false, onDatasetRefresh }
       <p>{(profile.profiled_bytes ?? 0).toLocaleString()} bytes profiled</p>
     </div>}
     {error && <p role="alert">{error}</p>}
+    {memberStateStale && <div role="alert">Saved; refreshing dataset… <Button type="button" size="sm" variant="outline" onClick={retryDatasetRefresh} disabled={saving}>Retry refresh</Button></div>}
     <div className="flex gap-4">
       <label>Role <select aria-label="Filter by role" value={role} onChange={e => { setRole(e.target.value); setPage(1); }}>
         <option value="">All roles</option>{["data", "documentation", "other"].map(r => <option key={r}>{r}</option>)}
@@ -1505,8 +1536,8 @@ const DatasetDetail = () => {
         onDelete={handleDelete}
         isDeleting={isDeleting}
       >
-        {apiDataset.file_type === "directory" && ((publishing: boolean) =>
-          <DirectoryMembers dataset={apiDataset} disabled={publishing} onDatasetRefresh={setApiDataset} />)}
+        {apiDataset.file_type === "directory" && ((publishing: boolean, onMemberStateBlockedChange: (blocked: boolean) => void) =>
+          <DirectoryMembers dataset={apiDataset} disabled={publishing} onDatasetRefresh={setApiDataset} onPublishBlockedChange={onMemberStateBlockedChange} />)}
       </ListingPreparation>
     );
   }

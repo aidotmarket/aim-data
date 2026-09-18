@@ -676,7 +676,7 @@ export interface DisclosureApprovedFields {
 export interface DisclosureSnapshotProxyRequest {
   dataset_id: string;
   approved_fields: DisclosureApprovedFields;
-  sample_decision: 'none' | 'approved_rows';
+  sample_decision: 'none' | 'approved_rows' | 'member_files';
   approved_sample: {
     columns: string[];
     row_refs: string[];
