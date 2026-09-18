@@ -221,3 +221,47 @@ Starting head: `188248012afa26cdb9cd048ea9b6d59a70cc4ea0`; existing
   left unchanged to preserve scope. Missing `sqlglot` and Pillow dependencies
   were installed only in the temporary test environment.
 - `rtk git diff --check` passed. No README/INSTALL edits, new branch, rebase, or PR.
+
+## R2 fold
+
+Starting head: `5ba74395fff63dbb8fcbcdc25e58a242372a25b3`; existing
+`build/bq-multi-file-datasets-s1717-ui-wiring` branch. No new branch, rebase,
+spec reading, PR, deployment, or unrelated changes.
+
+Implementation commits: `217be08` (directory publication/privacy state) and
+`d2fc9f3` (folder import copy).
+
+- A successful directory-member PATCH now refetches the parent dataset and
+  updates preparation state. Directory sample disclosure resets to `none` at
+  zero selected members and re-enables `member_files` on a zero-to-positive
+  transition. Member role/sample controls share the directory publication busy
+  state and remain disabled while the publish request is unresolved.
+- Directory privacy is fail-closed: only `scan_status: completed` progresses.
+  A 409 `directory_pii_not_ready` detail is shown as the Step 1 alert without a
+  rescan action. Zero-profile directories show neutral not-assessed copy, while
+  the adapter no longer returns the duplicate stored `status` field and keeps
+  `privacy_score`.
+- Directory detail no longer mounts sample-tab content when the tab is hidden.
+- Local Import now explains that folder-dataset mode ignores the selection and
+  registers the current folder. Direct completion toasts name that folder and
+  correctly use `1 file` versus `N files`.
+- The durable install-fold frontend test excerpt is
+  `docs/reports/artifacts/s1717-install-fold-frontend-test-excerpt.txt`. The full
+  local R2 log is `docs/reports/artifacts/s1717-r2-frontend-focused.log` (ignored
+  by the repository's `*.log` rule).
+
+### R2 validation
+
+| Check | Result |
+| --- | --- |
+| `DatasetDetail.test.tsx` and `LocalImportBrowser.test.tsx` | **42 passed** across 2 files (36 + 6); existing React `act(...)` warnings only |
+| `tests/test_pii_directory.py` and `tests/test_directory_import.py` | **14 passed**, 4 dependency/deprecation warnings |
+| Frontend build | Passed; inherited Browserslist freshness and bundle-size warnings |
+| Lint versus untouched base `119f643b5fd25dc8fd61557649371c9832ca33c5` | Exact count parity: **10 errors, 25 warnings** |
+| Typecheck versus the same base | Normalized diagnostics identical; the inherited nonzero result is unchanged |
+| `git diff --check` | Passed |
+
+The authoritative backend run used the report's existing isolated Python 3.12
+environment at `/tmp/s1717-ui-backend-venv`. The ambient Python 3.13 environment
+remains unsuitable because it lacks pinned application dependencies and has an
+incompatible Starlette/httpx pairing; no host dependencies were changed.
