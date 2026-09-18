@@ -181,22 +181,19 @@ export function LocalImportBrowser({
   const handleImport = async () => {
     if (selectedFiles.size === 0) return;
 
-    const relativeBase = currentPath.slice(rootPath.length);
-    const filePaths = Array.from(selectedFiles).map(
-      (name) => relativeBase + name
-    );
+    const filePaths = Array.from(selectedFiles);
 
     setPhase("importing");
     onImportingChange?.(true);
     setImportError(null);
 
     try {
-      const res = await importApi.start(rootPath, filePaths);
+      const res = await importApi.start(currentPath, filePaths);
       if ("dataset_id" in res) {
         setResults([{ file: currentPath, dataset_id: res.dataset_id, status: res.status }]);
         setPhase("complete");
         onImportingChange?.(false);
-        toast.success(`Imported 1 dataset (${res.total_files} files)`);
+        toast.success(`Imported ${currentPath} as 1 dataset (${res.total_files} files)`);
         onSuccess?.();
         return;
       }

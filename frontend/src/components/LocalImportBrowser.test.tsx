@@ -16,12 +16,13 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.clearAllMocks(); });
 
-async function startImport() {
+async function startImport(beforeStart = () => {}) {
   const onSuccess = vi.fn();
   const onImportingChange = vi.fn();
   const onClose = vi.fn();
   render(<LocalImportBrowser onSuccess={onSuccess} onImportingChange={onImportingChange} onClose={onClose} />);
   fireEvent.click(await screen.findByRole("button", { name: "Select All" }));
+  beforeStart();
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import Selected (2)" })); });
   return { onSuccess, onImportingChange, onClose };
 }
@@ -29,16 +30,36 @@ async function startImport() {
 describe("folder import response wiring", () => {
   it("completes a direct directory response without polling and triggers card refresh", async () => {
     vi.spyOn(importApi, "start").mockResolvedValue({ dataset_id: "directory-1", status: "complete", total_files: 2, total_bytes: 8 });
-    const callbacks = await startImport();
+    const interval = vi.spyOn(globalThis, "setInterval");
+    const callbacks = await startImport(() => interval.mockClear());
+    expect(importApi.getStatus).not.toHaveBeenCalled();
+    expect(interval).not.toHaveBeenCalled();
     expect(screen.getByText("Successfully imported 1 dataset")).toBeInTheDocument();
-    expect(toast.success).toHaveBeenCalledWith("Imported 1 dataset (2 files)");
+    expect(toast.success).toHaveBeenCalledWith("Imported /import/ as 1 dataset (2 files)");
     expect(callbacks.onSuccess).toHaveBeenCalledTimes(1);
     expect(callbacks.onImportingChange.mock.calls).toEqual([[true], [false]]);
-    vi.useFakeTimers();
-    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
-    expect(importApi.getStatus).not.toHaveBeenCalled();
+
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(callbacks.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["directory", "legacy"])("imports the browsed folder with relative files in %s mode", async (mode) => {
+    vi.mocked(importApi.browse).mockResolvedValueOnce({ path: "/import/", entries: [
+      { name: "subset", type: "directory" },
+    ], total: 1, limit: 500, offset: 0 }).mockResolvedValueOnce({ path: "/import/subset/", entries: [
+      { name: "a.csv", type: "file", size_bytes: 4 },
+    ], total: 1, limit: 500, offset: 0 });
+    vi.spyOn(importApi, "start").mockResolvedValue(mode === "directory"
+      ? { dataset_id: "directory-1", status: "complete", total_files: 1, total_bytes: 4 }
+      : { job_id: "legacy-1", status: "running", total_files: 1, total_bytes: 4 });
+    render(<LocalImportBrowser />);
+    fireEvent.click(await screen.findByRole("button", { name: "subset" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select All" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import Selected (1)" })); });
+    expect(importApi.start).toHaveBeenCalledWith("/import/subset/", ["a.csv"]);
+    if (mode === "directory") {
+      expect(toast.success).toHaveBeenCalledWith("Imported /import/subset/ as 1 dataset (1 files)");
+    }
   });
 
   it("keeps legacy job polling and completion callbacks", async () => {
