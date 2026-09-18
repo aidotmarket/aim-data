@@ -50,7 +50,17 @@ def test_aim_data_channel_gets_ring_two_styling():
 
 
 def test_verified_shape_label_heading_is_optional():
-    assert "Optional: add a verified shape label" in DATASET_DETAIL_PATH.read_text()
+    content = DATASET_DETAIL_PATH.read_text()
+    # Ignore block comments so commented-out JSX cannot satisfy the assertion.
+    content = re.sub(r"/\*.*?\*/", "", content, flags=re.S)
+    heading = re.search(
+        r'^\s*<h2\b[^>]*className="([^"]*)"[^>]*>'
+        r'Optional: add a verified shape label</h2>\s*$',
+        content,
+        flags=re.M,
+    )
+    assert heading is not None, "Expected the optional verified shape label in an h2 element"
+    assert "border-t" in heading.group(1).split(), "The heading must retain its top border"
 
 
 def _assert_no_verification_keys(value):
