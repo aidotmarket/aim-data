@@ -45,7 +45,7 @@ AIM_DATA_SERIAL_STORE_PATH=./base-serial python -m pytest -q --junitxml=base.xml
 | Full backend, candidate | 3162 | 109 | 34 | 38 | 820 | 217.72s |
 | Full backend, unchanged base | 3159 | 109 | 34 | 38 | 820 | 303.96s |
 
-The full suite is **not green**. Both full runs exit 1 with exactly the same 147 failing/error node IDs and the same failure/error classifications. No new failing nodes; the candidate adds three passing cases. Dominant inherited causes include an unavailable data directory, no local HTTP service for beta-readiness setup, unconfigured entitlement signing, directory verification disabled in existing tests, and existing missing-module/metering mismatches. No inherited failures were fixed or suppressed.
+The full suite is **not green**. Both full runs exit 1 with exactly the same 147 failing/error node IDs and the same failure/error classifications. No new failing nodes in that historical comparison; the current head adds four passing cases over the base (the original three plus the R1 heading assertion). The full-suite totals above predate that heading assertion. Dominant inherited causes include an unavailable data directory, no local HTTP service for beta-readiness setup, unconfigured entitlement signing, directory verification disabled in existing tests, and existing missing-module/metering mismatches. No inherited failures were fixed or suppressed.
 
 The following node IDs failed identically on the exact base and candidate.
 
@@ -216,7 +216,7 @@ Reviewed head: `8dd3a052e26a8a5433e6dd8b8c4fdf03d3a89288`. Council outcomes: GLM
 - **DeepSeek F3 — adopted.** Added `test_verified_shape_label_heading_is_optional` in `tests/test_channel_dataset_detail.py`, asserting that `frontend/src/pages/DatasetDetail.tsx` contains “Optional: add a verified shape label”. This makes AC6's heading half traceable from the module named by Gate 2. Existing rendered-heading test references supplied with the fold are `frontend/src/pages/DatasetDetail.test.tsx:145` and `frontend/src/pages/DatasetDetail.test.tsx:421`; those tests were not changed or rerun.
 - **DeepSeek F4 — no additional change.** No F4 change was included in the authorized adoption list; this fold adds none.
 - **DeepSeek F5 — adopted.** Removed machine-specific paths and command-wrapper details from the report. Commands now use ordinary Python and Git invocations with portable output names.
-- **Release wording and size — retained.** Both customer-facing sections keep “the current release” and their upgrade links, with no version numbers or internal project/session/customer names. Each section is 17 lines, below the 25-line limit.
+- **Release wording and size — retained.** Both customer-facing sections keep “the current release” and their upgrade links, with no version numbers or internal project/session/customer names. At R1, each section was 17 lines. The maximum of 25 lines is a caller instruction, not a spec citation.
 
 R1 implementation commits: `6466e07` (documentation), `ea7e9ce` (heading assertion). Report cleanup and dispositions are committed separately.
 
@@ -228,6 +228,29 @@ git diff --check
 ```
 
 Focused module: **7 passed, 5 warnings in 7.79s**. Whitespace check: passed. The original full-suite comparison above remains historical evidence; the full suite was not rerun for this narrow fold. No specs were read, and no runtime behavior was changed.
+
+## R2 fold
+
+Reviewed head: `6b4d3eb91651c206bbf8d4ce8991efa4df78b7ba`. Council outcomes: GLM APPROVE; DeepSeek REVISE. All five requested findings are adopted on the existing branch without a rebase.
+
+- **F1 MEDIUM:** Both sections now direct sellers to `import` beside the compose file or `HOST_IMPORT_DIR` in `.env`, mounted read-only. Verified against `docker-compose.aim-data.yml:22-23` and the backend import-directory default at `app/config.py:244`.
+- **F2 LOW:** Both sections name **Or import files from server directory** and **Server directory**, matching `frontend/src/components/FileUploadModal.tsx:480-510`.
+- **F3 LOW:** Both sections name `AIM_DATA_MULTI_FILE_DATASETS_ENABLED=true` in `.env`, state that folder datasets are off by default, and require ai.market account enablement in one sentence. Runtime field inspection confirms `default=False` and aliases `AIM_DATA_MULTI_FILE_DATASETS_ENABLED` / `VECTORAIZ_MULTI_FILE_DATASETS_ENABLED` for `app/config.py:116`. The inspected compose file does not forward this flag into the container; this fold follows the requested wording and does not change compose wiring or establish deployment enablement.
+- **F4 NIT:** Corrected the current test delta to **+4 cases**, retaining historical full-suite totals. Clarified that the 25-line maximum came from the caller. Receiver references in the R1 section remain unchanged.
+- **F5 NIT:** The existing file-content assertion now requires the optional label in an `<h2>` whose `className` contains the `border-t` token. Block comments are removed before matching; the heading must occupy an element line. An in-memory check confirmed acceptance of a valid heading and rejection of JSX comments, line comments, missing borders, and a different element.
+
+Both customer-facing sections are **18 lines including the heading**, within the caller's maximum of 25. Only README, installation docs, the focused test module, and this report changed. No specs were read.
+
+R2 implementation commits: `665018b` (F1–F3 documentation), `785b98a` (F5 heading assertion). F4 corrections and R2 dispositions are committed separately in this report.
+
+R2 validation, using the existing project Python environment and a separate writable serial store:
+
+```sh
+AIM_DATA_SERIAL_STORE_PATH=./r2-serial python -m pytest -q tests/test_channel_dataset_detail.py
+git diff --check
+```
+
+Focused module: **7 passed, 5 warnings in 8.25s**. Whitespace check: passed. The heading negative checks and documentation line counts also passed. The full suite was not rerun for this narrow fold; its earlier results remain historical evidence.
 
 ## Delivery
 
