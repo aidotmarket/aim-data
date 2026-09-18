@@ -44,8 +44,8 @@ export function PreviewOriginReview({ job, onChange }: { job: PreviewBuildStatus
       <label className="block" htmlFor={`origin-url-${job.job_id}`}>Seller HTTPS package URL</label>
       <Input id={`origin-url-${job.job_id}`} type="url" maxLength={2048} value={url} disabled={busy || !!job.candidate} onChange={e => setUrl(e.target.value)} placeholder={`https://your-host.example/${job.publication.relative_path}`} />
       <p>Exact destination: <span>{url || 'Enter your seller HTTPS URL'}</span></p>
-      <p>GET and OPTIONS must pass with no-store, credential-free CORS and no cookies. Export alone does not establish public hosting.</p>
-      <Button type="button" disabled={busy || !url || !!job.candidate} onClick={() => run(async () => { onChange(await previewBuildApi.originCheck(job.job_id,url)); })}>Check GET and OPTIONS</Button>
+      <p>The browser must be able to fetch a JSON package without credentials. CORS must allow https://ai.market or *. Other response headers and OPTIONS behaviour are recorded as observations.</p>
+      <Button type="button" disabled={busy || !url || !!job.candidate} onClick={() => run(async () => { onChange(await previewBuildApi.originCheck(job.job_id,url)); })}>Check browser access</Button>
     </>}
     {busy && <p role="status">Checking local publication…</p>}
     {job.receipts.map(receipt => <div key={receipt.method} className="text-sm">
