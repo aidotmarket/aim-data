@@ -81,6 +81,30 @@ async def list_entities():
     }
 
 
+def _directory_pii_result(record, dataset_id: str):
+    """Adapt bounded, stored directory PII without running a single-file scan."""
+    profile = (record.metadata or {}).get("directory_profile") or {}
+    pii = profile.get("pii")
+    if not pii:
+        raise HTTPException(
+            status_code=409,
+            detail="directory_pii_not_ready: Directory PII profiling has not run yet.",
+        )
+    status = pii.get("status", pii.get("scan_status", "completed"))
+    return {
+        **pii,
+        "dataset_id": dataset_id,
+        "filename": record.original_filename,
+        "scan_status": status,
+        "overall_risk": pii.get("overall_risk", "unknown"),
+        "columns_scanned": pii.get("columns_scanned", pii.get("total_columns", 0)),
+        "columns_with_pii": pii.get("columns_with_pii", 0),
+        "column_results": pii.get("column_results", []),
+        "privacy_score": pii.get("privacy_score") if profile.get("profiled_members", 0) else None,
+        "scope": pii.get("scope") or "Bounded member previews only; not a whole-set clearance",
+    }
+
+
 @router.post("/scan/{dataset_id}")
 async def scan_dataset(
     dataset_id: str,
@@ -101,6 +125,9 @@ async def scan_dataset(
     if not record:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     
+    if record.file_type == "directory":
+        return _directory_pii_result(record, dataset_id)
+
     if record.status != ProcessingStatus.PREVIEW_READY:
         raise HTTPException(
             status_code=400,
@@ -165,6 +192,9 @@ async def get_pii_scan_result(
     if not record:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     
+    if record.file_type == "directory":
+        return _directory_pii_result(record, dataset_id)
+
     pii_scan = record.metadata.get("pii_scan")
     if not pii_scan:
         raise HTTPException(
