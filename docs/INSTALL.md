@@ -91,6 +91,25 @@ Your long lived AWS credentials stay in your account. AIM Data only holds a shor
 
 Once green, you can point AIM Data at any bucket and prefix you have read access to. Files appear in the catalog and you can list them on the marketplace.
 
+## Datasets with many files
+
+Put the folder in the `import` directory next to your compose file (or the directory you set as `HOST_IMPORT_DIR` in `.env`); it is mounted read-only into the app.
+In the upload dialog choose **Or import files from server directory** to open **Server directory**.
+Folder datasets are off by default; enable them with `AIM_DATA_MULTI_FILE_DATASETS_ENABLED=true` in `.env`, and ai.market must also have the feature enabled for your account.
+Import from there with **Import Selected**; with folder datasets enabled, the import creates **one dataset for the folder**.
+Dragging a folder into the upload box still creates one dataset per file.
+
+Each member has a role: `data`, `documentation`, or `other`, shown as-is in the member table.
+The separate sample tick is available only on `data` members; sample is not a role.
+Use it to choose which data members buyers can try for free before buying.
+Publishing creates **one listing** with your selected free samples.
+Buyers receive every `data` member, including selected samples; `documentation` and `other` members are not delivered.
+In the ai.market release that includes this feature, buyers download the data members from their order page.
+The verified shape label is optional and separate from publishing; you can publish without it.
+
+Directory publishing and delivery require **the current release**, which includes this feature.
+For older installs, follow the [upgrade instructions](#updating) before publishing a folder.
+
 ## Updating
 
 When I release a new version, grab the latest compose file first, then pull and recreate. The compose file pins the version you run, so pulling without refreshing it first just keeps you on your current version.

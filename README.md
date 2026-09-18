@@ -36,6 +36,25 @@ The API serves your seller dashboard and the buyer portal. PostgreSQL stores lis
 
 Sign in with ai.market is on by default; set AIM_DATA_OAUTH_ENABLED=false to switch off (rollback).
 
+## Datasets with many files
+
+Put the folder in the `import` directory next to your compose file (or the directory you set as `HOST_IMPORT_DIR` in `.env`); it is mounted read-only into the app.
+In the upload dialog choose **Or import files from server directory** to open **Server directory**.
+Folder datasets are off by default; enable them with `AIM_DATA_MULTI_FILE_DATASETS_ENABLED=true` in `.env`, and ai.market must also have the feature enabled for your account.
+Import from there with **Import Selected**; with folder datasets enabled, the import creates **one dataset for the folder**.
+Dragging a folder into the upload box still creates one dataset per file.
+
+Each member has a role: `data`, `documentation`, or `other`, shown as-is in the member table.
+The separate sample tick is available only on `data` members; sample is not a role.
+Use it to choose which data members buyers can try for free before buying.
+Publishing creates **one listing** with your selected free samples.
+Buyers receive every `data` member, including selected samples; `documentation` and `other` members are not delivered.
+In the ai.market release that includes this feature, buyers download the data members from their order page.
+The verified shape label is optional and separate from publishing; you can publish without it.
+
+Directory publishing and delivery require **the current release**, which includes this feature.
+For older installs, follow the [upgrade instructions](docs/INSTALL.md#updating) before publishing a folder.
+
 ## Architecture
 
 ```
