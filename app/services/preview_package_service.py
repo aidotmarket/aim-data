@@ -27,7 +27,7 @@ from app.services.dataset_merkle_service import (
     encode_base64url,
     verify_inclusion_proof,
 )
-from app.services.preview_content_policy import NumericText, PolicyError, scan_selection
+from app.services.preview_content_policy import NumericText, scan_selection
 
 PROFILE = "aim-preview-package-v2"
 MEDIA_TYPE = "application/vnd.aim.preview+json"

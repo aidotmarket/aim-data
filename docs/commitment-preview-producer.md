@@ -8,9 +8,9 @@ identity or completeness against an external source.
 ## What stays on your machine
 
 AIM Data reads the complete original dataset, checks its declared schema, builds
-a Merkle tree, lets you review complete rows, scans every selected value, and
-signs the resulting metadata. Source paths, source files, private keys, rights
-prose and scan notes stay local. Temporary row indexes are removed after package
+a Merkle tree, lets you review complete rows, records your explicit publication
+confirmations, and signs the resulting metadata. Source paths, source files,
+private keys and rights prose stay local. Temporary row indexes are removed after package
 creation, cancellation, failure or review expiry. A changed selection may require
 another full build. Review sessions expire after 30 minutes without an authorized
 owner interaction by default; an operator can set `PREVIEW_REVIEW_IDLE_SECONDS`.
@@ -18,9 +18,9 @@ owner interaction by default; an operator can set `PREVIEW_REVIEW_IDLE_SECONDS`.
 The preview package contains the **entire selected records**, including fields
 hidden by the display-column choice. You must explicitly confirm your rights,
 public-preview permission, metadata accuracy and restricted-content review for
-that exact selection. The local scan cannot override uncertainty or provide
-legal clearance. Missing detector models or a version mismatch blocks publication.
-The pinned English detector is Presidio 2.2.362, spaCy 3.7.2, model 3.7.1.
+that exact selection. You are responsible for what you publish. Preview
+publication does not call Presidio, spaCy or deterministic content rules;
+missing model packages and version differences do not affect publication.
 
 The preview can contain at most 100 rows, 25 complete-row fields and 250,000
 canonical row bytes. All limits apply together. The package must also fit within
@@ -52,7 +52,7 @@ In the dataset detail page, approve the listing metadata, then choose **Prepare
 verified preview** in the optional Public sample panel. No sample remains the
 default. Provide the full parser/schema declaration when requested, wait for the
 complete build, and review the selected leaf-index rows and every field. Confirm
-rights and permission, run the local scan, select the publication directory or
+rights and permission, record the seller confirmations, select the publication directory or
 export option, then verify the exact origin and signing fingerprint.
 
 New uploads retain their authenticated owner. Historic uploads without a verified
@@ -90,7 +90,7 @@ provided. Exported bytes must be hosted unchanged at the displayed path:
 
 The controlled origin supplied by AIM Data can sit behind your HTTPS reverse
 proxy. Expose only that isolated origin, never the main application. Configure
-these response headers on successful GET, OPTIONS and retirement responses:
+these compatibility headers on successful GET, OPTIONS and retirement responses:
 
 | Header | Required value |
 |---|---|
@@ -101,11 +101,12 @@ these response headers on successful GET, OPTIONS and retirement responses:
 | `Access-Control-Allow-Headers` | May be absent; this GET requests no custom headers |
 | `Access-Control-Allow-Credentials` | Absent or `false`, never `true` |
 
-Do not send `Set-Cookie`; do not compress the response. Disable intermediary
-caching and response-body logging. Verify the CDN/reverse proxy actually preserves
-these headers, including OPTIONS and 404/410. The verifier validates public DNS,
-pins the address and TLS hostname, downloads and hashes the exact package, then
-checks the credential-free OPTIONS preflight. A real anonymous browser check is
+The controlled origin does not send `Set-Cookie` or compress the response and
+disables response-body logging. External origin admission requires a
+credential-free GET, CORS allow-origin `https://ai.market` or `*`, a JSON-parsable
+body, and the exact expected decoded bytes/hash. Media type, no-store, cookies,
+compression and OPTIONS behavior are recorded observations rather than refusals.
+The verifier validates public DNS and pins the address and TLS hostname. A real anonymous browser check is
 still required at Gate-4.
 
 Each GET/OPTIONS receipt has exactly `url`, `method`, `status`, `captured_at`,
@@ -173,7 +174,7 @@ rtk proxy python scripts/build_preview_producer_evidence.py build \
 
 The confirmation asserts exact-row rights, public permission, metadata accuracy
 and restricted-content review. The output directory must be new. The tool performs
-the bounded full worker build, real strict scan, package export, signing and
+the bounded full worker build, seller-attested v2 policy record, package export, signing and
 signature verification; it never sends a marketplace request. Source bytes and
 parser options are hashed without exporting their paths. Rights prose is digested
 and not copied. The `.private` directory contains local journals, not exported
@@ -210,7 +211,7 @@ metadata and receipt files, while `publication.json` retains the package checksu
 Keep the bundle on the seller machine: it contains public row bytes until
 retirement. Central evidence must contain only reviewed identities, hashes,
 counts, timestamps, headers and outcomes. No secrets or real rows belong in Git.
-The CI driver uses deterministic test identities, a real policy engine and a real
+The CI driver uses deterministic test identities, the seller-attested policy path and a real
 loopback HTTP origin; its receipts explicitly do not prove public HTTPS or real
 owner registration. Only its SHA reference is committed.
 

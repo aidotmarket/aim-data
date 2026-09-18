@@ -5,6 +5,24 @@ decision is committed in item 7). Scope is AIM Data producer source only. No
 merge, tag, release, provider mutation, production access, or marketplace
 submission was performed.
 
+## Files changed
+
+- Runtime: `app/models/dataset_commitment_schemas.py`,
+  `app/services/{pii_service,preview_build_service,preview_content_policy,preview_origin_service,preview_package_service}.py`.
+  `preview_signing_service.py` and `app/routers/preview_builds.py` were inspected;
+  they contain no detector/content gate and required no source change.
+- UI: `frontend/src/components/{CommitmentPreviewBuilder,PreviewOriginReview}.tsx`
+  and both corresponding test files.
+- Contracts: `.github/workflows/preview-contract-parity.yml`,
+  `tests/preview_fixture_factory.py`, eight changed fixture/checksum files,
+  the new `aim_preview_policy_v2.json`, and the fixture manifest.
+- Tests: `tests/test_preview_build_routes.py`,
+  `tests/test_preview_content_policy.py`, `tests/test_preview_origin_service.py`,
+  and `tests/test_preview_package_service.py`.
+- Documentation: `docs/commitment-preview-producer.md`,
+  `docs/runbooks/preview-publication.md`, the binding decision, the v1.24.1
+  release-notes draft, and this report.
+
 ## Seller-path obstacle inventory
 
 The inventory below walks metadata approval, selection, policy confirmation,
@@ -63,5 +81,47 @@ not modify either peer-owned repository.
   resource caps, source immutability, ownership, registration, signatures,
   transparency evidence, package integrity, or plain-text rendering.
 
-Fixture hashes and final validation commands/counts are recorded after items 5
-and 6 are complete.
+## Shared fixture pins
+
+`tests/fixtures/preview-fixture-manifest.json` is the complete 15-file pin list.
+The fixtures changed or introduced for this decision are:
+
+| Fixture | SHA-256 |
+|---|---|
+| `aim_preview_policy_v2.json` | `6efb7dbe71f1c0b05c5fec3eff56646a9eb0143c172b9dc8eb5084024f6423dc` |
+| `aim_preview_policy_v1.json` (legacy input, unchanged) | `ff8c85862c6aa90da271a1bb6204a229266dec2b5218b7b061d187119c22008b` |
+| `aim_preview_signing_v1.json` (v2-emitting signing corpus) | `df31f506eab886a1df17045b4aef809d1a66f0d01a5a4c1eed571bb7190cd026` |
+| `aim_preview_requests_v1.json` (v2-emitting request corpus) | `995c0fe142edeed5b89da7aed3f2e85b1cd10789355cf1ca881871306e6d637c` |
+| `aim_preview_signing_requests_v1.sha256` | `83a2c221b7476d0a4cc61e57c28d37b81a509861c2d28a6457ba6764d2648924` |
+| `aim_preview_differential_v1.json` | `a0f9e30fa463232aff936ce66640557b5ad8c1f8b21533c5106f5c5cd887321c` |
+| `aim_preview_differential_v1.sha256` | `26cafe2b05f8b292cab447d2d3e6e2c06b5ca27038134f03779b7f1c758c5542` |
+| `aim_preview_manifest_budget_v1.json` | `49caee71298fd02bc1c0b7b2d84c96f50ee1503b5491c01f0539bd83ceb0436e` |
+
+## Validation receipts
+
+- Standard preview/commitment backend matrix: `rtk proxy
+  /Users/max/Projects/ai-market/aim-data/.venv/bin/python -m pytest -q
+  tests/test_dataset_canonicalization.py tests/test_dataset_merkle_service.py
+  tests/test_preview_content_policy.py tests/test_preview_package_service.py
+  tests/test_preview_origin_service.py tests/test_preview_signing_service.py
+  tests/test_preview_disclosure_schemas.py tests/test_marketplace_commitment_push.py
+  tests/test_preview_lifecycle.py tests/test_preview_build_routes.py
+  tests/test_vz_publish_proxy.py tests/test_dataset_publish_signed_proxy.py
+  tests/test_s804_disclosure_dataset_detail.py tests/test_preview_fixture_parity.py
+  tests/test_preview_producer_evidence.py --tb=short` — **542 passed**.
+- Touched frontend suites: `rtk npm test -- --run
+  src/components/CommitmentPreviewBuilder.test.tsx
+  src/components/PreviewOriginReview.test.tsx` — **2 files, 15 tests passed**.
+- Frontend typecheck: `rtk npx tsc --noEmit` — **passed**.
+- Ruff on all changed Python modules/tests: `rtk ruff check ...` — **passed,
+  no issues**.
+- Fixture parity: `rtk python scripts/check_preview_fixture_parity.py` — **15
+  pinned files passed**.
+- Independent JavaScript verifier: `rtk node
+  tests/preview_differential_check.cjs` — **passed** (8 accepted digests and 6
+  required rejections).
+- `rtk git diff --check` — **passed**.
+- Repository-wide frontend ESLint was also sampled and remains red on 10
+  pre-existing errors in unrelated files (`portalApi.ts`, UI primitives,
+  `usePortalAuth.ts`, `ArtifactsPage.tsx`, `SqlQuery.tsx`, and
+  `tailwind.config.ts`). Neither touched component produced a lint error.
