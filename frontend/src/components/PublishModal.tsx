@@ -635,13 +635,14 @@ const PublishModal = ({ open, onOpenChange, dataset, onPublishSuccess }: Publish
 export default PublishModal;
 
 // Directory publication uses the stored seller-selected members, never row previews.
-export function DirectoryPublishControl({ datasetId, publishPayload, disclosurePayload, disabled, sampleCount, onPublished, onListingPublished }: {
+export function DirectoryPublishControl({ datasetId, publishPayload, disclosurePayload, disabled, sampleCount, onPublished, onListingPublished, onBusyChange }: {
   datasetId: string;
   publishPayload: Record<string, unknown>;
   disclosurePayload: Record<string, unknown> | null;
   disabled: boolean;
   sampleCount: number;
-  onPublished: (listingId: string) => void;
+  onPublished: (listingId: string, marketplaceUrl?: string) => void;
+  onBusyChange?: (busy: boolean) => void;
   onListingPublished?: (listingId: string) => void;
 }) {
   const { apiKey } = useAuth();
@@ -650,7 +651,7 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
   const [error, setError] = useState("");
   const [published, setPublished] = useState(false);
   const [shareSamples, setShareSamples] = useState(sampleCount > 0);
-  const [snapshotRetry, setSnapshotRetry] = useState<{ listingId: string; payload: Record<string, unknown> } | null>(null);
+  const [snapshotRetry, setSnapshotRetry] = useState<{ listingId: string; marketplaceUrl?: string; payload: Record<string, unknown> } | null>(null);
   const send = async (path: string, payload: Record<string, unknown>) => {
     const response = await fetch(`${getApiUrl()}/api${path}`, {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: apiKey ? `Bearer ${apiKey}` : "" },
@@ -669,7 +670,7 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
   };
   const publish = async () => {
     if (busy || !disclosurePayload) return;
-    setBusy(true); setError("");
+    setBusy(true); onBusyChange?.(true); setError("");
     try {
       let retry = snapshotRetry;
       if (!retry) {
@@ -677,15 +678,15 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
         if (result.status === "pending_members") { setStatus("pending_members"); return; }
         if (result.status !== "published") throw new Error(result.error || `Version ${result.status}; publication is not active.`);
         if (!result.listing_id) throw new Error("ai.market did not return a listing_id.");
-        retry = { listingId: result.listing_id, payload: { ...disclosurePayload,
+        retry = { listingId: result.listing_id, marketplaceUrl: result.marketplace_url, payload: { ...disclosurePayload,
           dataset_id: datasetId, sample_decision: shareSamples && sampleCount ? "member_files" : "none", approved_sample: null } };
         setSnapshotRetry(retry);
         onListingPublished?.(retry.listingId);
       }
       await send(`/marketplace/listings/${encodeURIComponent(retry.listingId)}/disclosure-snapshots`, retry.payload);
-      setSnapshotRetry(null); setPublished(true); setStatus("published"); onPublished(retry.listingId);
+      setSnapshotRetry(null); setPublished(true); setStatus("published"); onPublished(retry.listingId, retry.marketplaceUrl);
     } catch (e) { setError(e instanceof Error ? e.message : "Publish failed"); }
-    finally { setBusy(false); }
+    finally { setBusy(false); onBusyChange?.(false); }
   };
   return <div className="space-y-2">
     <p>{sampleCount} seller-selected sample files. Sample files are also part of the purchased set.</p>

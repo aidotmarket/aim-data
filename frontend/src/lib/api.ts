@@ -531,6 +531,9 @@ export interface ReadyResponse {
 }
 
 export interface PIIScanResponse {
+  scope?: string;
+  reason?: string;
+  privacy_score?: number | null;
   dataset_id: string;
   scan_status: string;
   overall_risk: string;

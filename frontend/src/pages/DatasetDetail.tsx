@@ -373,10 +373,12 @@ export function ListingPreparation({
 
   const datasetReady = dataset.status === "preview_ready";
   const flaggedColumns = piiScan?.column_results ?? [];
-  const piiState = piiScanState === "running" ? "running" : getPiiSignal(piiScan, piiFailed);
   const allFlaggedColumnsSaved = flaggedColumns.length === 0 || flaggedColumns.every((column) => Boolean(piiActions[column.column]));
-  const canContinuePrivacy = Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
-  const persistedPrivacySatisfied = privacyAttested || (Boolean(piiScan) && allFlaggedColumnsSaved);
+  const directoryScanFailed = dataset.file_type === "directory" && ["timeout", "failed"].includes(piiScan?.scan_status ?? "");
+  const scanFailed = piiFailed || directoryScanFailed;
+  const piiState = piiScanState === "running" ? "running" : getPiiSignal(piiScan, scanFailed);
+  const canContinuePrivacy = !directoryScanFailed && Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
+  const persistedPrivacySatisfied = !directoryScanFailed && (privacyAttested || (Boolean(piiScan) && allFlaggedColumnsSaved));
   const draftListingId = initialDraftListingId ?? metadata?.listing_id ?? null;
 
   useEffect(() => {
@@ -630,6 +632,7 @@ export function ListingPreparation({
 
   const completePublication = async (listingId: string, listingUrl = publishedListingUrl) => {
     setPublishedListingId(listingId);
+    setPublishedListingUrl(listingUrl);
     setRetrySnapshotPayload(null);
     setDisclosureFailure(null);
     setPublishComplete(true);
@@ -914,9 +917,12 @@ export function ListingPreparation({
                   Running privacy scan
                 </Badge>
               )}
-              {piiFailed && <Badge variant="secondary">Scan failed</Badge>}
-              {piiScan && flaggedColumns.length === 0 && <Badge className="bg-haven-success/20 text-haven-success border-haven-success/30">No personal data detected</Badge>}
+              {scanFailed && <Badge variant="secondary">Scan failed</Badge>}
+              {piiScan && !directoryScanFailed && flaggedColumns.length === 0 && <Badge className="bg-haven-success/20 text-haven-success border-haven-success/30">No personal data detected</Badge>}
             </div>
+
+            {dataset.file_type === "directory" && piiScan?.scope && <p className="text-sm text-muted-foreground">{piiScan.scope}</p>}
+            {scanFailed && piiScan?.reason && <p role="alert">{piiScan.reason}</p>}
 
             {flaggedColumns.length > 0 && (
               <div className="space-y-3">
@@ -1214,7 +1220,8 @@ export function ListingPreparation({
                   approvedSample: null, confirmed: true, sourcePublishOperationId: newPublishOperationId() }),
               } : null}
               onListingPublished={setPublishedListingId}
-              onPublished={(listingId) => { void completePublication(listingId); }}
+              onBusyChange={setPublishing}
+              onPublished={(listingId, marketplaceUrl) => { void completePublication(listingId, marketplaceUrl); }}
             /> : <Button
               onClick={handlePublish}
               disabled={Boolean(publishedListingId) || publishing || !finalDisclosureConfirmed || !approvedMetadataDraft}
@@ -1240,6 +1247,8 @@ export function ListingPreparation({
 
 type DirectoryProfile = {
   status: string; summary?: string; reason?: string; profiled_bytes?: number;
+  row_count?: number; column_count?: number; schema_count?: number;
+  profiled_members?: number; total_data_members?: number;
   members: Record<string, { status: string; reason?: string }>;
 };
 
@@ -1480,6 +1489,12 @@ const DatasetDetail = () => {
 
   // Convert API dataset to frontend format
   const dataset = mapApiDatasetToFrontend(apiDataset);
+  const isDirectory = apiDataset.file_type === "directory";
+  const directoryProfile = (apiDataset.metadata as unknown as { directory_profile?: DirectoryProfile })?.directory_profile;
+  if (isDirectory) {
+    dataset.rows = directoryProfile?.row_count ?? 0;
+    dataset.columns = directoryProfile?.column_count ?? 0;
+  }
   const Icon = getFileIcon(dataset.type);
 
   // Build schema from API data
@@ -1699,7 +1714,7 @@ const DatasetDetail = () => {
         <TabsList className="bg-secondary">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="schema">Schema</TabsTrigger>
-          <TabsTrigger value="sample">Sample Data</TabsTrigger>
+          {!isDirectory && <TabsTrigger value="sample">Sample Data</TabsTrigger>}
           <TabsTrigger value="statistics">Statistics</TabsTrigger>
           <TabsTrigger value="readiness">Readiness</TabsTrigger>
           {hasFeature("marketplace") && datasetIsPublished && (
@@ -1709,6 +1724,7 @@ const DatasetDetail = () => {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
+          {isDirectory && <p>Profiled {directoryProfile?.profiled_members ?? 0} of {directoryProfile?.total_data_members ?? apiDataset.metadata?.directory?.data_member_count ?? 0} files; {directoryProfile?.schema_count ?? 0} schemas.</p>}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <Card className="bg-card border-border">
               <CardContent className="p-4">
@@ -2047,7 +2063,7 @@ const DatasetDetail = () => {
 
         {/* Readiness Tab — BQ-VZ-DATA-READINESS */}
         <TabsContent value="readiness" className="space-y-6">
-          {readiness ? (
+          {isDirectory ? <p>Readiness is assessed per member; see the member table</p> : readiness ? (
             <>
               {/* Quality Scorecard */}
               {readiness.quality_scorecard && (
