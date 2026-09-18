@@ -16,6 +16,7 @@ from app.services.pii_service import (
     DEFAULT_SAMPLE_SIZE,
 )
 from app.auth.api_key_auth import get_current_user, AuthenticatedUser
+from app.config import settings
 from app.services.processing_service import get_processing_service, ProcessingService, ProcessingStatus
 from app.services.serial_metering import metered, MeterDecision
 
@@ -125,7 +126,7 @@ async def scan_dataset(
     if not record:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     
-    if record.file_type == "directory":
+    if settings.multi_file_datasets_enabled and record.file_type == "directory":
         return _directory_pii_result(record, dataset_id)
 
     if record.status != ProcessingStatus.PREVIEW_READY:
@@ -192,7 +193,7 @@ async def get_pii_scan_result(
     if not record:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     
-    if record.file_type == "directory":
+    if settings.multi_file_datasets_enabled and record.file_type == "directory":
         return _directory_pii_result(record, dataset_id)
 
     pii_scan = record.metadata.get("pii_scan")

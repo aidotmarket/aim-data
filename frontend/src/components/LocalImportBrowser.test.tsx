@@ -24,10 +24,10 @@ async function startImport(beforeStart = () => {}) {
   const onImportingChange = vi.fn();
   const onClose = vi.fn();
   render(<LocalImportBrowser onSuccess={onSuccess} onImportingChange={onImportingChange} onClose={onClose} />);
-  expect(await screen.findByText("With folder datasets enabled, the whole current folder becomes one dataset (selection is ignored)")).toBeInTheDocument();
+  expect(await screen.findByText("If folder datasets are enabled on this install, the whole current folder becomes one dataset (selection is ignored).")).toBeInTheDocument();
   fireEvent.click(await screen.findByRole("button", { name: "Select All" }));
   beforeStart();
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import Selected (2)" })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import current folder (2 files)" })); });
   return { onSuccess, onImportingChange, onClose };
 }
 
@@ -40,6 +40,19 @@ describe("folder import response wiring", () => {
     expect(screen.getByText(/Add files to/)).toHaveTextContent(
       "Add files to ./import (next to your compose file) on your machine,or set HOST_IMPORT_DIR in your .env file."
     );
+  });
+
+  it("imports every file in the current folder when no selection is made", async () => {
+    vi.spyOn(importApi, "start").mockResolvedValue({
+      dataset_id: "directory-1", status: "complete", total_files: 2, total_bytes: 8,
+    });
+    render(<LocalImportBrowser />);
+
+    const button = await screen.findByRole("button", { name: "Import current folder (2 files)" });
+    expect(button).toBeEnabled();
+    await act(async () => { fireEvent.click(button); });
+
+    expect(importApi.start).toHaveBeenCalledWith("/import/", ["a.csv", "b.csv"]);
   });
 
   it("completes a direct directory response without polling and triggers card refresh", async () => {
@@ -69,7 +82,7 @@ describe("folder import response wiring", () => {
     render(<LocalImportBrowser />);
     fireEvent.click(await screen.findByRole("button", { name: "subset" }));
     fireEvent.click(await screen.findByRole("button", { name: "Select All" }));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import Selected (1)" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import current folder (1 file)" })); });
     expect(importApi.start).toHaveBeenCalledWith("/import/subset/", ["a.csv"]);
     if (mode === "directory") {
       expect(toast.success).toHaveBeenCalledWith("Imported folder subset as one dataset (1 file)");
@@ -103,7 +116,7 @@ describe("folder import response wiring", () => {
     vi.spyOn(importApi, "start").mockRejectedValue(new Error(message));
     const callbacks = await startImport();
     expect(screen.getByText(message)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Import Selected (2)" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Import current folder (2 files)" })).toBeEnabled();
     expect(importApi.getStatus).not.toHaveBeenCalled();
     expect(callbacks.onSuccess).not.toHaveBeenCalled();
     expect(callbacks.onImportingChange.mock.calls).toEqual([[true], [false]]);

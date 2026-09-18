@@ -12,7 +12,8 @@ from app.services.processing_service import ProcessingStatus
 
 
 @pytest.fixture
-def scan_client():
+def scan_client(monkeypatch):
+    monkeypatch.setattr(pii.settings, "multi_file_datasets_enabled", True)
     record = SimpleNamespace(
         file_type="directory", original_filename="folder", processed_path=None,
         status=ProcessingStatus.PREVIEW_READY, metadata={},
@@ -53,6 +54,19 @@ def test_directory_profile_not_run_is_named_conflict(scan_client, method):
     response = getattr(client, method)("/api/pii/scan/dir-1")
     assert response.status_code == 409
     assert response.json()["detail"].startswith("directory_pii_not_ready:")
+    scanner.scan_structured.assert_not_called()
+
+
+def test_directory_flag_off_preserves_legacy_scan_behaviour(scan_client, monkeypatch):
+    client, _, _, scanner = scan_client
+    monkeypatch.setattr(pii.settings, "multi_file_datasets_enabled", False)
+
+    get_response = client.get("/api/pii/scan/dir-1")
+    post_response = client.post("/api/pii/scan/dir-1")
+
+    assert get_response.status_code == 404
+    assert post_response.status_code == 500
+    assert post_response.json()["detail"] == "Processed file not found"
     scanner.scan_structured.assert_not_called()
 
 
