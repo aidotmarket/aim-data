@@ -4,19 +4,19 @@
   "files": [
     {
       "path": "approval-candidate.json",
-      "sha256": "4d2467cb398c4d124ea69490b745c48b89c40dedcdc98cab8f24a2b087a3d5f1"
+      "sha256": "13aa0642de7c153d3044f039aa715c9e6b4bda09f410048e8deccce325dbf17a"
     },
     {
       "path": "build-receipt.json",
-      "sha256": "5222d70940dc697b56425a810fe5fe721b750f50b969f870701448889dfb45bb"
+      "sha256": "88713156e87f2d57ad7dcc03871074843c3a044bc635c4ca35f7953dee022daf"
     },
     {
       "path": "commitment.json",
-      "sha256": "27d3e96eb5fde0e71abed057d7d2f9aa6c27e776b9ca660cbe3e261e8024faa2"
+      "sha256": "fde846ebacc3ed5ea8af41fc0a2182093043830689ebb7bc23317eec28cfa172"
     },
     {
       "path": "expected-platform-records.json",
-      "sha256": "49af2f970b993b52db44fbdd4c25e07e2377b7ce9706393bceb356bd4e65f87f"
+      "sha256": "f13986895b6d908a97d383c28980265ee7c8831d4a5c05ec76b7280f9638bb1f"
     },
     {
       "path": "hosting-receipts.json",
@@ -28,7 +28,7 @@
     },
     {
       "path": "proofs.json",
-      "sha256": "2eb2a3211bcc4ca65fcfac86ca93519c7022f942dd6788403efaa82afbbf8fd4"
+      "sha256": "98185c5e23ffb9c9a97570d7636700fb314fa736f8dda12e2ee65a11970bdf98"
     },
     {
       "path": "publication.json",
@@ -36,7 +36,7 @@
     },
     {
       "path": "refresh-candidate.json",
-      "sha256": "e2d45041316e9b51a642406e63a93a8091adb11877ebce0887912d842488be77"
+      "sha256": "255eaaf8a3a05f989f2e97704a1b2a333d646df0dc0eacb1a991639d8a2f7203"
     },
     {
       "path": "registration-readback.json",
@@ -56,11 +56,11 @@
     },
     {
       "path": "signing-preimages.json",
-      "sha256": "994a09a68d4966e5bb9e8ddebc424162df0f0dc23a5921dc388d61ab8fd6c5d3"
+      "sha256": "2455df4b83ca1f94d919523b8d6d52fff3fac1d20af4d6262f098da1c5c1a6ab"
     },
     {
       "path": "supersede-candidate.json",
-      "sha256": "ea73c5aea0d07418095a85aaa08eaabf4859bbd5e8c838d5ca827df192d61147"
+      "sha256": "8a4fe39670ffb5b9851c75f8106667daaff910a8cf37ed048a001c46b6152aa8"
     },
     {
       "path": "synthetic-provenance.json",
