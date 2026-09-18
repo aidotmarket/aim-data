@@ -1,0 +1,26 @@
+S1717 UI wiring R3 focused validation
+Starting head: 88922047376ff9ce49a16aeabec0bd16b1717dcf
+
+Frontend command (run from frontend/):
+rtk npm test -- src/pages/DatasetDetail.test.tsx src/components/LocalImportBrowser.test.tsx
+Result: 2 files passed; 45 tests passed (DatasetDetail 38, LocalImportBrowser 7).
+
+Backend command (run from the checkout root):
+rtk proxy /tmp/s1717-ui-backend-venv/bin/python -m pytest -q tests/test_pii_directory.py tests/test_directory_import.py --tb=short --show-capture=no
+Result: 15 tests passed (PII directory 12, directory import 3); 4 dependency/deprecation warnings.
+
+Build command (run from frontend/):
+rtk npm run build
+Result: passed; inherited Browserslist freshness and bundle-size warnings only.
+
+Lint parity commands (run once in the branch frontend/ and once in /private/tmp/s1717-ui-wiring-base/frontend):
+rtk proxy zsh -o pipefail -c 'npm run lint -- --format stylish |& tail -40'
+Result in both trees: 10 errors and 25 warnings.
+
+Typecheck parity command (run once in each frontend directory above):
+rtk proxy zsh -o pipefail -c 'npx tsc --noEmit -p tsconfig.app.json 2>&1 | sed -E "s/\([0-9]+,[0-9]+\)/()/g" | sort | shasum -a 256 | tail -40'
+Result in both trees: exit 2; 36 inherited diagnostics; normalized SHA-256 215dc15a921a5a63e5ae5e0da74fc58d08a9a5b65548f307389a3ba3e93fce2b.
+
+Whitespace command (run from the checkout root):
+rtk git diff --check
+Result: passed.

@@ -128,18 +128,9 @@ Implementation commits: `4895bc3` (stored PII routes), `effa371` (folder import)
 This run used **Node v25.3.0**, Vitest 3.2.4 and Python 3.12.12 (the initial
 report's Node v25.6.0 describes the earlier run, not this fold).
 
-| Check | R1 result |
-| --- | --- |
-| `DatasetDetail.test.tsx` | 30 passed |
-| `LocalImportBrowser.test.tsx` | 5 passed |
-| `tests/test_directory_import.py` | 3 passed |
-| `tests/test_directory_registration.py` | 12 passed |
-| `tests/test_pii_directory.py` | 11 passed |
-| Backend combined | 26 passed, 4 dependency/deprecation warnings |
-| Frontend build | Passed; existing Browserslist/bundle-size warnings |
-| Lint against untouched base `119f643b5fd25dc8fd61557649371c9832ca33c5` | Identical 10 errors and 25 warnings |
-| Typecheck against that base | Identical 36 errors |
-| Whitespace checks | `git diff --check` and starting-head-to-final diff pass |
+The historical R1 counts are superseded by the single consolidated final table
+in the R3 fold section below. R1 also covered 12 directory-registration tests,
+which were outside the narrower R2/R3 command and are not added to those totals.
 
 The earlier **15 passed** backend result was **3 import + 12 registration**,
 not 15 tests in one module. Lint diagnostics were compared by relative file,
@@ -252,16 +243,77 @@ Implementation commits: `217be08` (directory publication/privacy state) and
 
 ### R2 validation
 
-| Check | Result |
-| --- | --- |
-| `DatasetDetail.test.tsx` and `LocalImportBrowser.test.tsx` | **42 passed** across 2 files (36 + 6); existing React `act(...)` warnings only |
-| `tests/test_pii_directory.py` and `tests/test_directory_import.py` | **14 passed**, 4 dependency/deprecation warnings |
-| Frontend build | Passed; inherited Browserslist freshness and bundle-size warnings |
-| Lint versus untouched base `119f643b5fd25dc8fd61557649371c9832ca33c5` | Exact count parity: **10 errors, 25 warnings** |
-| Typecheck versus the same base | Normalized diagnostics identical; the inherited nonzero result is unchanged |
-| `git diff --check` | Passed |
+The R2 snapshot was 42 focused frontend tests and 14 focused backend tests.
+Those historical counts are superseded by the single consolidated final table
+in the R3 fold section below.
 
 The authoritative backend run used the report's existing isolated Python 3.12
 environment at `/tmp/s1717-ui-backend-venv`. The ambient Python 3.13 environment
 remains unsuitable because it lacks pinned application dependencies and has an
 incompatible Starlette/httpx pairing; no host dependencies were changed.
+
+## R3 fold
+
+Starting head: `88922047376ff9ce49a16aeabec0bd16b1717dcf`; existing
+`build/bq-multi-file-datasets-s1717-ui-wiring` branch. No branch creation,
+rebase, spec reading, PR, deployment, or unrelated changes.
+
+- **GLM MEDIUM / DeepSeek F2:** member mutation and parent refresh now have
+  distinct failure paths; the saved-but-stale banner and retry live at
+  `frontend/src/pages/DatasetDetail.tsx:1293-1344`, while member work or stale
+  state blocks publication at `frontend/src/pages/DatasetDetail.tsx:1235-1238`.
+- **GLM LOW-2:** successful POST/GET scan paths clear the 409 state and dataset
+  changes reset it at `frontend/src/pages/DatasetDetail.tsx:401-438`; the
+  completed transition regression is at
+  `frontend/src/pages/DatasetDetail.test.tsx:449`.
+- **GLM LOW-3:** `member_files` is part of the proxy request union at
+  `frontend/src/lib/api.ts:679`, and directory publication uses concrete proxy
+  and marketplace request types at `frontend/src/components/PublishModal.tsx:648-649`.
+- **DeepSeek F1:** a null directory privacy score produces a neutral step state
+  and “Not assessed” copy at `frontend/src/pages/DatasetDetail.tsx:382-383` and
+  `frontend/src/pages/DatasetDetail.tsx:879`.
+- **DeepSeek F3:** both directory PII branches are conditional on the feature
+  flag at `app/routers/pii.py:129` and `app/routers/pii.py:196`; flag-off legacy
+  404/500 behavior is covered at `tests/test_pii_directory.py:60`.
+- **DeepSeek F4:** the not-assessed badge excludes terminal directory failures
+  at `frontend/src/pages/DatasetDetail.tsx:937-948`.
+- **DeepSeek F6:** a zero-to-positive sample-count refresh preserves the seller's
+  unchecked choice at `frontend/src/components/PublishModal.tsx:661-664`; the
+  updated regression is at `frontend/src/pages/DatasetDetail.test.tsx:564`.
+- **GLM NIT / CC NIT-1:** Local Import can submit an unselected non-empty folder
+  with all filenames at `frontend/src/components/LocalImportBrowser.tsx:182-191`,
+  and the conditional install copy/current-folder button are at
+  `frontend/src/components/LocalImportBrowser.tsx:438-451`.
+- **CC NIT-2:** the directory 409 is mapped to seller guidance while retaining
+  its code at `frontend/src/pages/DatasetDetail.tsx:447`.
+- **CC NIT-3 / DeepSeek F5:** R1/R2 historical snapshots and R3 results are
+  reconciled into the one final table below; the durable command/result receipt
+  is `docs/reports/artifacts/s1717-r3-validation.txt:1`.
+
+Implementation commits: `9f30d06` (publication refresh and typed disclosure)
+and `576bbe7` (privacy flag parity and folder import).
+
+### Consolidated final validation
+
+| Check | Final R3 result |
+| --- | --- |
+| `DatasetDetail.test.tsx` | **38 passed** |
+| `LocalImportBrowser.test.tsx` | **7 passed** |
+| Focused frontend combined | **45 passed** across 2 files; existing React `act(...)` warnings only |
+| `tests/test_pii_directory.py` | **12 passed** |
+| `tests/test_directory_import.py` | **3 passed** |
+| Focused backend combined | **15 passed**; 4 dependency/deprecation warnings |
+| Frontend build | Passed; inherited Browserslist freshness and bundle-size warnings |
+| Lint versus untouched base `119f643b5fd25dc8fd61557649371c9832ca33c5` | Exact parity: **10 errors, 25 warnings** |
+| Typecheck versus the same base | Exact normalized parity: **36 inherited diagnostics**, SHA-256 `215dc15a921a5a63e5ae5e0da74fc58d08a9a5b65548f307389a3ba3e93fce2b` |
+| `git diff --check` | Passed |
+
+Durable artifact and exact reproducible commands:
+`docs/reports/artifacts/s1717-r3-validation.txt`.
+
+```sh
+# Run from frontend/:
+rtk npm test -- src/pages/DatasetDetail.test.tsx src/components/LocalImportBrowser.test.tsx
+# Run from the checkout root:
+rtk proxy /tmp/s1717-ui-backend-venv/bin/python -m pytest -q tests/test_pii_directory.py tests/test_directory_import.py --tb=short --show-capture=no
+```
