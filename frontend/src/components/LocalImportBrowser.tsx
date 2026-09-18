@@ -181,17 +181,23 @@ export function LocalImportBrowser({
   const handleImport = async () => {
     if (selectedFiles.size === 0) return;
 
-    const relativeBase = currentPath.slice(rootPath.length);
-    const filePaths = Array.from(selectedFiles).map(
-      (name) => relativeBase + name
-    );
+    const filePaths = Array.from(selectedFiles);
 
     setPhase("importing");
     onImportingChange?.(true);
     setImportError(null);
 
     try {
-      const res = await importApi.start(rootPath, filePaths);
+      const res = await importApi.start(currentPath, filePaths);
+      if ("dataset_id" in res) {
+        setResults([{ file: currentPath, dataset_id: res.dataset_id, status: res.status }]);
+        setPhase("complete");
+        onImportingChange?.(false);
+        const folderName = currentPath.replace(/\/$/, "").split("/").pop() || currentPath;
+        toast.success(`Imported folder ${folderName} as one dataset (${res.total_files} ${res.total_files === 1 ? "file" : "files"})`);
+        onSuccess?.();
+        return;
+      }
       setJobId(res.job_id);
 
       // Start polling
@@ -427,19 +433,24 @@ export function LocalImportBrowser({
         )}
 
         {/* Footer actions */}
-        <div className="flex items-center justify-between pt-1">
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            disabled={selectedFiles.size === 0}
-            onClick={handleImport}
-            className="gap-2"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Import Selected ({selectedFiles.size})
-          </Button>
+        <div className="space-y-2 pt-1">
+          <p className="text-xs text-muted-foreground">
+            If folder datasets are enabled on this install, the whole current folder becomes one dataset regardless of the selection.
+          </p>
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={selectedFiles.size === 0}
+              onClick={handleImport}
+              className="gap-2"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Import selected ({selectedFiles.size})
+            </Button>
+          </div>
         </div>
       </div>
     );

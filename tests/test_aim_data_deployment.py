@@ -29,6 +29,16 @@ def test_aim_data_compose_yaml_is_valid():
     assert "volumes" in data
 
 
+def test_aim_data_compose_forwards_multi_file_datasets_flag_default_off():
+    data = yaml.safe_load(COMPOSE_FILE.read_text())
+    env = data["services"]["app"]["environment"]
+
+    assert (
+        "AIM_DATA_MULTI_FILE_DATASETS_ENABLED=${AIM_DATA_MULTI_FILE_DATASETS_ENABLED:-false}"
+        in env
+    )
+
+
 def test_aim_data_compose_uses_aim_data_image_and_env():
     """AIM Data deploys the AIM Data image with channel config."""
     data = yaml.safe_load(COMPOSE_FILE.read_text())

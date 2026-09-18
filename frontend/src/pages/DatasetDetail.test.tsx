@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { datasetsApi, marketplaceApi, previewBuildApi, piiApi, type ApiDataset, type DatasetListingMetadata, type PIIScanResponse } from "@/lib/api";
@@ -355,10 +355,15 @@ describe("directory members", () => {
       is_sample: false, status: "current" as const, reason: null };
     const members = vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [row], total: 101, page: 1, page_size: 100, editable: true });
     const patch = vi.spyOn(datasetsApi, "patchMember").mockResolvedValue(row);
-    render(<DirectoryMembers dataset={{ ...dataset(), file_type: "directory" }} />);
+    const refreshed = { ...dataset(), file_type: "directory", metadata: { ...dataset().metadata,
+      directory: { member_count: 101, sample_member_count: 1, data_member_count: 1, total_data_bytes: 4, manifest_hash: "0".repeat(64) } } } as ApiDataset;
+    vi.spyOn(datasetsApi, "get").mockResolvedValue(refreshed);
+    const onDatasetRefresh = vi.fn();
+    render(<DirectoryMembers dataset={{ ...dataset(), file_type: "directory" }} onDatasetRefresh={onDatasetRefresh} />);
     await screen.findByText("data.csv");
     fireEvent.click(screen.getByLabelText("Sample data.csv"));
     await waitFor(() => expect(patch).toHaveBeenCalledWith("ds-1", 0, { is_sample: true }));
+    expect(onDatasetRefresh).toHaveBeenCalledWith(refreshed);
     await screen.findByText("data.csv");
     fireEvent.change(screen.getByLabelText("Role for data.csv"), { target: { value: "documentation" } });
     await waitFor(() => expect(patch).toHaveBeenCalledWith("ds-1", 0, { role: "documentation" }));
@@ -386,6 +391,77 @@ describe("directory members", () => {
     render(<DirectoryMembers dataset={dataset()} />);
     await screen.findByText("Published member choices are frozen.");
     expect(screen.getByLabelText("Role for README.md")).toBeDisabled();
+  });
+
+  it("refreshes the parent sample count after deselection", async () => {
+    const row = { dataset_id: "ds-1", index: 0, relative_path: "data.csv", size_bytes: 4,
+      sha256: "0".repeat(64), detected_type: "csv", role: "data" as const,
+      is_sample: true, status: "current" as const, reason: null };
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [row], total: 1, page: 1, page_size: 100, editable: true });
+    vi.spyOn(datasetsApi, "patchMember").mockResolvedValue({ ...row, is_sample: false });
+    const refreshed = { ...dataset(), file_type: "directory", metadata: { ...dataset().metadata,
+      directory: { member_count: 1, sample_member_count: 0, data_member_count: 1, total_data_bytes: 4, manifest_hash: "0".repeat(64) } } } as ApiDataset;
+    vi.spyOn(datasetsApi, "get").mockResolvedValue(refreshed);
+    const onDatasetRefresh = vi.fn();
+    render(<DirectoryMembers dataset={{ ...dataset(), file_type: "directory" }} onDatasetRefresh={onDatasetRefresh} />);
+    fireEvent.click(await screen.findByLabelText("Sample data.csv"));
+    await waitFor(() => expect(datasetsApi.patchMember).toHaveBeenCalledWith("ds-1", 0, { is_sample: false }));
+    expect(onDatasetRefresh).toHaveBeenCalledWith(refreshed);
+  });
+});
+
+describe("directory privacy gate", () => {
+  function directoryFixture(): ApiDataset {
+    return { ...dataset(), file_type: "directory", metadata: { ...dataset().metadata,
+      directory: { member_count: 3, sample_member_count: 0, data_member_count: 3, total_data_bytes: 12, manifest_hash: "0".repeat(64) },
+      directory_profile: { status: "completed", profiled_members: 0, total_data_members: 3, members: {} },
+    } } as ApiDataset;
+  }
+
+  it("shows the named 409 reason without offering a directory rescan", async () => {
+    vi.spyOn(piiApi, "getConfig").mockResolvedValue({ dataset_id: "ds-1", column_actions: {}, privacy_attested: false, updated_at: null });
+    vi.spyOn(piiApi, "getScan").mockRejectedValue(new Error("directory_pii_not_ready: Directory PII profiling has not run yet."));
+    const scan = vi.spyOn(piiApi, "scan");
+    renderPreparation(directoryFixture());
+    expect(await screen.findByRole("alert")).toHaveTextContent("Privacy profiling has not run for this folder yet. Re-run processing, then return here. (directory_pii_not_ready)");
+    expect(screen.getByRole("button", { name: "Continue to metadata" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Run scan again" })).not.toBeInTheDocument();
+    expect(scan).not.toHaveBeenCalled();
+  });
+
+  it("blocks an unrecognized stored directory scan status", async () => {
+    vi.spyOn(piiApi, "getConfig").mockResolvedValue({ dataset_id: "ds-1", column_actions: {}, privacy_attested: false, updated_at: null });
+    vi.spyOn(piiApi, "getScan").mockResolvedValue({ ...cleanScan, scan_status: "whatever" });
+    renderPreparation(directoryFixture());
+    expect(await screen.findByRole("button", { name: "Continue to metadata" })).toBeDisabled();
+  });
+
+  it("renders a neutral assessment when zero directory members were profiled", async () => {
+    vi.spyOn(piiApi, "getConfig").mockResolvedValue({ dataset_id: "ds-1", column_actions: {}, privacy_attested: false, updated_at: null });
+    vi.spyOn(piiApi, "getScan").mockResolvedValue({ ...cleanScan, privacy_score: null });
+    renderPreparation(directoryFixture());
+    expect(await screen.findByText("Privacy scan covered 0 of 3 members — not assessed")).toBeInTheDocument();
+    expect(screen.getByText("Not assessed")).toBeInTheDocument();
+    expect(screen.queryByText("Passed")).not.toBeInTheDocument();
+    expect(screen.queryByText("No personal data detected")).not.toBeInTheDocument();
+  });
+
+  it("clears a directory not-ready alert after a later stored scan succeeds", async () => {
+    vi.spyOn(piiApi, "getConfig").mockResolvedValue({ dataset_id: "ds-1", column_actions: {}, privacy_attested: false, updated_at: null });
+    vi.spyOn(piiApi, "getScan")
+      .mockRejectedValueOnce(new Error("directory_pii_not_ready: Directory PII profiling has not run yet."))
+      .mockResolvedValueOnce(cleanScan);
+    const first = directoryFixture();
+    const view = renderPreparation(first);
+    expect(await screen.findByRole("alert")).toHaveTextContent("directory_pii_not_ready");
+
+    const next = { ...first, id: "ds-2" };
+    view.rerender(<MemoryRouter><MarketplaceProvider><MarketplaceProbe /><ListingPreparation
+      dataset={next} draftListingId={null} backPath="/datasets" onDelete={vi.fn()} isDeleting={false}
+    /></MarketplaceProvider></MemoryRouter>);
+
+    await waitFor(() => expect(piiApi.getScan).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/directory_pii_not_ready/)).not.toBeInTheDocument();
   });
 });
 
@@ -422,7 +498,14 @@ describe("directory publish control", () => {
   });
 
   const props = { datasetId: "directory-1", publishPayload: { title: "Set", description: "Set", price_cents: 2500 },
-    disclosurePayload: { approved_fields: { title: "Set" }, source_publish_operation_id: "op-1" },
+    disclosurePayload: {
+      approved_fields: { title: "Set", description: "Set", category: "other", tags: [], schema: { columns: [] },
+        data_format: "directory", source_row_count: null, source_column_count: null,
+        compliance_summary: {}, source_delivery_public_metadata: {} },
+      sample_decision: "none" as const, approved_sample: null,
+      ai_training_notification_ack: true, ai_training_notification_text: AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY,
+      license: "standard_marketplace", approval_source: "aim_channel" as const, source_publish_operation_id: "op-1",
+    },
     disabled: false, sampleCount: 2, onPublished: vi.fn() };
 
   it("accepts member_files without opening verification", async () => {
@@ -464,6 +547,30 @@ describe("directory publish control", () => {
     render(<DirectoryPublishControl {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("agent_upgrade_required: upgrade AIM Data to 1.24.0");
+  });
+
+  it("resets sample sharing when the refreshed count reaches zero", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-1" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    const view = render(<DirectoryPublishControl {...props} sampleCount={1} />);
+    view.rerender(<DirectoryPublishControl {...props} sampleCount={0} />);
+    expect(screen.queryByRole("checkbox", { name: "Publish selected sample files for free download" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    await screen.findByRole("button", { name: "Published" });
+    expect(JSON.parse(fetcher.mock.calls[1][1].body).sample_decision).toBe("none");
+  });
+
+  it("requires an explicit sample-sharing opt-in when the refreshed count rises from zero", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-1" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    const view = render(<DirectoryPublishControl {...props} sampleCount={0} />);
+    view.rerender(<DirectoryPublishControl {...props} sampleCount={1} />);
+    expect(screen.getByRole("checkbox", { name: "Publish selected sample files for free download" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    await screen.findByRole("button", { name: "Published" });
+    expect(JSON.parse(fetcher.mock.calls[1][1].body).sample_decision).toBe("none");
   });
 });
 
@@ -528,5 +635,214 @@ describe("directory profile read states", () => {
     expect(screen.getByText("profiling run did not complete (stale)")).toBeInTheDocument();
     expect(screen.queryByText("Processing")).not.toBeInTheDocument();
     expect(screen.queryByText("Ready to list")).not.toBeInTheDocument();
+  });
+});
+
+
+describe("directory detail preparation wiring", () => {
+  async function openDirectory(scanStatus = "completed") {
+    const storedPii = scanStatus === "completed" ? {
+      scanned_at: "2026-09-18T00:00:00Z", total_rows: 1, rows_sampled: 1, total_columns: 1,
+      columns_with_pii: 0, columns_clean: 1, overall_risk: "none", privacy_score: 10,
+      column_results: [], clean_columns: ["document_content"], duration_seconds: 0.1,
+      entities_checked: ["EMAIL_ADDRESS"], scan_type: "text_content", total_blocks: 1, blocks_sampled: 1,
+      scope: "Bounded member previews only; not a whole-set clearance",
+    } : { status: scanStatus, reason: scanStatus === "timeout" ? "PROFILE_TIMEOUT_S=30" : "PII scan unavailable" };
+    const directory: ApiDataset = { ...dataset(), file_type: "directory", metadata: {
+      ...dataset().metadata, directory: { member_count: 2, sample_member_count: 1, data_member_count: 2, total_data_bytes: 8, manifest_hash: "0".repeat(64) },
+      ...{ directory_profile: { status: "completed", summary: "profiled on 1 of 2 files", members: {},
+        profiled_members: 1, total_data_members: 2, row_count: 1234, column_count: 7, schema_count: 2, pii: storedPii } },
+    } };
+    vi.spyOn(datasetsApi, "get").mockResolvedValue(directory);
+    vi.spyOn(datasetsApi, "members").mockResolvedValue({ members: [{
+      dataset_id: "ds-1", index: 0, relative_path: "data.csv", size_bytes: 4,
+      sha256: "0".repeat(64), detected_type: "csv", role: "data", is_sample: true,
+      status: "current", reason: null,
+    }], total: 2, page: 1, page_size: 100, editable: true });
+    vi.spyOn(piiApi, "getConfig").mockResolvedValue({
+      dataset_id: "ds-1", column_actions: {}, privacy_attested: false, updated_at: null,
+    });
+    // Exercise the real piiApi transport with the backend's directory response shape.
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      expect(String(url)).toContain("/api/pii/scan/ds-1");
+      return { ok: true, json: async () => ({
+        ...storedPii, dataset_id: "ds-1", filename: "folder", scan_status: scanStatus,
+        columns_scanned: scanStatus === "completed" ? 1 : 0, columns_with_pii: 0,
+        column_results: [], overall_risk: scanStatus === "completed" ? "none" : "unknown",
+        privacy_score: scanStatus === "completed" ? 10 : null,
+        scope: "Bounded member previews only; not a whole-set clearance",
+      }) };
+    }));
+    vi.spyOn(datasetsApi, "getListingMetadata").mockResolvedValue(listingMetadata);
+    render(<MemoryRouter initialEntries={["/datasets/ds-1"]}><MarketplaceProvider>
+      <MarketplaceProbe />
+      <Routes><Route path="/datasets/:id" element={<DatasetDetail />} /></Routes>
+    </MarketplaceProvider></MemoryRouter>);
+    expect(await screen.findByText("data.csv")).toBeInTheDocument();
+    const members = screen.getByRole("region", { name: "Directory members" });
+    expect(members.querySelector("table")).toBeInTheDocument();
+    expect(members.compareDocumentPosition(screen.getByText("Listing Flow")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("profiled on 1 of 2 files")).toBeInTheDocument();
+    expect(screen.getByText("Step 1: Privacy Review")).toBeInTheDocument();
+    expect(await screen.findByText("Bounded member previews only; not a whole-set clearance")).toBeInTheDocument();
+    if (scanStatus !== "completed") return directory;
+    const next = await screen.findByRole("button", { name: "Continue to metadata" });
+    await waitFor(() => expect(next).toBeEnabled());
+    fireEvent.click(next);
+    expect(await screen.findByText("Step 2: Metadata Review")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Accept all & continue" }));
+    expect(screen.getByText("Step 3: Listing Details and Disclosure")).toBeInTheDocument();
+    expect(screen.getByText("Disclosure summary")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Publish selected sample files for free download" })).toBeChecked();
+    const heading = screen.getByRole("heading", { name: "Optional: add a verified shape label" });
+    expect(heading).toHaveClass("border-t", "pt-6");
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY }));
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeEnabled();
+    return directory;
+  }
+
+  it("publishes from the page with directory payload and refreshes into the published view", async () => {
+    const directory = await openDirectory();
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-directory" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    vi.mocked(datasetsApi.get).mockResolvedValue({ ...directory, listing_id: "listing-directory" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    await screen.findByRole("tab", { name: "Marketplace" });
+    expect(screen.getByText("Published")).toBeInTheDocument();
+    expect(screen.getByText("1,234")).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.getByText("Profiled 1 of 2 files; 2 schemas.")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Sample Data" })).not.toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Readiness" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("Readiness is assessed per member; see the member table")).toBeInTheDocument();
+    expect(screen.queryByText("Loading readiness report...")).not.toBeInTheDocument();
+    expect(screen.getByTestId("context-published")).toHaveTextContent("true");
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual(expect.objectContaining({
+      vz_dataset_id: "ds-1", file_format: "directory", title: "Customer Spend",
+    }));
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual(expect.objectContaining({
+      dataset_id: "ds-1", sample_decision: "member_files", approved_sample: null,
+    }));
+    expect(screen.getByRole("region", { name: "Directory members" })).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Marketplace" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("Listing ID: listing-directory")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View Listing" })).toHaveAttribute("href", "https://ai.market/listing/listing-directory");
+  });
+
+  it.each(["timeout", "failed"])("shows the directory %s reason and blocks privacy continuation", async (status) => {
+    await openDirectory(status);
+    const reason = status === "timeout" ? "PROFILE_TIMEOUT_S=30" : "PII scan unavailable";
+    expect(screen.getByRole("alert")).toHaveTextContent(reason);
+    expect(screen.queryByText(/not assessed/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue to metadata" })).toBeDisabled();
+    expect(screen.queryByText("No personal data detected")).not.toBeInTheDocument();
+    expect(screen.queryByText("Step 2: Metadata Review")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh privacy result" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/api/pii/scan/ds-1"), expect.objectContaining({ method: "POST" })));
+    expect(screen.getByRole("button", { name: "Continue to metadata" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(reason);
+  });
+
+  it("locks shared fields during directory publication and uses the receiver URL", async () => {
+    await openDirectory();
+    let finishPublish!: (value: unknown) => void;
+    const fetcher = vi.fn()
+      .mockImplementationOnce(() => new Promise(resolve => { finishPublish = resolve; }))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    expect(screen.getByLabelText("Title")).toBeDisabled();
+    expect(screen.getByLabelText("Description")).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY })).toBeDisabled();
+    expect(screen.getByLabelText("Role for data.csv")).toBeDisabled();
+    expect(screen.getByLabelText("Sample data.csv")).toBeDisabled();
+    await act(async () => { finishPublish({ ok: true, json: async () => ({ status: "published",
+      listing_id: "listing-directory", marketplace_url: "https://receiver.example/datasets/directory" }) }); });
+    const completion = vi.mocked(toast).mock.calls.find(([value]) => value.title === "Dataset published to ai.market")?.[0];
+    expect(completion).toBeDefined();
+    render(<>{completion?.description}</>);
+    expect(screen.getByRole("link", { name: "View listing on ai.market" })).toHaveAttribute("href", "https://receiver.example/datasets/directory");
+    expect(screen.getByLabelText("Title")).toBeEnabled();
+    expect(screen.getByLabelText("Role for data.csv")).toBeEnabled();
+  });
+
+  it("blocks publication during a member save and until a failed parent refresh is retried", async () => {
+    const directory = await openDirectory();
+    const member = { dataset_id: "ds-1", index: 0, relative_path: "data.csv", size_bytes: 4,
+      sha256: "0".repeat(64), detected_type: "csv", role: "data" as const,
+      is_sample: false, status: "current" as const, reason: null };
+    let finishPatch!: () => void;
+    vi.spyOn(datasetsApi, "patchMember").mockImplementation(() => new Promise(resolve => {
+      finishPatch = () => resolve(member);
+    }));
+    vi.mocked(datasetsApi.get).mockRejectedValueOnce(new Error("refresh unavailable"));
+
+    fireEvent.click(screen.getByLabelText("Sample data.csv"));
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeDisabled();
+    await act(async () => { finishPatch(); });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Saved; refreshing dataset…");
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeDisabled();
+    expect(screen.queryByText(/Could not save member/)).not.toBeInTheDocument();
+
+    vi.mocked(datasetsApi.patchMember).mockRejectedValueOnce(new Error("write rejected"));
+    fireEvent.change(screen.getByLabelText("Role for data.csv"), { target: { value: "documentation" } });
+    expect(await screen.findByText("write rejected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeDisabled();
+
+    const refreshed = { ...directory, metadata: { ...directory.metadata, directory: {
+      ...directory.metadata?.directory, sample_member_count: 0,
+    } } } as ApiDataset;
+    vi.mocked(datasetsApi.get).mockResolvedValueOnce(refreshed);
+    fireEvent.click(screen.getByRole("button", { name: "Retry refresh" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeEnabled());
+    expect(screen.queryByText("Saved; refreshing dataset…")).not.toBeInTheDocument();
+    expect(screen.queryByText("write rejected")).not.toBeInTheDocument();
+
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-directory" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    await screen.findByRole("button", { name: "Published" });
+    expect(JSON.parse(fetcher.mock.calls[1][1].body).sample_decision).toBe("none");
+  });
+
+  it("keeps publication blocked after a rejected member write until refresh succeeds", async () => {
+    const directory = await openDirectory();
+    vi.spyOn(datasetsApi, "patchMember").mockRejectedValue(new Error("Could not save member"));
+
+    fireEvent.click(screen.getByLabelText("Sample data.csv"));
+    expect(await screen.findByText("Could not save member")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Retry refresh" })).toBeInTheDocument();
+
+    vi.mocked(datasetsApi.get).mockResolvedValueOnce(directory);
+    fireEvent.click(screen.getByRole("button", { name: "Retry refresh" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeEnabled());
+    expect(screen.queryByText("Could not save member")).not.toBeInTheDocument();
+  });
+
+  it("retains disclosure retry and does not republish when the snapshot fails", async () => {
+    await openDirectory();
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-directory", marketplace_url: "https://receiver.example/retry" }) })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ detail: "Snapshot unavailable" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "complete" }) });
+    vi.stubGlobal("fetch", fetcher);
+    fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Snapshot unavailable");
+    expect(screen.getByText("Listing published, disclosure snapshot pending")).toBeInTheDocument();
+    expect(datasetsApi.get).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Retry disclosure" }));
+    expect(await screen.findByRole("button", { name: "Published" })).toBeDisabled();
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher.mock.calls[2]).toEqual(fetcher.mock.calls[1]);
+    expect(screen.getByText("Complete")).toBeInTheDocument();
+    const completion = vi.mocked(toast).mock.calls.find(([value]) => value.title === "Dataset published to ai.market")?.[0];
+    render(<>{completion?.description}</>);
+    expect(screen.getByRole("link", { name: "View listing on ai.market" })).toHaveAttribute("href", "https://receiver.example/retry");
   });
 });

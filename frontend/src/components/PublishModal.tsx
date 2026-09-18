@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   AlertTriangle,
   Check,
@@ -29,7 +29,15 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type Dataset } from "@/types/mockDatasets";
-import { piiApi, getApiUrl, type PIIScanResponse } from "@/lib/api";
+import {
+  piiApi,
+  getApiUrl,
+  type DisclosureSnapshotProxyRequest,
+  type DisclosureSnapshotProxyResponse,
+  type MarketplacePublishRequest,
+  type MarketplacePublishResponse,
+  type PIIScanResponse,
+} from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 
@@ -635,13 +643,15 @@ const PublishModal = ({ open, onOpenChange, dataset, onPublishSuccess }: Publish
 export default PublishModal;
 
 // Directory publication uses the stored seller-selected members, never row previews.
-export function DirectoryPublishControl({ datasetId, publishPayload, disclosurePayload, disabled, sampleCount, onPublished }: {
+export function DirectoryPublishControl({ datasetId, publishPayload, disclosurePayload, disabled, sampleCount, onPublished, onListingPublished, onBusyChange }: {
   datasetId: string;
-  publishPayload: Record<string, unknown>;
-  disclosurePayload: Record<string, unknown> | null;
+  publishPayload: Omit<MarketplacePublishRequest, "vz_dataset_id">;
+  disclosurePayload: Omit<DisclosureSnapshotProxyRequest, "dataset_id"> | null;
   disabled: boolean;
   sampleCount: number;
-  onPublished: () => void;
+  onPublished: (listingId: string, marketplaceUrl?: string) => void;
+  onBusyChange?: (busy: boolean) => void;
+  onListingPublished?: (listingId: string) => void;
 }) {
   const { apiKey } = useAuth();
   const [busy, setBusy] = useState(false);
@@ -649,8 +659,11 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
   const [error, setError] = useState("");
   const [published, setPublished] = useState(false);
   const [shareSamples, setShareSamples] = useState(sampleCount > 0);
-  const [snapshotRetry, setSnapshotRetry] = useState<{ listingId: string; payload: Record<string, unknown> } | null>(null);
-  const send = async (path: string, payload: Record<string, unknown>) => {
+  const [snapshotRetry, setSnapshotRetry] = useState<{ listingId: string; marketplaceUrl?: string; payload: DisclosureSnapshotProxyRequest } | null>(null);
+  useEffect(() => {
+    setShareSamples(current => sampleCount === 0 ? false : current);
+  }, [sampleCount]);
+  const send = async <T,>(path: string, payload: object): Promise<T> => {
     const response = await fetch(`${getApiUrl()}/api${path}`, {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: apiKey ? `Bearer ${apiKey}` : "" },
       body: JSON.stringify(payload),
@@ -664,26 +677,28 @@ export function DirectoryPublishControl({ datasetId, publishPayload, disclosureP
           : JSON.stringify(detail ?? result.error ?? "Publish failed");
       throw new Error(message);
     }
-    return result;
+    return result as T;
   };
   const publish = async () => {
     if (busy || !disclosurePayload) return;
-    setBusy(true); setError("");
+    setBusy(true); onBusyChange?.(true); setError("");
     try {
       let retry = snapshotRetry;
       if (!retry) {
-        const result = await send("/marketplace/publish", { ...publishPayload, vz_dataset_id: datasetId });
+        const result = await send<MarketplacePublishResponse>("/marketplace/publish", { ...publishPayload, vz_dataset_id: datasetId });
         if (result.status === "pending_members") { setStatus("pending_members"); return; }
         if (result.status !== "published") throw new Error(result.error || `Version ${result.status}; publication is not active.`);
         if (!result.listing_id) throw new Error("ai.market did not return a listing_id.");
-        retry = { listingId: result.listing_id, payload: { ...disclosurePayload,
-          dataset_id: datasetId, sample_decision: shareSamples && sampleCount ? "member_files" : "none", approved_sample: null } };
+        const payload: DisclosureSnapshotProxyRequest = { ...disclosurePayload,
+          dataset_id: datasetId, sample_decision: shareSamples && sampleCount ? "member_files" : "none", approved_sample: null };
+        retry = { listingId: result.listing_id, marketplaceUrl: result.marketplace_url ?? undefined, payload };
         setSnapshotRetry(retry);
+        onListingPublished?.(retry.listingId);
       }
-      await send(`/marketplace/listings/${encodeURIComponent(retry.listingId)}/disclosure-snapshots`, retry.payload);
-      setSnapshotRetry(null); setPublished(true); setStatus("published"); onPublished();
+      await send<DisclosureSnapshotProxyResponse>(`/marketplace/listings/${encodeURIComponent(retry.listingId)}/disclosure-snapshots`, retry.payload);
+      setSnapshotRetry(null); setPublished(true); setStatus("published"); onPublished(retry.listingId, retry.marketplaceUrl);
     } catch (e) { setError(e instanceof Error ? e.message : "Publish failed"); }
-    finally { setBusy(false); }
+    finally { setBusy(false); onBusyChange?.(false); }
   };
   return <div className="space-y-2">
     <p>{sampleCount} seller-selected sample files. Sample files are also part of the purchased set.</p>

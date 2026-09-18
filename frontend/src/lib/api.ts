@@ -531,6 +531,9 @@ export interface ReadyResponse {
 }
 
 export interface PIIScanResponse {
+  scope?: string;
+  reason?: string;
+  privacy_score?: number | null;
   dataset_id: string;
   scan_status: string;
   overall_risk: string;
@@ -673,7 +676,7 @@ export interface DisclosureApprovedFields {
 export interface DisclosureSnapshotProxyRequest {
   dataset_id: string;
   approved_fields: DisclosureApprovedFields;
-  sample_decision: 'none' | 'approved_rows';
+  sample_decision: 'none' | 'approved_rows' | 'member_files';
   approved_sample: {
     columns: string[];
     row_refs: string[];
@@ -1518,12 +1521,17 @@ export interface ImportScanResponse {
   truncated: boolean;
 }
 
-export interface ImportStartResponse {
+export type ImportStartResponse = {
   job_id: string;
   total_files: number;
   total_bytes: number;
   status: string;
-}
+} | {
+  dataset_id: string;
+  status: "complete";
+  total_files: number;
+  total_bytes: number;
+};
 
 export interface ImportProgress {
   files_total: number;
@@ -1552,10 +1560,11 @@ export interface ImportStatusResponse {
 
 // Local Import API
 export const importApi = {
-  browse: (path: string, limit = 500, offset = 0) =>
-    apiFetch<ImportBrowseResponse>(
-      `/api/datasets/import/browse?path=${encodeURIComponent(path)}&limit=${limit}&offset=${offset}`
-    ),
+  browse: (path: string, limit = 500, offset = 0) => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (path.trim()) params.set('path', path);
+    return apiFetch<ImportBrowseResponse>(`/api/datasets/import/browse?${params}`);
+  },
 
   scan: (path: string, recursive = true, maxDepth = 5) =>
     apiFetch<ImportScanResponse>('/api/datasets/import/scan', {

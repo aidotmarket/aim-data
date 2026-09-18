@@ -1,0 +1,13 @@
+S1717 install-fold frontend test artifact (revalidated in R2)
+
+Command:
+rtk npm test -- --run src/pages/DatasetDetail.test.tsx src/components/LocalImportBrowser.test.tsx
+
+Relevant result:
+PASS src/components/LocalImportBrowser.test.tsx (6 tests)
+PASS src/pages/DatasetDetail.test.tsx (36 tests)
+Test Files  2 passed (2)
+Tests       42 passed (42)
+
+Full local log: docs/reports/artifacts/s1717-r2-frontend-focused.log
+The full .log is intentionally ignored by the repository; this tracked excerpt is the durable artifact.

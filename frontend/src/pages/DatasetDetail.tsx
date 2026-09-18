@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { useLocation, useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -308,6 +308,7 @@ export function ListingPreparation({
   isDeleting,
   draftListingId: initialDraftListingId,
   onDatasetRefresh,
+  children,
 }: {
   dataset: ApiDataset;
   backPath: string;
@@ -315,6 +316,7 @@ export function ListingPreparation({
   isDeleting: boolean;
   draftListingId: string | null;
   onDatasetRefresh?: (dataset: ApiDataset) => void;
+  children?: ReactNode | ((publishing: boolean, onMemberStateBlockedChange: (blocked: boolean) => void) => ReactNode);
 }) {
   const navigate = useNavigate();
   const { publishDataset } = useMarketplace();
@@ -328,6 +330,7 @@ export function ListingPreparation({
   const [piiScan, setPiiScan] = useState<PIIScanResponse | null>(null);
   const [piiFailed, setPiiFailed] = useState(false);
   const [piiScanState, setPiiScanState] = useState<ListingStepState>("pending");
+  const [directoryPiiNotReadyReason, setDirectoryPiiNotReadyReason] = useState("");
   const [piiActions, setPiiActions] = useState<Record<string, PIIColumnAction>>({});
   const [privacyAttested, setPrivacyAttested] = useState(false);
   const [privacyStateHydrated, setPrivacyStateHydrated] = useState(false);
@@ -338,6 +341,7 @@ export function ListingPreparation({
   const [metadataApproved, setMetadataApproved] = useState(false);
   const [activeMetadataField, setActiveMetadataField] = useState<GuidedMetadataField>("title");
   const [publishing, setPublishing] = useState(false);
+  const [memberStateBlocked, setMemberStateBlocked] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const autoPiiScanDatasetRef = useRef<string | null>(null);
   const autoMetadataDatasetRef = useRef<string | null>(persistedListingMetadata ? dataset.id : null);
@@ -371,10 +375,14 @@ export function ListingPreparation({
 
   const datasetReady = dataset.status === "preview_ready";
   const flaggedColumns = piiScan?.column_results ?? [];
-  const piiState = piiScanState === "running" ? "running" : getPiiSignal(piiScan, piiFailed);
   const allFlaggedColumnsSaved = flaggedColumns.length === 0 || flaggedColumns.every((column) => Boolean(piiActions[column.column]));
-  const canContinuePrivacy = Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
-  const persistedPrivacySatisfied = privacyAttested || (Boolean(piiScan) && allFlaggedColumnsSaved);
+  const directoryScanCompleted = dataset.file_type !== "directory" || piiScan?.scan_status === "completed";
+  const directoryScanFailed = dataset.file_type === "directory" && Boolean(piiScan) && !directoryScanCompleted;
+  const scanFailed = piiFailed || directoryScanFailed || Boolean(directoryPiiNotReadyReason);
+  const privacyNotAssessed = dataset.file_type === "directory" && piiScan?.privacy_score === null && !scanFailed;
+  const piiState = piiScanState === "running" ? "running" : privacyNotAssessed ? "not_run" : getPiiSignal(piiScan, scanFailed);
+  const canContinuePrivacy = directoryScanCompleted && Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
+  const persistedPrivacySatisfied = directoryScanCompleted && (privacyAttested || (Boolean(piiScan) && allFlaggedColumnsSaved));
   const draftListingId = initialDraftListingId ?? metadata?.listing_id ?? null;
 
   useEffect(() => {
@@ -390,6 +398,7 @@ export function ListingPreparation({
     try {
       const scan = await piiApi.scan(dataset.id);
       setPiiScan(scan);
+      setDirectoryPiiNotReadyReason("");
       setPiiScanState("passed");
     } catch (e) {
       setPiiFailed(true);
@@ -403,6 +412,10 @@ export function ListingPreparation({
       }
     }
   }, [dataset.id, datasetReady]);
+
+  useEffect(() => {
+    setDirectoryPiiNotReadyReason("");
+  }, [dataset.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -422,12 +435,20 @@ export function ListingPreparation({
         const scan = await piiApi.getScan(dataset.id);
         if (!cancelled) {
           setPiiScan(scan);
+          setDirectoryPiiNotReadyReason("");
           autoPiiScanDatasetRef.current = dataset.id;
           autoPiiScanAttemptedDatasetIds.add(dataset.id);
           setPiiScanState("passed");
         }
-      } catch {
+      } catch (error) {
         if (cancelled) return;
+        const detail = error instanceof Error ? error.message : "";
+        if (dataset.file_type === "directory" && detail.startsWith("directory_pii_not_ready:")) {
+          setDirectoryPiiNotReadyReason("Privacy profiling has not run for this folder yet. Re-run processing, then return here. (directory_pii_not_ready)");
+          setPiiScanState("failed");
+          if (!cancelled) setPrivacyStateHydrated(true);
+          return;
+        }
         if (
           datasetReady &&
           autoPiiScanDatasetRef.current !== dataset.id &&
@@ -448,7 +469,7 @@ export function ListingPreparation({
     return () => {
       cancelled = true;
     };
-  }, [dataset.id, datasetReady, runPiiScan]);
+  }, [dataset.file_type, dataset.id, datasetReady, runPiiScan]);
 
   useEffect(() => {
     if (!privacyStateHydrated || hydrationStepResolvedRef.current) return;
@@ -623,7 +644,12 @@ export function ListingPreparation({
       listingId,
       request
     );
+    await completePublication(listingId, listingUrl);
+  };
+
+  const completePublication = async (listingId: string, listingUrl = publishedListingUrl) => {
     setPublishedListingId(listingId);
+    setPublishedListingUrl(listingUrl);
     setRetrySnapshotPayload(null);
     setDisclosureFailure(null);
     setPublishComplete(true);
@@ -833,6 +859,8 @@ export function ListingPreparation({
         </p>
       </div>
 
+      {typeof children === "function" ? children(publishing, setMemberStateBlocked) : children}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Listing Flow</CardTitle>
@@ -848,7 +876,7 @@ export function ListingPreparation({
               {!datasetReady && "Waiting for dataset preview"}
               {piiState === "passed" && "Passed"}
               {piiState === "flagged" && `${piiScan?.columns_with_pii ?? 0} column${piiScan?.columns_with_pii === 1 ? "" : "s"} flagged`}
-              {piiState === "not_run" && "Not run"}
+              {piiState === "not_run" && (privacyNotAssessed ? "Not assessed" : "Not run")}
               {piiState === "pending" && datasetReady && "Preparing scan"}
               {piiState === "running" && "Scanning"}
             </p>
@@ -894,10 +922,10 @@ export function ListingPreparation({
             )}
 
             <div className="flex flex-wrap items-center gap-2">
-              {(piiScan || piiFailed) && (
+              {(piiScan || piiFailed) && !directoryPiiNotReadyReason && (
                 <Button onClick={handleRunPiiScan} disabled={!datasetReady || piiScanState === "running" || savingPrivacy} size="sm" className="gap-2">
                   {piiScanState === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
-                  Run scan again
+                  {dataset.file_type === "directory" ? "Refresh privacy result" : "Run scan again"}
                 </Button>
               )}
               {!piiScan && piiScanState === "running" && (
@@ -906,9 +934,18 @@ export function ListingPreparation({
                   Running privacy scan
                 </Badge>
               )}
-              {piiFailed && <Badge variant="secondary">Scan failed</Badge>}
-              {piiScan && flaggedColumns.length === 0 && <Badge className="bg-haven-success/20 text-haven-success border-haven-success/30">No personal data detected</Badge>}
+              {scanFailed && <Badge variant="secondary">Scan failed</Badge>}
+              {piiScan && !directoryScanFailed && flaggedColumns.length === 0 &&
+                (dataset.file_type !== "directory" || piiScan.privacy_score !== null) &&
+                <Badge className="bg-haven-success/20 text-haven-success border-haven-success/30">No personal data detected</Badge>}
+              {dataset.file_type === "directory" && piiScan?.privacy_score === null && !directoryScanFailed && (
+                <Badge variant="secondary">Privacy scan covered 0 of {(dataset.metadata as { directory_profile?: DirectoryProfile })?.directory_profile?.total_data_members ?? dataset.metadata?.directory?.data_member_count ?? 0} members — not assessed</Badge>
+              )}
             </div>
+
+            {dataset.file_type === "directory" && piiScan?.scope && <p className="text-sm text-muted-foreground">{piiScan.scope}</p>}
+            {directoryPiiNotReadyReason && <p role="alert">{directoryPiiNotReadyReason}</p>}
+            {scanFailed && piiScan?.reason && <p role="alert">{piiScan.reason}</p>}
 
             {flaggedColumns.length > 0 && (
               <div className="space-y-3">
@@ -1198,14 +1235,16 @@ export function ListingPreparation({
             {dataset.file_type === "directory" ? <DirectoryPublishControl
               datasetId={dataset.id}
               sampleCount={dataset.metadata?.directory?.sample_member_count ?? 0}
-              disabled={publishing || !finalDisclosureConfirmed || !approvedMetadataDraft}
+              disabled={publishing || memberStateBlocked || !finalDisclosureConfirmed || !approvedMetadataDraft}
               publishPayload={{ title: form.title.trim(), description: form.description.trim(), tags: form.tags,
                 category: form.category, price_cents: Math.round(Number.parseFloat(form.priceUsd) * 100), file_format: "directory" }}
               disclosurePayload={approvedMetadataDraft && finalDisclosureConfirmed ? {
                 ...buildDisclosureSnapshotPayload({ approvedFields: approvedMetadataDraft, sampleDecision: "none",
                   approvedSample: null, confirmed: true, sourcePublishOperationId: newPublishOperationId() }),
               } : null}
-              onPublished={() => { setPublishComplete(true); void datasetsApi.get(dataset.id).then(onDatasetRefresh); }}
+              onListingPublished={setPublishedListingId}
+              onBusyChange={setPublishing}
+              onPublished={(listingId, marketplaceUrl) => { void completePublication(listingId, marketplaceUrl); }}
             /> : <Button
               onClick={handlePublish}
               disabled={Boolean(publishedListingId) || publishing || !finalDisclosureConfirmed || !approvedMetadataDraft}
@@ -1231,10 +1270,17 @@ export function ListingPreparation({
 
 type DirectoryProfile = {
   status: string; summary?: string; reason?: string; profiled_bytes?: number;
+  row_count?: number; column_count?: number; schema_count?: number;
+  profiled_members?: number; total_data_members?: number;
   members: Record<string, { status: string; reason?: string }>;
 };
 
-export function DirectoryMembers({ dataset }: { dataset: ApiDataset }) {
+export function DirectoryMembers({ dataset, disabled = false, onDatasetRefresh, onPublishBlockedChange }: {
+  dataset: ApiDataset;
+  disabled?: boolean;
+  onDatasetRefresh?: (dataset: ApiDataset) => void;
+  onPublishBlockedChange?: (blocked: boolean) => void;
+}) {
   const profile = (dataset.metadata as unknown as { directory_profile?: DirectoryProfile })?.directory_profile;
 
   const [page, setPage] = useState(1);
@@ -1244,6 +1290,12 @@ export function DirectoryMembers({ dataset }: { dataset: ApiDataset }) {
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [memberStateStale, setMemberStateStale] = useState(false);
+  const memberStateStaleRef = useRef(false);
+  const updateMemberStateStale = (stale: boolean) => {
+    memberStateStaleRef.current = stale;
+    setMemberStateStale(stale);
+  };
   useEffect(() => {
     let active = true;
     setResult(null);
@@ -1254,11 +1306,36 @@ export function DirectoryMembers({ dataset }: { dataset: ApiDataset }) {
   }, [dataset.id, page, role, status, revision]);
   const edit = async (index: number, patch: Parameters<typeof datasetsApi.patchMember>[2]) => {
     setSaving(true);
+    setError("");
+    onPublishBlockedChange?.(true);
     try {
       await datasetsApi.patchMember(dataset.id, index, patch);
       setRevision(value => value + 1);
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not save member"); }
-    finally { setSaving(false); }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save member");
+      updateMemberStateStale(true);
+      setSaving(false);
+      return;
+    }
+    try {
+      if (onDatasetRefresh) onDatasetRefresh(await datasetsApi.get(dataset.id));
+      updateMemberStateStale(false);
+      onPublishBlockedChange?.(false);
+    } catch {
+      updateMemberStateStale(true);
+    } finally { setSaving(false); }
+  };
+  const retryDatasetRefresh = async () => {
+    setSaving(true);
+    onPublishBlockedChange?.(true);
+    try {
+      if (onDatasetRefresh) onDatasetRefresh(await datasetsApi.get(dataset.id));
+      setError("");
+      updateMemberStateStale(false);
+      onPublishBlockedChange?.(false);
+    } catch {
+      updateMemberStateStale(true);
+    } finally { setSaving(false); }
   };
   return <section className="space-y-4" aria-label="Directory members">
     <p>{dataset.metadata?.directory?.member_count ?? result?.total ?? 0} files</p>
@@ -1270,6 +1347,7 @@ export function DirectoryMembers({ dataset }: { dataset: ApiDataset }) {
       <p>{(profile.profiled_bytes ?? 0).toLocaleString()} bytes profiled</p>
     </div>}
     {error && <p role="alert">{error}</p>}
+    {memberStateStale && <div role="alert">Saved; refreshing dataset… <Button type="button" size="sm" variant="outline" onClick={retryDatasetRefresh} disabled={saving}>Retry refresh</Button></div>}
     <div className="flex gap-4">
       <label>Role <select aria-label="Filter by role" value={role} onChange={e => { setRole(e.target.value); setPage(1); }}>
         <option value="">All roles</option>{["data", "documentation", "other"].map(r => <option key={r}>{r}</option>)}
@@ -1285,12 +1363,12 @@ export function DirectoryMembers({ dataset }: { dataset: ApiDataset }) {
         <thead><tr>{["File", "Bytes", "Type", "Role", "Sample", "Status", "Reason"].map(h => <th key={h} className="p-2">{h}</th>)}</tr></thead>
         <tbody>{result.members.map(member => <tr key={member.index}>
           <td className="p-2 break-all">{member.relative_path}</td><td>{member.size_bytes.toLocaleString()}</td><td>{member.detected_type}</td>
-          <td><select aria-label={`Role for ${member.relative_path}`} value={member.role} disabled={!result.editable || saving}
+          <td><select aria-label={`Role for ${member.relative_path}`} value={member.role} disabled={disabled || !result.editable || saving}
             onChange={e => edit(member.index, { role: e.target.value as typeof member.role })}>
             {["data", "documentation", "other"].map(r => <option key={r}>{r}</option>)}
           </select></td>
           <td><input type="checkbox" aria-label={`Sample ${member.relative_path}`} checked={member.is_sample}
-            disabled={!result.editable || saving || member.role !== "data"}
+            disabled={disabled || !result.editable || saving || member.role !== "data"}
             onChange={e => edit(member.index, { is_sample: e.target.checked })} /></td>
           <td>{profile?.members[String(member.index)]?.status ?? member.status}</td>
           <td>{profile?.members[String(member.index)]?.reason ?? member.reason ?? "—"}</td>
@@ -1454,12 +1532,6 @@ const DatasetDetail = () => {
     }
   };
 
-  if (apiDataset.file_type === "directory") {
-    return <main className="space-y-6 p-6"><Link to={backPath}>Back to datasets</Link>
-      <h1 className="text-2xl font-bold">{apiDataset.original_filename}</h1>
-      <DirectoryMembers dataset={apiDataset} /></main>;
-  }
-
   if (apiDataset.status !== "error" && !apiDataset.listing_id) {
     return (
       <ListingPreparation
@@ -1469,12 +1541,21 @@ const DatasetDetail = () => {
         backPath={backPath}
         onDelete={handleDelete}
         isDeleting={isDeleting}
-      />
+      >
+        {apiDataset.file_type === "directory" && ((publishing: boolean, onMemberStateBlockedChange: (blocked: boolean) => void) =>
+          <DirectoryMembers dataset={apiDataset} disabled={publishing} onDatasetRefresh={setApiDataset} onPublishBlockedChange={onMemberStateBlockedChange} />)}
+      </ListingPreparation>
     );
   }
 
   // Convert API dataset to frontend format
   const dataset = mapApiDatasetToFrontend(apiDataset);
+  const isDirectory = apiDataset.file_type === "directory";
+  const directoryProfile = (apiDataset.metadata as unknown as { directory_profile?: DirectoryProfile })?.directory_profile;
+  if (isDirectory) {
+    dataset.rows = directoryProfile?.row_count ?? 0;
+    dataset.columns = directoryProfile?.column_count ?? 0;
+  }
   const Icon = getFileIcon(dataset.type);
 
   // Build schema from API data
@@ -1547,6 +1628,8 @@ const DatasetDetail = () => {
         <ChevronRightIcon className="w-4 h-4 text-muted-foreground" />
         <span className="text-foreground font-medium">{dataset.name}</span>
       </nav>
+
+      {apiDataset.file_type === "directory" && <DirectoryMembers dataset={apiDataset} />}
 
       {/* Header */}
       <div className="flex flex-col gap-4">
@@ -1692,7 +1775,7 @@ const DatasetDetail = () => {
         <TabsList className="bg-secondary">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="schema">Schema</TabsTrigger>
-          <TabsTrigger value="sample">Sample Data</TabsTrigger>
+          {!isDirectory && <TabsTrigger value="sample">Sample Data</TabsTrigger>}
           <TabsTrigger value="statistics">Statistics</TabsTrigger>
           <TabsTrigger value="readiness">Readiness</TabsTrigger>
           {hasFeature("marketplace") && datasetIsPublished && (
@@ -1702,6 +1785,7 @@ const DatasetDetail = () => {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
+          {isDirectory && <p>Profiled {directoryProfile?.profiled_members ?? 0} of {directoryProfile?.total_data_members ?? apiDataset.metadata?.directory?.data_member_count ?? 0} files; {directoryProfile?.schema_count ?? 0} schemas.</p>}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <Card className="bg-card border-border">
               <CardContent className="p-4">
@@ -1870,7 +1954,7 @@ const DatasetDetail = () => {
         </TabsContent>
 
         {/* Sample Data Tab */}
-        <TabsContent value="sample" className="space-y-4">
+        {!isDirectory && <TabsContent value="sample" className="space-y-4">
           <Card className="bg-card border-border overflow-hidden">
             <ScrollArea className="w-full">
               <Table>
@@ -1940,7 +2024,7 @@ const DatasetDetail = () => {
               </Button>
             </div>
           </div>
-        </TabsContent>
+        </TabsContent>}
 
         {/* Statistics Tab */}
         <TabsContent value="statistics" className="space-y-4">
@@ -2040,7 +2124,7 @@ const DatasetDetail = () => {
 
         {/* Readiness Tab — BQ-VZ-DATA-READINESS */}
         <TabsContent value="readiness" className="space-y-6">
-          {readiness ? (
+          {isDirectory ? <p>Readiness is assessed per member; see the member table</p> : readiness ? (
             <>
               {/* Quality Scorecard */}
               {readiness.quality_scorecard && (

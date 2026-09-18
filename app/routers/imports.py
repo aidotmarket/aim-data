@@ -7,10 +7,15 @@ from app.auth.api_key_auth import get_current_user, AuthenticatedUser
 from app.services.import_service import get_import_service, ImportService
 
 router = APIRouter()
+DEFAULT_IMPORT_PATH = "/imports/"
+
+
+def _import_path_or_default(path: str | None) -> str:
+    return path if path and path.strip() else DEFAULT_IMPORT_PATH
 
 
 class ScanRequest(BaseModel):
-    path: str
+    path: str = DEFAULT_IMPORT_PATH
     recursive: bool = True
     max_depth: int = Field(default=5, ge=1, le=10)
 
@@ -22,14 +27,14 @@ class StartRequest(BaseModel):
 
 @router.get("/browse")
 async def browse_directory(
-    path: str = Query("/imports/"),
+    path: str = Query(DEFAULT_IMPORT_PATH),
     limit: int = Query(500, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     user: AuthenticatedUser = Depends(get_current_user),
     svc: ImportService = Depends(get_import_service),
 ):
     try:
-        return svc.browse(path, limit=limit, offset=offset)
+        return svc.browse(_import_path_or_default(path), limit=limit, offset=offset)
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except FileNotFoundError:
@@ -43,7 +48,7 @@ async def scan_directory(
     svc: ImportService = Depends(get_import_service),
 ):
     try:
-        return svc.scan(req.path, recursive=req.recursive, max_depth=req.max_depth)
+        return svc.scan(_import_path_or_default(req.path), recursive=req.recursive, max_depth=req.max_depth)
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except FileNotFoundError:
