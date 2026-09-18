@@ -63,3 +63,139 @@ All 23 failing node IDs are identical on base and candidate. They fail because t
 `FileUploadModal.tsx` **Browse Folder** still submits files individually through `UploadContext.tsx:234-246`, creating N one-member datasets. This is an unchanged product decision pending with Max. Neither file was touched.
 
 Flags remain default off. No backend contract change, deployment, or PR is included. The second backend module was taken to be `tests/test_directory_registration.py`; the request explicitly named only `tests/test_directory_import.py`.
+
+
+## R1 fold
+
+Starting head: `72838720dbd98944f5acfb50ddf565ce5206e613`, on the existing
+`build/bq-multi-file-datasets-s1717-ui-wiring` branch. No new branch, rebase,
+spec reading, PR, deployment, or flag changes. This section supersedes the
+initial report's claim that backend application code was unchanged. CC remains
+pending for the next round; this fold does not claim Council approval.
+
+Implementation commits: `4895bc3` (stored PII routes), `effa371` (folder import),
+`1adbea4` (privacy and publication UI).
+
+### Adopted findings
+
+- **DeepSeek F1:** `app/routers/pii.py:84`, `:128`, `:195` adapt the stored
+  `metadata.directory_profile.pii` for both GET and POST. Text-scan
+  `total_columns` maps to `columns_scanned`, status maps to `scan_status`, and
+  scope is returned even for timeout/failure. No profiled members means a null
+  privacy score. Missing PII returns 409 `directory_pii_not_ready`; POST never
+  rescans a directory. `frontend/src/pages/DatasetDetail.tsx:377` blocks failed
+  directory scans, including persisted-state hydration; `:924` shows scope and
+  the failure reason. Single-file gate semantics remain unchanged.
+  `tests/test_pii_directory.py:34` covers the HTTP branches, failure states,
+  missing profile, null score, and unchanged file GET/POST/readiness/not-found
+  behavior. `frontend/src/pages/DatasetDetail.test.tsx:535` replaces the clean
+  single-file scan mask with real `piiApi` transport and the directory response
+  shape, and proves progression to Steps 2 and 3 with an enabled publish control.
+  `:628` proves timeout/failed GET and POST stay blocked with visible reasons.
+- **DeepSeek F2:** `frontend/src/components/LocalImportBrowser.tsx:184` sends
+  `currentPath` with filenames relative to that folder, and `:196` names the
+  registered folder in the completion toast. The legacy branch at
+  `app/routers/imports.py:79` forwards path/files unchanged; `ImportService` at
+  `app/services/import_service.py:189` joins the resolved base and each entry
+  (`:195`), so source file selection is preserved. Exact subfolder arguments
+  are tested for both response modes at
+  `frontend/src/components/LocalImportBrowser.test.tsx:46`.
+- **DeepSeek F5 / GLM 3:** `frontend/src/components/PublishModal.tsx:638` passes
+  the receiver URL through completion and retains it across disclosure retry.
+  `frontend/src/pages/DatasetDetail.tsx:635` stores it in completion state.
+  Tests at `frontend/src/pages/DatasetDetail.test.tsx:640` exercise the receiver
+  success link, and the following retry test verifies URL retention; the
+  published-page test retains coverage of the URL fallback.
+- **GLM 4:** `frontend/src/components/PublishModal.tsx:673` and `:689` notify the
+  parent of busy state, connected at `frontend/src/pages/DatasetDetail.tsx:1223`.
+  The shared listing fields and disclosure confirmation are disabled in flight.
+  `frontend/src/pages/DatasetDetail.test.tsx:640` holds the publish response open
+  to verify this and verifies unlocking after completion.
+- **GLM 2:** `frontend/src/pages/DatasetDetail.tsx:1492` uses directory profile
+  row/column aggregates. `:1727` adds profiled N of M and schema count. The
+  directory sample tab is hidden and `:2066` replaces readiness loading with
+  the member-table guidance. The published-directory fixture checks all of
+  these, including absence of the endless readiness message.
+- **DeepSeek F3:** `frontend/src/components/LocalImportBrowser.test.tsx:34`
+  asserts no status request and no interval immediately after start resolves.
+  The interval spy is cleared just before the click, excluding the testing
+  library's earlier wait timer. A temporary mutation removing only the direct
+  response's early return made this test fail on the unexpected 1000 ms
+  interval. The mutation was restored before final verification.
+
+### Final validation and reproducible read-only commands
+
+This run used **Node v25.3.0**, Vitest 3.2.4 and Python 3.12.12 (the initial
+report's Node v25.6.0 describes the earlier run, not this fold).
+
+| Check | R1 result |
+| --- | --- |
+| `DatasetDetail.test.tsx` | 30 passed |
+| `LocalImportBrowser.test.tsx` | 5 passed |
+| `tests/test_directory_import.py` | 3 passed |
+| `tests/test_directory_registration.py` | 12 passed |
+| `tests/test_pii_directory.py` | 11 passed |
+| Backend combined | 26 passed, 4 dependency/deprecation warnings |
+| Frontend build | Passed; existing Browserslist/bundle-size warnings |
+| Lint against untouched base `119f643b5fd25dc8fd61557649371c9832ca33c5` | Identical 10 errors and 25 warnings |
+| Typecheck against that base | Identical 36 errors |
+| Whitespace checks | `git diff --check` and starting-head-to-final diff pass |
+
+The earlier **15 passed** backend result was **3 import + 12 registration**,
+not 15 tests in one module. Lint diagnostics were compared by relative file,
+severity, rule and message; TypeScript output was compared after removing line
+and column positions. Both comparisons preserve diagnostic multiplicity and
+have no candidate-only or base-only diagnostics.
+
+Checkout used:
+`/private/var/tmp/koskadeux/minimal-bridge-worktrees/bad84c16bc5b-3bc1a2`.
+Untouched baseline used: `/tmp/s1717-ui-wiring-base` (clean, exact base above).
+
+The following config-copy preparation ran from the checkout root. It leaves
+config bundling and test caches outside the checkout and resolves dependencies
+from the existing installation; it does not require editing project config:
+
+```sh
+rtk proxy python3 - <<'PYCONFIG'
+from pathlib import Path
+root = Path.cwd().resolve()
+s = Path('frontend/vitest.config.ts').read_text()
+s = s.replace('"vitest/config"', repr(str(root / 'frontend/node_modules/vitest/dist/config.js')))
+s = s.replace('"@vitejs/plugin-react-swc"', repr(str(root / 'frontend/node_modules/@vitejs/plugin-react-swc/index.js')))
+s = s.replace('  plugins:', '  root: process.cwd(),\n  cacheDir: "/tmp/s1717-r1-vitest-cache",\n  plugins:')
+s = s.replace('path.resolve(__dirname, "./src")', 'path.resolve(process.cwd(), "./src")')
+Path('/tmp/s1717-r1-vitest.config.mjs').write_text(s)
+PYCONFIG
+```
+
+Exact successful frontend test invocation from `frontend`, with macOS sandbox
+writes denied throughout the checkout (35 passed):
+
+```sh
+rtk proxy sandbox-exec -p '(version 1)(allow default)(deny file-write* (subpath "/private/var/tmp/koskadeux/minimal-bridge-worktrees/bad84c16bc5b-3bc1a2"))' npm test -- --config /tmp/s1717-r1-vitest.config.mjs src/pages/DatasetDetail.test.tsx src/components/LocalImportBrowser.test.tsx --reporter=json --outputFile=/tmp/s1717-r1-readonly-frontend.json > /tmp/s1717-r1-readonly-frontend.log 2>&1
+```
+
+Exact successful backend invocation from the checkout root with the same
+write-denial proof (26 passed):
+
+```sh
+rtk proxy sandbox-exec -p '(version 1)(allow default)(deny file-write* (subpath "/private/var/tmp/koskadeux/minimal-bridge-worktrees/bad84c16bc5b-3bc1a2"))' env PYTHONDONTWRITEBYTECODE=1 /tmp/s1717-ui-backend-venv/bin/python -m pytest tests/test_directory_import.py tests/test_directory_registration.py tests/test_pii_directory.py -v --tb=short -o cache_dir=/tmp/s1717-r1-pytest-cache > /tmp/s1717-r1-readonly-backend.log 2>&1
+```
+
+Build and diagnostic commands from `frontend`:
+
+```sh
+rtk proxy npm run build > /tmp/s1717-r1-build.log 2>&1
+rtk proxy npm run lint -- --format json --output-file /tmp/s1717-r1-lint.json > /tmp/s1717-r1-lint.log 2>&1
+rtk proxy npx tsc --noEmit -p tsconfig.app.json > /tmp/s1717-r1-tsc.log 2>&1
+```
+
+Baseline diagnostic commands from `/tmp/s1717-ui-wiring-base/frontend`:
+
+```sh
+rtk proxy npm run lint -- --format json --output-file /tmp/s1717-r1-base-lint.json > /tmp/s1717-r1-base-lint.log 2>&1
+rtk proxy npx tsc --noEmit -p tsconfig.app.json > /tmp/s1717-r1-base-tsc.log 2>&1
+```
+
+Lint and typecheck intentionally retain their inherited nonzero exits (1 and
+2 respectively); parity is not a claim that the repository is lint/type clean.
