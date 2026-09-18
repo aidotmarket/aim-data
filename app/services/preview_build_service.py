@@ -748,22 +748,22 @@ class PreviewBuildService:
             }
 
     def signer(self, job):
-        from datetime import timedelta
         from app.config import settings
         from app.core.crypto import DeviceCrypto
-        from app.services.registration_service import read_preview_registration_evidence
+        from app.services.serial_store import get_serial_store
         from app.services.preview_signing_service import PreviewSigningService
 
-        evidence_path = self.root / "registration-evidence.json"
-        evidence = read_preview_registration_evidence(evidence_path)
-        if evidence.seller_id != job["owner"]:
+        registration = get_serial_store().state
+        if (
+            not registration.vz_install_id
+            or not registration.ai_market_seller_id
+            or registration.ai_market_seller_id != job["owner"]
+        ):
             raise BuildError("registration_owner_mismatch", 403)
         return PreviewSigningService(
             DeviceCrypto(settings.keystore_path, settings.keystore_passphrase),
-            install_id=evidence.install_id,
+            install_id=registration.vz_install_id,
             seller_id=job["owner"],
-            evidence_reader=lambda: read_preview_registration_evidence(evidence_path),
-            evidence_max_age=timedelta(hours=1),
         )
 
     def candidate(self, job_id, owner, consent):

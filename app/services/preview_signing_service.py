@@ -1,4 +1,4 @@
-"""Non-custodial F2 signing. Never allocates candidates or submits previews.
+"""Non-custodial F2 signing.
 
 The existing encrypted install identity is the only seller signing key. Platform
 signatures are verification-only; fixture generation lives exclusively in tests.
@@ -178,8 +178,8 @@ class PreviewSigningService:
         *,
         install_id,
         seller_id,
-        evidence_reader,
-        evidence_max_age: timedelta,
+        evidence_reader=None,
+        evidence_max_age: timedelta | None = None,
         clock=lambda: datetime.now(timezone.utc),
     ):
         self.crypto = crypto
@@ -211,14 +211,21 @@ class PreviewSigningService:
             raw = public_bytes(keys[1])
             if public_bytes(keys[0].public_key()) != raw:
                 raise SigningError("keystore_key_mismatch")
-            check_evidence(
-                self.evidence_reader(),
-                install_id=self.install_id,
-                seller_id=self.seller_id,
-                raw_key=raw,
-                now=self.clock(),
-                max_age=self.max_age,
-            )
+            # Live authorization belongs to ai.market: every submitted disclosure
+            # is resolved against the owner-bound install registry there.  Older
+            # evidence-bundle callers may still supply a readback for an additional
+            # local check, but signing never depends on an operator-created file.
+            if self.evidence_reader is not None:
+                if self.max_age is None:
+                    raise SigningError("invalid_evidence_policy")
+                check_evidence(
+                    self.evidence_reader(),
+                    install_id=self.install_id,
+                    seller_id=self.seller_id,
+                    raw_key=raw,
+                    now=self.clock(),
+                    max_age=self.max_age,
+                )
             return keys
         except Exception:
             raise SigningError("signing_authority_unavailable") from None
