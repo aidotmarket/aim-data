@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { importApi } from "@/lib/api";
+import { UploadProvider, useUpload } from "@/contexts/UploadContext";
 import { toast } from "sonner";
 import { LocalImportBrowser } from "./LocalImportBrowser";
 
@@ -10,24 +11,38 @@ vi.mock("@/contexts/BrandContext", async () => {
 });
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
+const browseRequest = importApi.browse.bind(importApi);
+
 beforeEach(() => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    clear: () => storage.clear(),
+  });
   vi.spyOn(importApi, "browse").mockResolvedValue({ path: "/import/", entries: [
     { name: "a.csv", type: "file", size_bytes: 4 },
     { name: "b.csv", type: "file", size_bytes: 4 },
   ], total: 2, limit: 500, offset: 0 });
   vi.spyOn(importApi, "getStatus");
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+
+function UploadProbe() {
+  const { hasImportFiles, openModal } = useUpload();
+  return <><button onClick={openModal}>Open upload</button><span>{String(hasImportFiles)}</span></>;
+}
 
 async function startImport(beforeStart = () => {}) {
   const onSuccess = vi.fn();
   const onImportingChange = vi.fn();
   const onClose = vi.fn();
   render(<LocalImportBrowser onSuccess={onSuccess} onImportingChange={onImportingChange} onClose={onClose} />);
-  expect(await screen.findByText("If folder datasets are enabled on this install, the whole current folder becomes one dataset (selection is ignored).")).toBeInTheDocument();
+  expect(await screen.findByText("If folder datasets are enabled on this install, the whole current folder becomes one dataset regardless of the selection.")).toBeInTheDocument();
   fireEvent.click(await screen.findByRole("button", { name: "Select All" }));
   beforeStart();
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import current folder (2 files)" })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import selected (2)" })); });
   return { onSuccess, onImportingChange, onClose };
 }
 
@@ -42,17 +57,35 @@ describe("folder import response wiring", () => {
     );
   });
 
-  it("imports every file in the current folder when no selection is made", async () => {
-    vi.spyOn(importApi, "start").mockResolvedValue({
-      dataset_id: "directory-1", status: "complete", total_files: 2, total_bytes: 8,
-    });
+  it("loads the initial folder without serialising an empty path", async () => {
+    vi.mocked(importApi.browse).mockImplementation(browseRequest);
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+      path: "/import/", entries: [], total: 0, limit: 500, offset: 0,
+    }) });
+    vi.stubGlobal("fetch", fetcher);
     render(<LocalImportBrowser />);
 
-    const button = await screen.findByRole("button", { name: "Import current folder (2 files)" });
-    expect(button).toBeEnabled();
-    await act(async () => { fireEvent.click(button); });
+    await screen.findByText("No files found in import directory.");
+    const requestUrl = new URL(String(fetcher.mock.calls[0][0]), "http://localhost");
+    expect(requestUrl.pathname).toBe("/api/datasets/import/browse");
+    expect(requestUrl.searchParams.has("path")).toBe(false);
+  });
 
-    expect(importApi.start).toHaveBeenCalledWith("/import/", ["a.csv", "b.csv"]);
+  it("marks local import files available after the upload-modal probe succeeds", async () => {
+    render(<UploadProvider><UploadProbe /></UploadProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Open upload" }));
+    expect(await screen.findByText("true")).toBeInTheDocument();
+    expect(importApi.browse).toHaveBeenCalledWith("", 1, 0);
+  });
+
+  it("requires an explicit selection before starting an import", async () => {
+    const start = vi.spyOn(importApi, "start");
+    render(<LocalImportBrowser />);
+
+    const button = await screen.findByRole("button", { name: "Import selected (0)" });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(start).not.toHaveBeenCalled();
   });
 
   it("completes a direct directory response without polling and triggers card refresh", async () => {
@@ -82,7 +115,7 @@ describe("folder import response wiring", () => {
     render(<LocalImportBrowser />);
     fireEvent.click(await screen.findByRole("button", { name: "subset" }));
     fireEvent.click(await screen.findByRole("button", { name: "Select All" }));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import current folder (1 file)" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import selected (1)" })); });
     expect(importApi.start).toHaveBeenCalledWith("/import/subset/", ["a.csv"]);
     if (mode === "directory") {
       expect(toast.success).toHaveBeenCalledWith("Imported folder subset as one dataset (1 file)");
@@ -116,7 +149,7 @@ describe("folder import response wiring", () => {
     vi.spyOn(importApi, "start").mockRejectedValue(new Error(message));
     const callbacks = await startImport();
     expect(screen.getByText(message)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Import current folder (2 files)" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Import selected (2)" })).toBeEnabled();
     expect(importApi.getStatus).not.toHaveBeenCalled();
     expect(callbacks.onSuccess).not.toHaveBeenCalled();
     expect(callbacks.onImportingChange.mock.calls).toEqual([[true], [false]]);

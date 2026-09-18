@@ -13,6 +13,45 @@ from app.routers import imports
 from app.services import import_service
 
 
+@pytest.fixture
+def imports_client():
+    svc = Mock()
+    svc.browse.return_value = {
+        "path": "/imports/",
+        "entries": [{"name": "a.csv", "type": "file", "size_bytes": 1}],
+        "total": 1,
+        "limit": 500,
+        "offset": 0,
+    }
+    svc.scan.return_value = {"path": "/imports/", "total_files": 1}
+    app = FastAPI()
+    app.include_router(imports.router, prefix="/imports")
+    app.dependency_overrides[imports.get_current_user] = lambda: SimpleNamespace(user_id="seller")
+    app.dependency_overrides[imports.get_import_service] = lambda: svc
+    with TestClient(app) as client:
+        yield client, svc
+
+
+@pytest.mark.parametrize("query", ["", "?path="])
+def test_browse_defaults_absent_or_empty_path(imports_client, query):
+    client, svc = imports_client
+    response = client.get(f"/imports/browse{query}")
+    assert response.status_code == 200
+    assert response.json()["entries"] == [
+        {"name": "a.csv", "type": "file", "size_bytes": 1}
+    ]
+    svc.browse.assert_called_once_with("/imports/", limit=500, offset=0)
+
+
+@pytest.mark.parametrize("body", [{}, {"path": "   "}])
+def test_scan_defaults_absent_or_blank_path(imports_client, body):
+    client, svc = imports_client
+    response = client.post("/imports/scan", json=body)
+    assert response.status_code == 200
+    assert response.json()["total_files"] == 1
+    svc.scan.assert_called_once_with("/imports/", recursive=True, max_depth=5)
+
+
 @pytest.mark.parametrize('enabled', [False, True])
 def test_directory_import_flag(tmp_path, monkeypatch, enabled):
     from app import config

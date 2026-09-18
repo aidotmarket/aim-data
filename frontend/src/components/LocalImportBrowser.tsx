@@ -179,9 +179,9 @@ export function LocalImportBrowser({
 
   // Start import
   const handleImport = async () => {
-    if (fileEntries.length === 0) return;
+    if (selectedFiles.size === 0) return;
 
-    const filePaths = selectedFiles.size > 0 ? Array.from(selectedFiles) : fileEntries.map(entry => entry.name);
+    const filePaths = Array.from(selectedFiles);
 
     setPhase("importing");
     onImportingChange?.(true);
@@ -435,7 +435,7 @@ export function LocalImportBrowser({
         {/* Footer actions */}
         <div className="space-y-2 pt-1">
           <p className="text-xs text-muted-foreground">
-            If folder datasets are enabled on this install, the whole current folder becomes one dataset (selection is ignored).
+            If folder datasets are enabled on this install, the whole current folder becomes one dataset regardless of the selection.
           </p>
           <div className="flex items-center justify-between">
             <Button variant="ghost" size="sm" onClick={onClose}>
@@ -443,12 +443,12 @@ export function LocalImportBrowser({
             </Button>
             <Button
               size="sm"
-              disabled={fileEntries.length === 0}
+              disabled={selectedFiles.size === 0}
               onClick={handleImport}
               className="gap-2"
             >
               <Download className="w-3.5 h-3.5" />
-              Import current folder ({fileEntries.length} {fileEntries.length === 1 ? "file" : "files"})
+              Import selected ({selectedFiles.size})
             </Button>
           </div>
         </div>

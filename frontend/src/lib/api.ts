@@ -1560,10 +1560,11 @@ export interface ImportStatusResponse {
 
 // Local Import API
 export const importApi = {
-  browse: (path: string, limit = 500, offset = 0) =>
-    apiFetch<ImportBrowseResponse>(
-      `/api/datasets/import/browse?path=${encodeURIComponent(path)}&limit=${limit}&offset=${offset}`
-    ),
+  browse: (path: string, limit = 500, offset = 0) => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (path.trim()) params.set('path', path);
+    return apiFetch<ImportBrowseResponse>(`/api/datasets/import/browse?${params}`);
+  },
 
   scan: (path: string, recursive = true, maxDepth = 5) =>
     apiFetch<ImportScanResponse>('/api/datasets/import/scan', {
