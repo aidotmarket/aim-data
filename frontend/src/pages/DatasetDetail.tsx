@@ -925,7 +925,7 @@ export function ListingPreparation({
               {(piiScan || piiFailed) && !directoryPiiNotReadyReason && (
                 <Button onClick={handleRunPiiScan} disabled={!datasetReady || piiScanState === "running" || savingPrivacy} size="sm" className="gap-2">
                   {piiScanState === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
-                  Run scan again
+                  {dataset.file_type === "directory" ? "Refresh privacy result" : "Run scan again"}
                 </Button>
               )}
               {!piiScan && piiScanState === "running" && (
@@ -1291,6 +1291,11 @@ export function DirectoryMembers({ dataset, disabled = false, onDatasetRefresh, 
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState(false);
   const [memberStateStale, setMemberStateStale] = useState(false);
+  const memberStateStaleRef = useRef(false);
+  const updateMemberStateStale = (stale: boolean) => {
+    memberStateStaleRef.current = stale;
+    setMemberStateStale(stale);
+  };
   useEffect(() => {
     let active = true;
     setResult(null);
@@ -1308,16 +1313,16 @@ export function DirectoryMembers({ dataset, disabled = false, onDatasetRefresh, 
       setRevision(value => value + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save member");
-      onPublishBlockedChange?.(false);
+      updateMemberStateStale(true);
       setSaving(false);
       return;
     }
     try {
       if (onDatasetRefresh) onDatasetRefresh(await datasetsApi.get(dataset.id));
-      setMemberStateStale(false);
+      updateMemberStateStale(false);
       onPublishBlockedChange?.(false);
     } catch {
-      setMemberStateStale(true);
+      updateMemberStateStale(true);
     } finally { setSaving(false); }
   };
   const retryDatasetRefresh = async () => {
@@ -1325,10 +1330,11 @@ export function DirectoryMembers({ dataset, disabled = false, onDatasetRefresh, 
     onPublishBlockedChange?.(true);
     try {
       if (onDatasetRefresh) onDatasetRefresh(await datasetsApi.get(dataset.id));
-      setMemberStateStale(false);
+      setError("");
+      updateMemberStateStale(false);
       onPublishBlockedChange?.(false);
     } catch {
-      setMemberStateStale(true);
+      updateMemberStateStale(true);
     } finally { setSaving(false); }
   };
   return <section className="space-y-4" aria-label="Directory members">

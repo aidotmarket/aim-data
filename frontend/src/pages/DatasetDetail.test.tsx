@@ -647,7 +647,7 @@ describe("directory detail preparation wiring", () => {
       column_results: [], clean_columns: ["document_content"], duration_seconds: 0.1,
       entities_checked: ["EMAIL_ADDRESS"], scan_type: "text_content", total_blocks: 1, blocks_sampled: 1,
       scope: "Bounded member previews only; not a whole-set clearance",
-    } : { status: scanStatus, reason: "PROFILE_TIMEOUT_S=30" };
+    } : { status: scanStatus, reason: scanStatus === "timeout" ? "PROFILE_TIMEOUT_S=30" : "PII scan unavailable" };
     const directory: ApiDataset = { ...dataset(), file_type: "directory", metadata: {
       ...dataset().metadata, directory: { member_count: 2, sample_member_count: 1, data_member_count: 2, total_data_bytes: 8, manifest_hash: "0".repeat(64) },
       ...{ directory_profile: { status: "completed", summary: "profiled on 1 of 2 files", members: {},
@@ -734,15 +734,16 @@ describe("directory detail preparation wiring", () => {
 
   it.each(["timeout", "failed"])("shows the directory %s reason and blocks privacy continuation", async (status) => {
     await openDirectory(status);
-    expect(screen.getByRole("alert")).toHaveTextContent("PROFILE_TIMEOUT_S=30");
+    const reason = status === "timeout" ? "PROFILE_TIMEOUT_S=30" : "PII scan unavailable";
+    expect(screen.getByRole("alert")).toHaveTextContent(reason);
     expect(screen.queryByText(/not assessed/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue to metadata" })).toBeDisabled();
     expect(screen.queryByText("No personal data detected")).not.toBeInTheDocument();
     expect(screen.queryByText("Step 2: Metadata Review")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Run scan again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh privacy result" }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/api/pii/scan/ds-1"), expect.objectContaining({ method: "POST" })));
     expect(screen.getByRole("button", { name: "Continue to metadata" })).toBeDisabled();
-    expect(screen.getByRole("alert")).toHaveTextContent("PROFILE_TIMEOUT_S=30");
+    expect(screen.getByRole("alert")).toHaveTextContent(reason);
   });
 
   it("locks shared fields during directory publication and uses the receiver URL", async () => {
@@ -786,6 +787,11 @@ describe("directory detail preparation wiring", () => {
     expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeDisabled();
     expect(screen.queryByText(/Could not save member/)).not.toBeInTheDocument();
 
+    vi.mocked(datasetsApi.patchMember).mockRejectedValueOnce(new Error("write rejected"));
+    fireEvent.change(screen.getByLabelText("Role for data.csv"), { target: { value: "documentation" } });
+    expect(await screen.findByText("write rejected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeDisabled();
+
     const refreshed = { ...directory, metadata: { ...directory.metadata, directory: {
       ...directory.metadata?.directory, sample_member_count: 0,
     } } } as ApiDataset;
@@ -793,6 +799,7 @@ describe("directory detail preparation wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry refresh" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeEnabled());
     expect(screen.queryByText("Saved; refreshing dataset…")).not.toBeInTheDocument();
+    expect(screen.queryByText("write rejected")).not.toBeInTheDocument();
 
     const fetcher = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "published", listing_id: "listing-directory" }) })
@@ -801,6 +808,21 @@ describe("directory detail preparation wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Publish to ai.market" }));
     await screen.findByRole("button", { name: "Published" });
     expect(JSON.parse(fetcher.mock.calls[1][1].body).sample_decision).toBe("none");
+  });
+
+  it("keeps publication blocked after a rejected member write until refresh succeeds", async () => {
+    const directory = await openDirectory();
+    vi.spyOn(datasetsApi, "patchMember").mockRejectedValue(new Error("Could not save member"));
+
+    fireEvent.click(screen.getByLabelText("Sample data.csv"));
+    expect(await screen.findByText("Could not save member")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Retry refresh" })).toBeInTheDocument();
+
+    vi.mocked(datasetsApi.get).mockResolvedValueOnce(directory);
+    fireEvent.click(screen.getByRole("button", { name: "Retry refresh" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeEnabled());
+    expect(screen.queryByText("Could not save member")).not.toBeInTheDocument();
   });
 
   it("retains disclosure retry and does not republish when the snapshot fails", async () => {
