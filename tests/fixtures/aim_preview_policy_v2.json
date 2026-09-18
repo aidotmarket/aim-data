@@ -1,0 +1,19 @@
+{
+  "scan_policy": "aim-preview-policy-v2",
+  "scan_policy_version": "2.0.0",
+  "scan_verdict": "passed",
+  "rules": [],
+  "reason_codes": [],
+  "legacy_accepted": {
+    "scan_policy": "aim-preview-policy-v1",
+    "scan_policy_version": "1.0.0"
+  },
+  "content_examples_that_pass": [
+    "2026-06-28",
+    "Lisbon",
+    "seller@example.test",
+    "https://example.test/path",
+    "-123.45",
+    "a\\u0000b"
+  ]
+}
