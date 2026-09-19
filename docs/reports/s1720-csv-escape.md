@@ -4,10 +4,12 @@
 
 An ordinary RFC4180 CSV now builds when its declaration uses either an empty
 escape or an escape equal to the quote character. The two declarations produce
-the same records, canonical bytes, schema digest and Merkle root. A genuinely
-distinct escape character remains active. The Public sample panel defaults its
-editable CSV declaration to an empty escape and shows actionable, non-reflecting
-failure messages.
+the same records and commitments for ordinary RFC4180 quoting, including doubled
+quotes inside quoted fields. This is not universal compatibility with the old
+equal-escape parser: a quote character inside an unquoted field is now retained
+instead of being consumed as an escape. A genuinely distinct escape character
+remains active. The Public sample panel defaults its editable CSV declaration to
+an empty escape and shows actionable, non-reflecting failure messages.
 
 The branch started from `origin/main` commit
 `316f9898437814d5a0e90eccc2bcf453df4aafa2`, tagged `aim-data-v1.24.1`.
@@ -21,9 +23,10 @@ quote, and an empty or one-character escape. It therefore accepts
 
 On the pinned Python 3.11 runtime, the ordinary quoted-field corpus succeeds
 with an empty escape and a distinct backslash escape, but `escape == quote`
-raises `csv.Error: unexpected end of data`. This is the only failure among the
-normal empty/equal/distinct escape choices. The host Python 3.13 runtime rejects
-the equal pair earlier with `ValueError: bad escapechar or quotechar value`.
+raises `csv.Error: unexpected end of data`. For that quoted-field corpus, this
+is the only failure among the normal empty/equal/distinct escape choices. The
+host Python 3.13 runtime rejects the equal pair earlier with
+`ValueError: bad escapechar or quotechar value`.
 
 The implemented rule is: **when CSV/TSV escape equals quote, pass no separate
 escape character to `csv.reader`; otherwise pass the declared non-empty escape
@@ -56,12 +59,14 @@ the UI.
 and `source_changed` codes are unchanged. Empty headers now reach the existing
 `invalid_header` code instead of falling through a generic read failure.
 
-## Byte and hash compatibility proof
+## Scoped byte and hash equivalence
 
 `test_csv_equal_quote_escape_is_rfc4180_and_hash_equivalent` parses a CSV with a
 comma inside a quoted field and an RFC4180 doubled quote under both declarations.
 It compares the complete tuple of canonical row bytes, schema digest and Merkle
-root and requires exact equality. The test also pins the decoded record values.
+root and requires exact equality for that ordinary RFC4180 input. The test also
+pins the decoded record values; it does not claim equivalence for every byte
+sequence the old equal-escape parser happened to accept.
 
 `test_csv_distinct_escape_character_is_honoured` proves a backslash escape still
 decodes an escaped quote. The unchanged shared real-file corpus, the complete
@@ -70,6 +75,54 @@ producer bundle provide regression proof for previously parsing files and the
 downstream commitment artifacts. No signing, attestation, Merkle,
 `sampled_leaf_list_digest`, marketplace transport or content-policy logic was
 changed.
+
+## R2 fold
+
+The corrected equivalence claim is narrow: an empty escape and an escape equal
+to the quote character select the same RFC4180 parser mode in this version, so
+they produce the same records and commitment tuple for inputs interpreted the
+same way by that mode. They are not universally byte- or hash-equivalent to the
+released v1.24.1 equal-escape behavior.
+
+Exactly one input class changes interpretation: a quote character appearing
+inside an **unquoted** field when the declaration has `escape == quote`. On
+v1.24.1, Python treated the quote as an escape character and consumed it; the
+new rule passes no separate escape character and retains it. For example,
+`value\nx""y\n` decoded as `x"y` before and now decodes as `x""y`, which changes
+the canonical row, leaf hash and Merkle root. This is intentional. Treating the
+quote character as a separate escape character is not a real CSV dialect and
+silently produced a record that standard RFC4180 parsers do not agree with.
+
+`test_csv_equal_quote_escape_preserves_quotes_in_unquoted_field` pins the new
+behavior with that counterexample. It requires the canonical value `x""y`, the
+schema digest `825399d361e38fb1b2d104f84f32255426953977f5a7e20f3a5c8597310d0e9f`,
+and Merkle root
+`d4a04191a9ec02aafd107ca120deabb3f8966b3cb548eff69ba09c5ac7236649`.
+The existing quoted-field equivalence test remains in place.
+
+The known production population at this fold contains one submitted and
+approved verified preview: the 240-row, 222,876-canonical-byte seller run that
+exposed S1720. Its equal-escape attempt failed before producing any records or
+commitment; the approved preview was rebuilt from the same source with an empty
+escape. Therefore no published production artifact in this population was
+created under the old equal-escape interpretation, and there is no stale
+production commitment to replace.
+
+A stale commitment is nevertheless possible in another installation: it would
+require a preview built on v1.24.1 from this exact changed input class under an
+equal-escape declaration. After upgrade, rebuilding it would show the retained
+quote, a different root and a new immutable package rather than silently
+rewriting the published preview. The seller must withdraw and retire the old
+preview, use an empty escape (or the now-equivalent equal-escape declaration),
+obtain fresh approval, rebuild with fresh commitment/disclosure identities, and
+submit the replacement.
+
+R2 validation before the single push:
+
+- `rtk proxy env AIM_DATA_SERIAL_DATA_DIR=/private/var/tmp/s1720-r2-serial.hpzV83 VECTORAIZ_DATA_DIRECTORY=/private/var/tmp/s1720-r2-data.Hs9jgL VECTORAIZ_UPLOAD_DIRECTORY=/private/var/tmp/s1720-r2-uploads.2tytHn VECTORAIZ_PROCESSED_DIRECTORY=/private/var/tmp/s1720-r2-processed.1dWwEz DATABASE_URL=sqlite:////private/var/tmp/s1720-r2.db /var/tmp/aim-data-s1719-venv/bin/python -m pytest -q tests/test_dataset_canonicalization.py tests/test_preview_build_routes.py --tb=short` — **passed: 180 tests**, 27 dependency deprecation warnings.
+- `rtk ruff check tests/test_dataset_canonicalization.py` — **passed, no issues**.
+- `rtk proxy /var/tmp/aim-data-s1719-venv/bin/python scripts/check_preview_fixture_parity.py` — **passed, 15 pinned files**; backend SHA pin checked because no backend copy was supplied.
+- `rtk git diff --check` — **passed**.
 
 ## UI and documentation
 
@@ -116,7 +169,8 @@ No dependency or lockfile change and no `npm audit fix` was made.
 
 - Reported CSV locations are physical line numbers and are approximate for
   multiline quoted records; they intentionally do not include row values.
-- Delimiter collisions remain validator-compatible for byte/hash stability, as
-  described above. They are not recommended declarations.
+- Delimiter collisions remain validator-compatible but are not recommended
+  declarations. No universal byte/hash-stability claim is made for an
+  equal-escape declaration containing quotes in unquoted fields.
 - This is local automated proof. No production dataset, marketplace submission,
   provider configuration or external host was touched.

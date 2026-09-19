@@ -71,9 +71,11 @@ quotes inside a quoted field remain the quote convention:
 {"format":"csv","encoding":"utf-8","delimiter":",","quote":"\"","escape":"","header":true,"locale":"C","null_token":""}
 ```
 
-For compatibility, a declaration whose escape equals its quote is interpreted the
-same way and produces identical canonical bytes. A genuinely distinct escape
-character remains active. Timestamps require an unambiguous UTC/offset declaration.
+An equal quote/escape declaration selects the same RFC4180 doubled-quote parser
+mode as an empty escape. This does not preserve the old interpretation of quote
+characters inside unquoted fields: the old parser consumed one such character as
+an escape, while the RFC4180 mode retains it. A genuinely distinct escape character
+remains active. Timestamps require an unambiguous UTC/offset declaration.
 No source preview or inferred sample schema substitutes for the full dataset.
 
 **FLOAT/DOUBLE/REAL are ineligible**, even when finite. There is no approved

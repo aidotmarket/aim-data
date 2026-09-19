@@ -518,6 +518,24 @@ def test_csv_equal_quote_escape_is_rfc4180_and_hash_equivalent(tmp_path):
     ]
 
 
+def test_csv_equal_quote_escape_preserves_quotes_in_unquoted_field(tmp_path):
+    path = tmp_path / "unquoted-quote.csv"
+    path.write_text('value\nx""y\n')
+    schema = CanonicalSchema([["value", "string", False, {}]])
+
+    rows, schema_digest, merkle_root = _csv_commitment(path, schema, '"')
+
+    assert [row.decode() for row in rows] == [
+        '[["value","string","x\\"\\"y"]]'
+    ]
+    assert schema_digest.hex() == (
+        "825399d361e38fb1b2d104f84f32255426953977f5a7e20f3a5c8597310d0e9f"
+    )
+    assert merkle_root.hex() == (
+        "d4a04191a9ec02aafd107ca120deabb3f8966b3cb548eff69ba09c5ac7236649"
+    )
+
+
 def test_csv_distinct_escape_character_is_honoured(tmp_path):
     path = tmp_path / "escaped.csv"
     path.write_text('id,text\n1,"say \\"hello\\""\n')
