@@ -44,6 +44,13 @@ RIGHTS = {
     "other_authorized": "I am authorized to publish these complete selected records.",
 }
 
+BUILD_FAILURE_MESSAGES = {
+    "csv_parse_error": "CSV parsing failed. Check the delimiter, quote, and escape settings, then try again.",
+    "source_encoding_error": "The source is not valid UTF-8. Save or export it as UTF-8, then try again.",
+    "invalid_source": "The source file could not be read. Re-upload it or restore access, then try again.",
+    "source_changed": "The source changed while the preview was being built. Start a new preview build.",
+}
+
 
 class BuildError(ValueError):
     def __init__(self, code, status=409, job_id=None, message=None):
@@ -282,6 +289,7 @@ class PreviewBuildService:
                 descriptors=schema.descriptors,
                 state="building",
                 code=None,
+                message=None,
                 progress=dict(
                     phase="reading", records=0, canonical_bytes=0, elapsed_seconds=0
                 ),
@@ -400,6 +408,7 @@ class PreviewBuildService:
                             code=exc.code
                             if isinstance(exc, CommitmentValidationError)
                             else "build_failed",
+                            message=getattr(exc, "safe_message", None),
                         )
                         self.save(current)
             finally:
@@ -428,6 +437,8 @@ class PreviewBuildService:
                 "source_version": job["source_version"],
                 "state": job["state"],
                 "code": job["code"],
+                "message": job.get("message")
+                or BUILD_FAILURE_MESSAGES.get(job["code"]),
                 "progress": job["progress"],
                 "review_ready": bool(
                     job["state"] in {"ready", "selected", "scanned"}

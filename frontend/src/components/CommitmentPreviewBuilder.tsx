@@ -12,6 +12,11 @@ interface Props {
   originReview?: (job: PreviewBuildStatus, onChange: (job: PreviewBuildStatus) => void) => React.ReactNode;
 }
 
+const CSV_DECLARATION_TEMPLATE = JSON.stringify({
+  parsing: { format: 'csv', encoding: 'utf-8', delimiter: ',', quote: '"', escape: '', header: true, locale: 'C', null_token: '' },
+  schema_descriptors: [['column_name', 'string', true, {}]],
+}, null, 2);
+
 export function CommitmentPreviewBuilder({ datasetId, onStatus, originReview }: Props) {
   const [job, setJob] = useState<PreviewBuildStatus | null>(null);
   const [page, setPage] = useState<LocalPreviewPage | null>(null);
@@ -84,7 +89,10 @@ export function CommitmentPreviewBuilder({ datasetId, onStatus, originReview }: 
     try { await action(); } catch (e) {
       const message = e instanceof Error ? e.message : 'preview_operation_failed';
       setError(message);
-      if (message === 'parsing_declaration_required') setDeclarationsNeeded(true);
+      if (message === 'parsing_declaration_required') {
+        setDeclarationsNeeded(true);
+        setDeclarations(current => current || CSV_DECLARATION_TEMPLATE);
+      }
       if (message === 'review_expired' || message === 'job_already_running') {
         try { setJob(await previewBuildApi.latest(datasetId)); } catch { /* Keep the original error visible. */ }
       }
@@ -127,14 +135,14 @@ export function CommitmentPreviewBuilder({ datasetId, onStatus, originReview }: 
     </div>
     {declarationsNeeded && !active && <div className="space-y-2">
       <label htmlFor="preview-parsing">Missing parsing declarations</label>
-      <p className="text-sm">Declare the original file format and complete logical schema. CSV also needs UTF-8, delimiter, quote, escape, header, C locale and a null token. Schema entries are [name, type, nullable, parameters].</p>
+      <p className="text-sm">Declare the original file format and complete logical schema. Ordinary CSV uses an empty escape and doubled quotes inside quoted fields. A distinct escape character is also supported. Schema entries are [name, type, nullable, parameters].</p>
       <Textarea id="preview-parsing" value={declarations} onChange={e => setDeclarations(e.target.value)} rows={4} maxLength={262144}
-        placeholder={'{"parsing":{"format":"ndjson","encoding":"utf-8"},"schema_descriptors":[["name","string",true,{}]]}'} />
+        placeholder={CSV_DECLARATION_TEMPLATE} />
     </div>}
     {job && <>
       <p>Source version: <code>{job.source_version.slice(0,12)}</code></p>
       <p role="status" aria-live="polite">{job.progress.phase}: {job.progress.records} records · {job.progress.canonical_bytes} canonical bytes{job.state === 'building' ? ' · Building or recovering local index' : ''}</p>
-      {job.code && <p role="alert">{job.code}</p>}
+      {job.code && <p role="alert">{job.message || job.code}</p>}
       {job.review_ready && active && <>
         <h4 className="font-medium">Select complete records</h4>
         <p>{PREVIEW_ALL_FIELDS_WARNING}</p>

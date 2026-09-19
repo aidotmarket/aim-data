@@ -96,7 +96,17 @@ it('announces errors, focuses the message and offers retry',async () => {
   fireEvent.click(screen.getByRole('button',{name:'Prepare verified preview'}));
   expect(await screen.findByRole('alert')).toHaveTextContent('parsing_declaration_required');
   expect(screen.getByRole('alert')).toHaveFocus();
-  expect(screen.getByLabelText('Missing parsing declarations')).toBeInTheDocument();
+  const declarations = screen.getByLabelText('Missing parsing declarations') as HTMLTextAreaElement;
+  expect(declarations.value).toContain('"escape": ""');
+  expect(declarations.value).toContain('"format": "csv"');
+});
+it('shows the actionable build message without exposing only the stable code',async () => {
+  job={...job,state:'failed',code:'csv_parse_error',message:'CSV parsing failed near line 2. Check the delimiter, quote, and escape settings, then try again.',review_ready:false};
+  vi.mocked(previewBuildApi.latest).mockResolvedValue(job);
+  render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
+  const alert=await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('CSV parsing failed near line 2');
+  expect(alert).not.toHaveTextContent('csv_parse_error');
 });
 it('shows a submitted marketplace state and key fingerprint on recovery',async () => {
   job={...job,state:'submitted',candidate:{kind:'marketplace_candidate',request_digest:'d'.repeat(64),key_fingerprint:'f'.repeat(64),sample_hash:'s'.repeat(64),disclosure_version:'v'},outcome:'Verified preview is visible on ai.market.',marketplace:{state:'visible',listing_url:'https://ai.market/listings/synthetic'}};

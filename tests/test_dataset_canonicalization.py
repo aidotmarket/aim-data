@@ -11,7 +11,12 @@ from app.services.dataset_canonicalization import (
     dispatch_type,
     iter_records,
 )
-from app.services.dataset_merkle_service import canonical_json_bytes
+from app.services.dataset_merkle_service import (
+    build_merkle_root,
+    canonical_json_bytes,
+    compute_base_row_digest,
+    compute_leaf_hash,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -470,6 +475,119 @@ def test_csv_no_header_declared_order_and_multiline(tmp_path):
     assert list(iter_records(path, declaration, schema)) == [
         {"z": "line1\nline2", "a": "last"}
     ]
+
+
+def _csv_commitment(path, schema, escape):
+    declaration = ParsingDeclaration(
+        "csv",
+        encoding="utf-8",
+        delimiter=",",
+        quote='"',
+        escape=escape,
+        header=True,
+        locale="C",
+        null_token="",
+    )
+    rows = [
+        schema.canonical_row(record, text=True)
+        for record in iter_records(path, declaration, schema)
+    ]
+    leaves = [
+        compute_leaf_hash(base_digest, 0)
+        for base_digest, _ in sorted(
+            (compute_base_row_digest(schema.digest, row), row) for row in rows
+        )
+    ]
+    return rows, schema.digest, build_merkle_root(leaves)
+
+
+def test_csv_equal_quote_escape_is_rfc4180_and_hash_equivalent(tmp_path):
+    path = tmp_path / "ordinary.csv"
+    path.write_text('id,text\n1,"hello, world"\n2,"say ""hello"""\n')
+    schema = CanonicalSchema(
+        [["id", "signed_integer", False, {}], ["text", "string", False, {}]]
+    )
+
+    no_escape = _csv_commitment(path, schema, "")
+    quote_escape = _csv_commitment(path, schema, '"')
+
+    assert quote_escape == no_escape
+    assert [row.decode() for row in quote_escape[0]] == [
+        '[["id","signed_integer","1"],["text","string","hello, world"]]',
+        '[["id","signed_integer","2"],["text","string","say \\"hello\\""]]',
+    ]
+
+
+def test_csv_distinct_escape_character_is_honoured(tmp_path):
+    path = tmp_path / "escaped.csv"
+    path.write_text('id,text\n1,"say \\"hello\\""\n')
+    schema = CanonicalSchema(
+        [["id", "signed_integer", False, {}], ["text", "string", False, {}]]
+    )
+
+    rows, _, _ = _csv_commitment(path, schema, "\\")
+
+    assert json.loads(rows[0]) == [
+        ["id", "signed_integer", "1"],
+        ["text", "string", 'say "hello"'],
+    ]
+
+
+def test_csv_parse_failure_is_actionable(tmp_path):
+    schema = CanonicalSchema([["value", "string", False, {}]])
+    declaration = ParsingDeclaration(
+        "csv",
+        encoding="utf-8",
+        delimiter=",",
+        quote='"',
+        escape='"',
+        header=False,
+        locale="C",
+        null_token="",
+    )
+    declaration.validate()  # Equal quote/escape is explicitly within the contract.
+
+    malformed = tmp_path / "malformed.csv"
+    malformed.write_text('"unterminated\n')
+    declaration = ParsingDeclaration(
+        "csv",
+        encoding="utf-8",
+        delimiter=",",
+        quote='"',
+        escape="",
+        header=False,
+        locale="C",
+        null_token="",
+    )
+    with pytest.raises(Error, match="^csv_parse_error$") as failure:
+        list(iter_records(malformed, declaration, schema))
+    assert "line 1" in failure.value.safe_message
+    assert "unterminated" not in failure.value.safe_message
+
+
+def test_source_encoding_and_io_failures_are_distinct_and_safe(tmp_path):
+    schema = CanonicalSchema([["value", "string", False, {}]])
+    declaration = ParsingDeclaration(
+        "csv",
+        encoding="utf-8",
+        delimiter=",",
+        quote='"',
+        escape="",
+        header=False,
+        locale="C",
+        null_token="",
+    )
+    encoded = tmp_path / "encoded.csv"
+    encoded.write_bytes(b"valid\nsecret-\xff\n")
+    with pytest.raises(Error, match="^source_encoding_error$") as failure:
+        list(iter_records(encoded, declaration, schema))
+    assert "line 2" in failure.value.safe_message
+    assert "secret" not in failure.value.safe_message
+
+    missing = tmp_path / "missing.csv"
+    with pytest.raises(Error, match="^invalid_source$") as failure:
+        list(iter_records(missing, declaration, schema))
+    assert str(missing) not in failure.value.safe_message
 
 
 def test_parquet_exact_nanos_decimal_binary_nested(tmp_path):

@@ -113,6 +113,11 @@ complete explicit schema and 2a parsing options. No field type or nullability is
 silently inferred from sample rows. The current UI accepts these declarations as
 JSON; CSV/TSV must include all required parser choices. Unsupported formats remain
 ineligible. No client-supplied source or publication filesystem path is accepted.
+The editor's ordinary-CSV template uses `"escape":""`. `escape` equal to `quote`
+is accepted as the equivalent RFC4180 doubled-quote convention; only a distinct,
+non-empty escape is passed to the parser as an escape character. A failed CSV
+parse reports its approximate physical line and asks the seller to check delimiter,
+quote and escape. Invalid UTF-8 and unreadable sources have separate messages.
 
 Jobs are local to one application process, with independent review sessions per
 (owner, dataset). Heavy 2a builds remain serialized under the installation worker
