@@ -220,7 +220,7 @@ class DatasetPreviewProofContract(WireModel):
     package_media_type: Literal["application/vnd.aim.preview+json"]
     package_profile: Literal["aim-preview-package-v1", "aim-preview-package-v2"]
     package_byte_ceiling: int = Field(gt=0, le=1048576)
-    scan_policy: Literal["aim-preview-policy-v1"]
+    scan_policy: Literal["aim-preview-policy-v1", "aim-preview-policy-v2"]
     scan_policy_version: Annotated[
         str, Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
     ]
@@ -241,6 +241,11 @@ class DatasetPreviewProofContract(WireModel):
 
     @model_validator(mode="after")
     def positions(self):
+        if (self.scan_policy, self.scan_policy_version) not in {
+            ("aim-preview-policy-v1", "1.0.0"),
+            ("aim-preview-policy-v2", "2.0.0"),
+        }:
+            raise ValueError("scan_policy_unknown")
         if (
             self.leaf_index >= self.tree_size
             or self.duplicate_ordinal >= self.tree_size

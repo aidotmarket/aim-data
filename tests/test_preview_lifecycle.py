@@ -39,22 +39,9 @@ def test_atomic_retry_and_recovery(tmp_path):
     changed["seller_signature"] = "A" * 86
     with pytest.raises(LifecycleError, match="request_id_conflict"):
         restarted.freeze(key, changed)
-    with pytest.raises(LifecycleError, match="fixture_not_submittable"):
-        j.transition(key, "submitted")
-    with pytest.raises(LifecycleError, match="fixture_not_submittable"):
-        j.transition(key, "submission_unknown")
+    j.transition(key, "submitted")
+    assert j.read(key)["state"] == "submitted"
     assert j.read(key)["request"] == first[0]
-
-
-def test_candidate_change_allocates_new_identity(tmp_path):
-    j = PreviewJournal(tmp_path / "journal.sqlite")
-    b = request_fixture()["binding"]
-    c = j.allocate_fixture(b)
-    assert j.allocate_fixture(b) == c
-    changed = dict(b, update_cadence_days=5)
-    c2 = j.allocate_fixture(changed)
-    assert c2.binding()["request_id"] != c.binding()["request_id"]
-    assert c2.binding()["disclosure_version"] != c.binding()["disclosure_version"]
 
 
 def test_withdrawal_refresh_supersession():
@@ -170,27 +157,6 @@ def test_retirement_pending_recovery(tmp_path, allow_origin):
     receipts[0]["body"] = "marker"
     with pytest.raises(LifecycleError):
         validate_retirement_receipts(receipts, url=URL, origin=BROWSER)
-
-
-def test_fixture_head_retry_conflict_and_saved_package_replay(tmp_path):
-    from tests.preview_fixture_factory import all_requests
-
-    journal = PreviewJournal(tmp_path / "journal.sqlite")
-    requests = all_requests()
-    r = requests["approve"]
-    original = journal.apply_fixture(r)
-    assert journal.fixture_current(r["binding"])
-    assert journal.apply_fixture(r) == original
-    changed = copy.deepcopy(r)
-    changed["binding"]["update_cadence_days"] = 99
-    with pytest.raises(LifecycleError, match="409_request_id_conflict"):
-        journal.apply_fixture(changed)
-    journal.apply_fixture(requests["withdraw"])
-    assert not journal.fixture_current(r["binding"])
-    assert journal.apply_fixture(r) == original  # Original receipt, never head revival.
-    assert not journal.fixture_current(r["binding"])
-    with pytest.raises(LifecycleError, match="409_stale_expected_head"):
-        journal.apply_fixture(requests["refresh"])
 
 
 golden = package_tests.golden

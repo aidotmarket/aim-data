@@ -1,4 +1,4 @@
-"""Non-custodial F2 signing. Never allocates candidates or submits previews.
+"""Non-custodial F2 signing.
 
 The existing encrypted install identity is the only seller signing key. Platform
 signatures are verification-only; fixture generation lives exclusively in tests.
@@ -178,8 +178,8 @@ class PreviewSigningService:
         *,
         install_id,
         seller_id,
-        evidence_reader,
-        evidence_max_age: timedelta,
+        evidence_reader=None,
+        evidence_max_age: timedelta | None = None,
         clock=lambda: datetime.now(timezone.utc),
     ):
         self.crypto = crypto
@@ -211,14 +211,21 @@ class PreviewSigningService:
             raw = public_bytes(keys[1])
             if public_bytes(keys[0].public_key()) != raw:
                 raise SigningError("keystore_key_mismatch")
-            check_evidence(
-                self.evidence_reader(),
-                install_id=self.install_id,
-                seller_id=self.seller_id,
-                raw_key=raw,
-                now=self.clock(),
-                max_age=self.max_age,
-            )
+            # Live authorization belongs to ai.market: every submitted disclosure
+            # is resolved against the owner-bound install registry there.  Older
+            # evidence-bundle callers may still supply a readback for an additional
+            # local check, but signing never depends on an operator-created file.
+            if self.evidence_reader is not None:
+                if self.max_age is None:
+                    raise SigningError("invalid_evidence_policy")
+                check_evidence(
+                    self.evidence_reader(),
+                    install_id=self.install_id,
+                    seller_id=self.seller_id,
+                    raw_key=raw,
+                    now=self.clock(),
+                    max_age=self.max_age,
+                )
             return keys
         except Exception:
             raise SigningError("signing_authority_unavailable") from None
@@ -261,14 +268,14 @@ class PreviewSigningService:
         return self._sign(disclosure_bytes(b), b["signer_reference"])
 
 
-# Candidate bytes are immutable and labelled fixture-only until I.b supplies an
-# authenticated platform allocation. No mutable UI object is retained for retry.
+# Candidate bytes are the immutable binding allocated by ai.market. No mutable
+# UI object is retained for retry.
 
 
 @dataclass(frozen=True)
 class LocalCandidate:
     binding_bytes: bytes
-    kind: Literal["fixture_candidate"] = "fixture_candidate"
+    kind: Literal["marketplace_candidate"] = "marketplace_candidate"
 
     @classmethod
     def validate(cls, binding):
@@ -279,8 +286,8 @@ class LocalCandidate:
     def binding(self):
         from app.models.preview_disclosure_schemas import DisclosureBinding
 
-        if self.kind != "fixture_candidate":
-            raise SigningError("integration_not_yet_available")
+        if self.kind != "marketplace_candidate":
+            raise SigningError("candidate_invalid")
         data = closed(DisclosureBinding, json.loads(self.binding_bytes))
         if serialize(DisclosureBinding, data) != self.binding_bytes:
             raise SigningError("candidate_changed")
@@ -374,11 +381,6 @@ def verify_request(request, *, evidence, raw_key, now, max_age):
             if not verify_bytes(raw_key, p["signature"], proof_bytes(c, p)):
                 raise SigningError("proof_signature_invalid")
     return r
-
-
-def submit_preview_request(request):
-    request_bytes(request)
-    raise SigningError("preview_integration_not_yet_available")
 
 
 def verify_authenticated_request(envelope, request, trusted_keys, *, now):

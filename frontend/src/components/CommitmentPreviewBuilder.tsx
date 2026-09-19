@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { previewBuildApi, type PreviewBuildStatus, type PreviewConsent, type LocalPreviewPage, type PreviewCreateOptions } from '@/lib/api';
+import { previewBuildApi, type PreviewBuildStatus, type PreviewConsent, type LocalPreviewPage, type PreviewCreateOptions, type MarketplaceSummaryPreview } from '@/lib/api';
 import { inertPreviewText, previewBudget, PREVIEW_ALL_FIELDS_WARNING, PREVIEW_MEMBERSHIP_DISCLAIMER, PREVIEW_PERMISSION } from '@/lib/disclosure';
 
 interface Props {
   datasetId: string;
-  metadataApproved: boolean;
-  approvedMetadataDigest?: string;
+  /** Legacy caller input; live At a glance approval is now authoritative. */
+  metadataApproved?: boolean;
   onStatus?: (status: string) => void;
   originReview?: (job: PreviewBuildStatus, onChange: (job: PreviewBuildStatus) => void) => React.ReactNode;
 }
 
-export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approvedMetadataDigest, onStatus, originReview }: Props) {
+export function CommitmentPreviewBuilder({ datasetId, onStatus, originReview }: Props) {
   const [job, setJob] = useState<PreviewBuildStatus | null>(null);
   const [page, setPage] = useState<LocalPreviewPage | null>(null);
   const [start, setStart] = useState(0);
@@ -24,6 +24,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
   const [error, setError] = useState<string | null>(null);
   const [declarationsNeeded, setDeclarationsNeeded] = useState(false);
   const [declarations, setDeclarations] = useState('');
+  const [marketplaceSummary, setMarketplaceSummary] = useState<MarketplaceSummaryPreview | null>(null);
   const [rights, setRights] = useState<PreviewConsent['rights_basis'] | ''>('');
   const [permission, setPermission] = useState(false);
   const [restricted, setRestricted] = useState(false);
@@ -69,6 +70,15 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
     return () => { active = false; };
   }, [job?.job_id, job?.review_ready, job?.state, start]);
 
+  useEffect(() => {
+    if (!job?.job_id || job.receipts.length !== 2 || job.candidate) return;
+    let active = true;
+    previewBuildApi.marketplaceSummary(job.job_id)
+      .then(value => { if (active) setMarketplaceSummary(value); })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : 'marketplace_summary_failed'); });
+    return () => { active = false; };
+  }, [job?.job_id, job?.receipts.length, job?.candidate]);
+
   const run = async (action: () => Promise<void>) => {
     setBusy(true); setError(null);
     try { await action(); } catch (e) {
@@ -86,7 +96,6 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
       try { options = { ...JSON.parse(declarations), dataset_id: datasetId }; }
       catch { throw new Error('Enter valid parsing declarations.'); }
     }
-    if (approvedMetadataDigest) await previewBuildApi.approveMetadata(datasetId, approvedMetadataDigest);
     const value = await previewBuildApi.create(options);
     setJob(value); setSelected([]); setColumns(value.columns); setSizes({}); setStart(0);
     setPermission(false); setRestricted(false); setAccuracy(false); setRights('');
@@ -97,7 +106,6 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
     setPermission(false); setRestricted(false); setAccuracy(false);
   };
   const budget = previewBudget(selected, job?.columns.length || 0, sizes);
-  const metadataChanged = !!job?.candidate && !!approvedMetadataDigest && job.approved_metadata_digest !== approvedMetadataDigest;
   const fixed = !!job?.publication || !!job?.candidate;
   const active = !!job && !['cancelled','failed','expired','retired','withdrawn'].includes(job.state);
   const selectionChanged = JSON.stringify(selected) !== JSON.stringify(job?.selection.leaf_indices) || JSON.stringify(columns) !== JSON.stringify(job?.selection.display_columns);
@@ -114,7 +122,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
         if (job && active) await previewBuildApi.cancel(job.job_id);
         setJob(null); setSelected([]); setPermission(false); setRestricted(false); setAccuracy(false);
       })}>No sample</Button>
-      {!active && job?.state !== 'withdrawn' && <Button type="button" disabled={busy || recovering || !metadataApproved} onClick={prepare}>Prepare verified preview</Button>}
+      {!active && job?.state !== 'withdrawn' && <Button type="button" disabled={busy || recovering} onClick={prepare}>Prepare verified preview</Button>}
       {active && !job?.publication && <Button type="button" variant="outline" disabled={busy} onClick={() => run(async () => { setJob(await previewBuildApi.cancel(job!.job_id)); })}>Cancel preview build</Button>}
     </div>
     {declarationsNeeded && !active && <div className="space-y-2">
@@ -145,7 +153,7 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
               <td><label><input type="checkbox" aria-label={`Select leaf ${row.leaf_index}`} checked={selected.includes(row.leaf_index)} disabled={busy || fixed || !!row.code}
                 onChange={() => toggle(row.leaf_index)} onKeyDown={e => { if (e.key === ' ') { e.preventDefault(); toggle(row.leaf_index); } }} /> {row.leaf_index}</label></td>
               {job.columns.map(column => <td key={column} className="max-w-xs break-words whitespace-pre-wrap" data-preview-cell><span>{inertPreviewText(row.cells?.[column])}</span></td>)}
-              <td>{row.code || 'Eligible for local scan'}</td>
+              <td>{row.code || 'Within technical limits'}</td>
             </tr>)}</tbody>
           </table>
         </div>
@@ -159,40 +167,44 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
       </>}
       {active && (job.review_ready || !!job.publication) && <>
         <fieldset disabled={busy} className="space-y-3">
-          <legend className="font-medium">Rights and local policy review</legend>
+          <legend className="font-medium">Seller publication confirmation</legend>
+          <p>You are responsible for what you publish. Confirm that you have the right to show these exact selected rows publicly.</p>
           <label className="block">Rights basis <select aria-label="Rights basis" value={rights} onChange={e => { setRights(e.target.value as typeof rights); setPermission(false); setAccuracy(false); }}>
             <option value="">Choose rights basis</option><option value="owner">I own the rights</option><option value="licensed">Licensed for public preview</option><option value="public_domain">Public domain</option><option value="other_authorized">Other authorization</option>
           </select></label>
           <label className="flex items-start gap-2"><input type="checkbox" checked={permission} onChange={e => setPermission(e.target.checked)} />{PREVIEW_PERMISSION}</label>
-          <label className="flex items-start gap-2"><input type="checkbox" checked={restricted} onChange={e => setRestricted(e.target.checked)} />I confirm these selected records contain no prohibited or third-party restricted content.</label>
+          <label className="flex items-start gap-2"><input type="checkbox" checked={restricted} onChange={e => setRestricted(e.target.checked)} />I confirm I reviewed these exact rows for restricted or third-party content.</label>
           <Button type="button" disabled={busy || fixed || selectionChanged || !job.selection.rows || !readyConsent} onClick={() => run(async () => {
             await previewBuildApi.policy(job.job_id,consent); setJob(await previewBuildApi.status(job.job_id));
-          })}>Run local policy scan</Button>
+          })}>Confirm selected rows</Button>
         </fieldset>
-        {job.policy && <p role="status">{job.policy.policy} / {job.policy.version}: {job.policy.passed ? 'Passed local scan; this is not clearance.' : job.policy.reason_codes.join(', ')}</p>}
+        {job.policy?.passed && <p role="status">Seller confirmations recorded for these exact selected rows.</p>}
         {job.policy?.passed && originReview?.(job,setJob)}
         {job.receipts.length === 2 && job.state !== 'retired' && <div className="space-y-3">
           <h4 className="font-medium">Confirm preview</h4>
+          {marketplaceSummary && <div className="rounded-md border p-3">
+            <p className="font-medium">Current ai.market At a glance ({marketplaceSummary.state})</p>
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(marketplaceSummary.at_a_glance, null, 2)}</pre>
+            <p className="mt-2 text-sm">{marketplaceSummary.approval_text}</p>
+          </div>}
           <p>Root: <code>{job.commitment?.dataset_merkle_root.slice(0,12)}</code> · Sample: <code>{job.publication?.sample_hash.slice(0,12)}</code></p>
           <p>{job.selection.rows} selected records · Display fields: {job.selection.display_columns.join(', ')}</p>
           <p>Origin: {job.origin}</p>
-          <p>Registered key fingerprint: {job.signing?.fingerprint || job.signing?.code || "Registration evidence required"}</p>
+          <p>Registered key fingerprint: {job.signing?.fingerprint || job.signing?.code || "Install signing key unavailable"}</p>
           <label className="flex gap-2"><input type="checkbox" checked={accuracy} onChange={e => setAccuracy(e.target.checked)} />I confirm the approved metadata is accurate for this source and selection.</label>
-          <Button type="button" disabled={busy || !!job.candidate || !metadataApproved || !readyConsent || !accuracy} onClick={() => run(async () => {
-            if (approvedMetadataDigest) await previewBuildApi.approveMetadata(datasetId, approvedMetadataDigest);
+          <Button type="button" disabled={busy || !!job.candidate || !marketplaceSummary || !readyConsent || !accuracy} onClick={() => run(async () => {
             setJob(await previewBuildApi.candidate(job.job_id,{...consent,metadata_accuracy_confirmed:accuracy}));
-          })}>Prepare signed preview</Button>
+          })}>Approve At a glance and prepare signed preview</Button>
         </div>}
       </>}
-      {metadataChanged && <p role="alert">Metadata changed. Withdraw and replace the preview with fresh consent.</p>}
       {job.candidate && <div className="space-y-2">
         <p>Registered key fingerprint: <code>{job.candidate.key_fingerprint}</code></p>
-        <p>Local candidate digest: <code>{job.candidate.request_digest.slice(0,12)}</code></p>
-        <p>Local candidate only; no public marketplace sample is active.</p>
-        {!job.outcome && active && <Button type="button" disabled={busy || metadataChanged || !metadataApproved} onClick={() => run(async () => { setJob(await previewBuildApi.submit(job.job_id)); })}>Finish local preparation</Button>}
+        <p>ai.market candidate digest: <code>{job.candidate.request_digest.slice(0,12)}</code></p>
+        {!job.outcome && active && <Button type="button" disabled={busy} onClick={() => run(async () => { setJob(await previewBuildApi.submit(job.job_id)); })}>Submit verified preview to ai.market</Button>}
       </div>}
-      {job.outcome && !metadataChanged && <p role="status">{job.outcome}</p>}
-      {job.candidate && active && <Button type="button" variant="outline" disabled={busy || metadataChanged || !readyConsent || !accuracy} onClick={() => run(async () => {
+      {job.outcome && <p role="status">{job.outcome}</p>}
+      {job.marketplace?.listing_url && <p>Live listing: <a className="underline" href={job.marketplace.listing_url} target="_blank" rel="noreferrer">{job.marketplace.listing_url}</a> · state: {job.marketplace.state}</p>}
+      {job.state === 'submitted' && <Button type="button" variant="outline" disabled={busy || !readyConsent || !accuracy} onClick={() => run(async () => {
         const value = await previewBuildApi.refresh(job.job_id,{...consent,metadata_accuracy_confirmed:accuracy});
         setJob(value); setSelected(value.selection.leaf_indices); setColumns(value.selection.display_columns); setSizes(value.selection.row_sizes || {}); setStart(0);
         setPermission(false); setRestricted(false); setAccuracy(false);
@@ -202,8 +214,8 @@ export function CommitmentPreviewBuilder({ datasetId, metadataApproved, approved
       })}>Retire previous package</Button></p>}
       {job.state === 'withdrawn' && <p role="status">Local package retired. Remove the external object at {job.origin || job.publication?.relative_path}, then retry withdrawal to verify GET/OPTIONS retirement receipts.</p>}
       {job.publication && <Button type="button" variant="outline" disabled={busy || job.state === 'retired'} onClick={() => run(async () => { try { await previewBuildApi.withdraw(job.job_id); } finally { setJob(await previewBuildApi.status(job.job_id)); } })}>Withdraw preview</Button>}
-      {job.state === 'retired' && <Button type="button" disabled={busy || !metadataApproved} onClick={prepare}>Replace preview</Button>}
-      {job.state === 'retired' && <p role="status">Hosting retired; marketplace submission was never made. Prepare a replacement preview with fresh consent.</p>}
+      {job.state === 'retired' && <Button type="button" disabled={busy} onClick={prepare}>Replace preview</Button>}
+      {job.state === 'retired' && <p role="status">The marketplace preview and hosting are retired. Prepare a replacement with fresh consent.</p>}
     </>}
   </section>;
 }

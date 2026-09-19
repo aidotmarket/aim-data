@@ -26,6 +26,50 @@ NOTICE = "PRODUCER-LOCAL NON-RUNTIME FIXTURE. No platform allocation, acceptance
 NAMESPACE = UUID("0684eb10-2a2b-4c2e-8181-171600000001")
 
 
+class FixtureReplay:
+    """Synthetic contract oracle kept outside the AIM Data runtime."""
+
+    def __init__(self):
+        self.results = {}
+        self.heads = {}
+
+    def apply(self, request):
+        from app.services.preview_lifecycle import LifecycleError
+        from app.services.preview_signing_service import request_digest
+
+        digest = request_digest(request)
+        binding = request["binding"]
+        key = (
+            binding["seller_id"],
+            binding["listing_id"],
+            binding["request_id"],
+        )
+        if key in self.results:
+            saved_digest, result = self.results[key]
+            if saved_digest != digest:
+                raise LifecycleError("409_request_id_conflict")
+            return result
+        owner_key = key[:2]
+        if binding["expected_current_disclosure_id"] != self.heads.get(owner_key):
+            raise LifecycleError("409_stale_expected_head")
+        result = {
+            "decision_id": binding["request_id"],
+            "disclosure_version": binding["disclosure_version"],
+            "decision": binding["decision"],
+        }
+        self.results[key] = (digest, result)
+        self.heads[owner_key] = binding["disclosure_version"]
+        return result
+
+    def current(self, binding):
+        return (
+            self.heads.get((binding["seller_id"], binding["listing_id"]))
+            == binding["disclosure_version"]
+            and binding["decision"] == "approve"
+            and binding["sample_decision"] == "approved"
+        )
+
+
 def write_json(path, value):
     from app.services.dataset_merkle_service import canonical_json_bytes
 
@@ -80,7 +124,6 @@ def manifest(output, *, state):
 
 def lifecycle_evidence(output, request, signer, p1):
     from app.services.preview_lifecycle import LifecycleError
-    from app.services.preview_lifecycle import PreviewJournal
     from app.services.dataset_merkle_service import canonical_rfc3339_utc
     from app.services.preview_signing_service import construct_request
     from app.services.preview_lifecycle import freshness
@@ -138,23 +181,23 @@ def lifecycle_evidence(output, request, signer, p1):
         requests[name] = result
     outcomes = {}
     for name, revision in requests.items():
-        journal = PreviewJournal(output / ".private" / (name + ".sqlite"))
-        original = journal.apply_fixture(request)
-        assert journal.apply_fixture(request) == original
+        replay = FixtureReplay()
+        original = replay.apply(request)
+        assert replay.apply(request) == original
         changed = json.loads(request_bytes(request))
         changed["binding"]["update_cadence_days"] = 99
         try:
-            journal.apply_fixture(changed)
+            replay.apply(changed)
         except LifecycleError as error:
             conflict = str(error)
         else:
             raise ValueError("idempotency_guard_failed")
-        journal.apply_fixture(revision)
-        assert not journal.fixture_current(b)
-        assert journal.apply_fixture(request) == original
-        assert not journal.fixture_current(b)
+        replay.apply(revision)
+        assert not replay.current(b)
+        assert replay.apply(request) == original
+        assert not replay.current(b)
         try:
-            journal.apply_fixture(
+            replay.apply(
                 dict(
                     requests["refresh"],
                     binding=dict(

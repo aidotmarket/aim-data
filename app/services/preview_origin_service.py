@@ -3,9 +3,11 @@
 import hashlib
 import http.client
 import ipaddress
+import json
 import re
 import socket
 import ssl
+import zlib
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
@@ -148,24 +150,20 @@ def receipt_bytes(receipt):
 def capture_receipt(
     url, method, status, headers, *, captured_at, origin, retired=False
 ):
-    """Only a passing closed receipt escapes; cookie values never enter evidence."""
+    """Capture transport observations; only GET CORS is an admission condition."""
     if method not in {"GET", "OPTIONS"} or type(status) is not int:
         raise OriginError("invalid_response")
     validate_url(url)
     if 300 <= status <= 399:
         raise OriginError("redirect")
-    if (method == "GET" and status not in ({404, 410} if retired else {200})) or (
-        method == "OPTIONS" and not 200 <= status < 300
-    ):
+    if method == "GET" and status not in ({404, 410} if retired else {200}):
         raise OriginError("http_status")
-    if headers.get_all("set-cookie") is not None:
-        raise OriginError("set_cookie")
     values = {}
     for key in HEADER_KEYS:
         items = headers.get_all(key)
-        if items is not None and len(items) != 1:
-            raise OriginError("ambiguous_headers")
-        values[key] = items[0] if items else None
+        if items is not None and len(items) != 1 and key == "access-control-allow-origin":
+            raise OriginError("cors_origin")
+        values[key] = ", ".join(items) if items else None
     receipt = {
         "url": url,
         "method": method,
@@ -175,23 +173,28 @@ def capture_receipt(
         "no_set_cookie": True,
     }
     receipt_bytes(receipt)
-    if values["content-type"] != MEDIA_TYPE:
-        raise OriginError("content_type")
-    cache = {v.strip().lower() for v in (values["cache-control"] or "").split(",")}
-    if "no-store" not in cache:
-        raise OriginError("cache_control")
-    if values["access-control-allow-origin"] not in {"*", origin}:
+    if (
+        method == "GET"
+        and not retired
+        and values["access-control-allow-origin"] not in {"*", origin}
+    ):
         raise OriginError("cors_origin")
-    if values["access-control-allow-credentials"] not in {None, "false"}:
-        raise OriginError("cors_credentials")
-    methods = {
-        v.strip() for v in (values["access-control-allow-methods"] or "").split(",")
-    }
-    if method == "OPTIONS" and not methods.intersection({"GET", "*"}):
-        raise OriginError("cors_method")
-    if headers.get("content-encoding", "identity") != "identity":
-        raise OriginError("unsupported_encoding")
     return receipt
+
+
+def browser_body(payload, encoding):
+    """Return bytes exposed by browser fetch; compression is an observation."""
+    encoding = (encoding or "identity").lower()
+    try:
+        if encoding == "gzip":
+            return zlib.decompress(payload, 16 + zlib.MAX_WBITS)
+        if encoding == "deflate":
+            return zlib.decompress(payload)
+        if encoding in {"", "identity"}:
+            return payload
+    except zlib.error:
+        pass
+    raise OriginError("package_unreadable")
 
 
 def verify_hosted_package(
@@ -231,12 +234,32 @@ def verify_hosted_package(
                 )
                 if method == "GET" and not retired:
                     payload = response.read(CAPS["envelope_bytes"] + 1)
+                    payload = browser_body(payload, response.headers.get("content-encoding"))
                     if (
                         len(payload) != expected_bytes
                         or hashlib.sha256(payload).hexdigest() != expected_sha256
                     ):
                         raise OriginError("package_mismatch")
+                    try:
+                        parsed_payload = json.loads(payload)
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        raise OriginError("package_unreadable") from None
+                    if not isinstance(parsed_payload, dict):
+                        raise OriginError("package_unreadable")
                 receipts.append(receipt)
+            except Exception:
+                if method != "OPTIONS":
+                    raise
+                observation = {
+                    "url": url,
+                    "method": "OPTIONS",
+                    "status": 0,
+                    "captured_at": canonical_rfc3339_utc(datetime.now(timezone.utc)),
+                    "headers": {key: None for key in HEADER_KEYS},
+                    "no_set_cookie": True,
+                }
+                receipt_bytes(observation)
+                receipts.append(observation)
             finally:
                 connection.close()
     except OriginError:

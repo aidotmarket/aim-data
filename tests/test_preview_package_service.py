@@ -6,10 +6,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.services.preview_content_policy import (
-    detector_identity as real_detector_identity,
-)
-from app.services.pii_service import PIIService
 from app.services.dataset_canonicalization import CanonicalSchema
 from app.services.dataset_merkle_service import build_disk_tree, canonical_json_bytes
 from app.services.preview_package_service import (
@@ -27,12 +23,10 @@ from app.services.preview_package_service import (
 FIXTURES = Path("tests/fixtures")
 
 
-@pytest.fixture(autouse=True)
-def pinned_identity(monkeypatch):
-    # Only identity metadata is patched; all successful scans use the real engine.
-    from app.services import preview_content_policy as policy
-
-    monkeypatch.setattr(policy, "detector_identity", lambda: policy.DETECTOR_IDENTITY)
+@pytest.fixture
+def pinned_identity():
+    """Compatibility fixture: preview admission has no detector identity."""
+    yield
 
 
 @pytest.fixture
@@ -376,28 +370,12 @@ def test_unique_cell_marker_absent_from_journal_and_errors(tmp_path, caplog):
     assert marker not in str(exc.value) + caplog.text
 
 
-def test_failed_policy_writes_nothing(tmp_path, builder, envelope):
-    from app.services.preview_content_policy import PolicyError
-
+def test_detector_failure_and_injection_do_not_block_package(builder, envelope):
     detector = Mock()
-    detector.scan_complete_selection.side_effect = RuntimeError(
-        "unique synthetic cell marker"
-    )
-    with pytest.raises(PolicyError, match="detector_unavailable"):
-        builder.prepare(
-            [0],
-            proof_ids=[envelope["entries"][0]["proof_id"]],
-            commitment_id=envelope["commitment_id"],
-            disclosure_version=envelope["disclosure_version"],
-            detector=detector,
-            scanned_at="2026-09-17T00:00:00Z",
-            rights_confirmed=True,
-            public_preview_permission=True,
-            restricted_content_confirmed=True,
-            package_url="https://seller.example/p",
-            manifest_bytes=1000,
-        )
-    assert not (tmp_path / "public").exists()
+    detector.scan_complete_selection.side_effect = RuntimeError("must not be called")
+    package = prepare(builder, envelope, detector=detector)
+    assert package.scan["scan_verdict"] == "passed"
+    detector.scan_complete_selection.assert_not_called()
 
 
 def test_tampered_index_and_published_file(tmp_path, builder, envelope):
@@ -417,98 +395,3 @@ def test_unscanned_payload_cannot_be_marked_prepared():
 
     with pytest.raises(PackageError, match="approval_required"):
         PreparedPackage(b"unscanned synthetic cell marker", {})
-
-
-@pytest.mark.parametrize("substitute", [Mock(), Mock(spec=PIIService), object()])
-def test_detector_injection_rejected(builder, envelope, substitute, tmp_path):
-    from app.services.preview_content_policy import PolicyError
-
-    with pytest.raises(PolicyError, match="^detector_unavailable$"):
-        prepare(builder, envelope, detector=substitute)
-    assert not (tmp_path / "public").exists()
-
-
-def test_builder_wrong_identity_fails_closed(builder, envelope, monkeypatch):
-    from app.services import preview_content_policy as policy
-
-    # Restore the actual provider, overriding the metadata-only test seam.
-    monkeypatch.setattr("importlib.metadata.version", lambda _: "wrong-version")
-    monkeypatch.setattr(policy, "detector_identity", real_detector_identity)
-    with pytest.raises(policy.PolicyError, match="^detector_unavailable$"):
-        prepare(builder, envelope)
-
-
-@pytest.mark.parametrize(
-    "pinned", [False, True], ids=["shared-environment", "isolated-pinned"]
-)
-def test_builder_real_detector_environment(pinned, tmp_path):
-    import os
-    import subprocess
-    import sys
-
-    target = os.environ.get("PREVIEW_PINNED_IMPORT_TARGET")
-    if pinned and not target:
-        pytest.skip("Set PREVIEW_PINNED_IMPORT_TARGET to the isolated pinned install")
-    script = r"""
-import json
-import tempfile
-from pathlib import Path
-from app.config import settings
-from app.services.dataset_canonicalization import CanonicalSchema
-from app.services.dataset_merkle_service import build_disk_tree
-from app.services.preview_content_policy import PolicyError, detector_identity
-from app.services.preview_package_service import CommitmentPreviewBuilder
-with tempfile.TemporaryDirectory() as directory:
-    settings.data_directory = directory
-    schema = CanonicalSchema([["crop", "string", False, {}]])
-    tree = build_disk_tree([schema.canonical_row({"crop": "oats"})], schema.digest, Path(directory))
-    try:
-        package = CommitmentPreviewBuilder(tree, schema.descriptors).prepare(
-            [0], proof_ids=["00000000-0000-0000-0000-000000000003"],
-            commitment_id="00000000-0000-0000-0000-000000000001",
-            disclosure_version="00000000-0000-0000-0000-000000000002",
-            scanned_at="2026-09-17T00:00:00Z", rights_confirmed=True,
-            public_preview_permission=True, restricted_content_confirmed=True,
-            manifest_bytes=1000, package_url="https://seller.example/p")
-        print(json.dumps({"result": package.scan["scan_verdict"], "identity": detector_identity()}))
-    except PolicyError as error:
-        print(json.dumps({"result": str(error)}))
-"""
-    env = dict(
-        os.environ,
-        PYTHONPATH=os.pathsep.join(
-            filter(None, [target if pinned else None, str(Path.cwd())])
-        ),
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=90,
-    )
-    assert result.returncode == 0, result.stderr
-    outcome = json.loads(result.stdout)
-    if pinned:
-        from app.services.preview_content_policy import DETECTOR_IDENTITY
-
-        assert outcome == {"result": "passed", "identity": DETECTOR_IDENTITY}
-    else:
-        from importlib.metadata import version
-        from app.services.preview_content_policy import DETECTOR_IDENTITY
-
-        actual = {name: version(name) for name in DETECTOR_IDENTITY}
-        assert outcome == (
-            {"result": "passed", "identity": actual}
-            if actual == DETECTOR_IDENTITY
-            else {"result": "detector_unavailable"}
-        )
-
-
-def test_noop_service_injection_rejected(builder, envelope, monkeypatch):
-    from app.services.preview_content_policy import PolicyError
-
-    service = PIIService()
-    monkeypatch.setattr(service, "scan_complete_selection", lambda *a, **kw: None)
-    with pytest.raises(PolicyError, match="^detector_unavailable$"):
-        prepare(builder, envelope, detector=service)

@@ -44,8 +44,8 @@ export function PreviewOriginReview({ job, onChange }: { job: PreviewBuildStatus
       <label className="block" htmlFor={`origin-url-${job.job_id}`}>Seller HTTPS package URL</label>
       <Input id={`origin-url-${job.job_id}`} type="url" maxLength={2048} value={url} disabled={busy || !!job.candidate} onChange={e => setUrl(e.target.value)} placeholder={`https://your-host.example/${job.publication.relative_path}`} />
       <p>Exact destination: <span>{url || 'Enter your seller HTTPS URL'}</span></p>
-      <p>GET and OPTIONS must pass with no-store, credential-free CORS and no cookies. Export alone does not establish public hosting.</p>
-      <Button type="button" disabled={busy || !url || !!job.candidate} onClick={() => run(async () => { onChange(await previewBuildApi.originCheck(job.job_id,url)); })}>Check GET and OPTIONS</Button>
+      <p>The browser must be able to fetch a JSON package without credentials. CORS must allow https://ai.market or *. Other response headers and OPTIONS behaviour are recorded as observations.</p>
+      <Button type="button" disabled={busy || !url || !!job.candidate} onClick={() => run(async () => { onChange(await previewBuildApi.originCheck(job.job_id,url)); })}>Check browser access</Button>
     </>}
     {busy && <p role="status">Checking local publication…</p>}
     {job.receipts.map(receipt => <div key={receipt.method} className="text-sm">
@@ -53,6 +53,6 @@ export function PreviewOriginReview({ job, onChange }: { job: PreviewBuildStatus
       <dl>{Object.entries(receipt.headers).map(([key,value]) => <div key={key}><dt className="inline font-medium">{key}: </dt><dd className="inline">{value ?? '(absent)'}</dd></div>)}</dl>
       <p>No Set-Cookie: {receipt.no_set_cookie ? 'confirmed' : 'not confirmed'}</p>
     </div>)}
-    {job.receipts.length === 2 && <p role="status">GET and OPTIONS receipts recorded for {job.origin}. Marketplace preview submission still awaits backend support.</p>}
+    {job.receipts.length === 2 && <p role="status">GET and OPTIONS receipts recorded for {job.origin}. The package is ready for signed marketplace submission.</p>}
   </section>;
 }

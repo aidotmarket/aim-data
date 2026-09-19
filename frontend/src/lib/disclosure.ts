@@ -151,14 +151,24 @@ export function buildDisclosureSnapshotPayload({
 export const PREVIEW_MEMBERSHIP_DISCLAIMER = 'Seller-selected preview. Membership does not establish quality, representativeness, legality, compliance, identity or external completeness.';
 export const PREVIEW_ALL_FIELDS_WARNING = 'All fields of every selected record will be disclosed in the package, including fields hidden from display. Display columns do not redact records.';
 export const PREVIEW_PERMISSION = 'I permit these exact complete selected records to be published as a public preview.';
-export const PREVIEW_AWAITING_BACKEND = 'Prepared locally; marketplace preview submission awaits backend support';
 export const PREVIEW_CAPS = { rows: 100, fields: 25, canonical_bytes: 250000 } as const;
 
 /** React must render this return value as a text child, never HTML or Markdown. */
 export function inertPreviewText(value: unknown): string {
   if (value === undefined) return '(missing)';
   if (value === null) return 'null';
-  return typeof value === 'string' ? value : JSON.stringify(value);
+  const neutralize = (text: string) => text.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, '\uFFFD');
+  const inertValue = (candidate: unknown): unknown => {
+    if (typeof candidate === 'string') return neutralize(candidate);
+    if (Array.isArray(candidate)) return candidate.map(inertValue);
+    if (candidate !== null && typeof candidate === 'object') {
+      return Object.fromEntries(
+        Object.entries(candidate).map(([key, child]) => [neutralize(key), inertValue(child)]),
+      );
+    }
+    return candidate;
+  };
+  return typeof value === 'string' ? neutralize(value) : JSON.stringify(inertValue(value));
 }
 
 export function previewBudget(indices: number[], fieldCount: number, sizes: Record<number, number>) {

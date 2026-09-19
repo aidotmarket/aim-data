@@ -425,12 +425,6 @@ def get_marketplace_push_service() -> MarketplacePushService:
     return MarketplacePushService()
 
 
-def prepare_preview_request(request):
-    """Shared closed egress boundary; no 409-to-PATCH fallback for previews."""
-    from app.services.preview_signing_service import submit_preview_request
-    return submit_preview_request(request)
-
-
 async def upload_member_chunks(*, version_id, members_upload_id, members, post, checkpoint,
                                start_offset=0):
     """Resume at the last acknowledged chunk; a lost ACK replays identical rows.

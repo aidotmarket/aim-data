@@ -49,7 +49,7 @@
         "00000000-0000-4000-8000-000000000011"
       ],
       "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
-      "scan_attestation_digest": "74ecf7c15d55189d63558b2f107874a99418b5d9d7ebbe27896b26d2ca23f4f5",
+      "scan_attestation_digest": "b8ed4d2f4fb34638100ac4bfc46b41ecd00ea69da0d584d8505ac2def8d4368e",
       "rights_basis_digest": "5172e4f2f69f97a6258586767c9aeb883bdeeb7edc9d8b6a866b1236b9a84997",
       "rights_basis_code": "owner",
       "public_preview_permission": true,
@@ -65,7 +65,7 @@
       "signature_algorithm": "ed25519",
       "signature_profile": "aim-preview-disclosure-signature-v1"
     },
-    "seller_signature": "QfG6W4rAlSIuwuGbTWarRoEwGjAaLDU9dvENgbAohPcYMu0HSjGHbCPwXKef7Zt-6UkTfCmS1tYrg36yi6xDCg",
+    "seller_signature": "Ndk2ntodumDQK77jftKy4R4b-xHI56ZcnGdgRNOosTvSgwjYQF1qksK1Ms88uQk2q9opFB1hJLSI4zZMdiAMBg",
     "commitment": {
       "commitment_id": "00000000-0000-4000-8000-000000000003",
       "listing_id": "00000000-0000-4000-8000-000000000004",
@@ -79,7 +79,7 @@
       "seller_attestation_digest": "WXK7X-lm7_00utagI_4s3x-7u3gSoy_bEiB9fdFC1VM",
       "aim_data_signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
       "signature_algorithm": "ed25519",
-      "seller_signature": "X6c6094CQAe_G6x_WenNEKFJJ1Oas-KJRUYCM_Ge05e2ZwxnAg3aWgMzrUbsmTsmZLSYNIesujN9e75kwc9kDA",
+      "seller_signature": "8Gfp_8R4yfhiGAHp7qQaTLh2nzyfX8AjpGh_51ac7aVe_zeWo2FnJysekt7NmrrffB_t3uF2upVnPUNe4N8YCA",
       "signed_at": "2026-09-17T00:00:00.000000Z",
       "proofs": [
         {
@@ -98,14 +98,14 @@
           "package_media_type": "application/vnd.aim.preview+json",
           "package_profile": "aim-preview-package-v2",
           "package_byte_ceiling": 1048576,
-          "scan_policy": "aim-preview-policy-v1",
-          "scan_policy_version": "1.0.0",
+          "scan_policy": "aim-preview-policy-v2",
+          "scan_policy_version": "2.0.0",
           "scan_verdict": "passed",
           "scanned_at": "2026-09-17T00:00:00.000000Z",
           "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
           "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
           "signature_algorithm": "ed25519",
-          "signature": "43sUI-NAB36XrbCKZXiWRScIOn3tFglGT68vXUZI71A69L54V8vSOeVI-ScsLBBSUb65WpFxYE5WnbdbK52wCA"
+          "signature": "gAwl5GbpI65UeqPBc7OfwoVNEa0hmvhWL36YOKNYkoU-TOFDkHOn4bO_gJh2TwqXxBKSkS2LH3KU1g9X7AVQBQ"
         },
         {
           "proof_id": "00000000-0000-4000-8000-000000000011",
@@ -123,14 +123,14 @@
           "package_media_type": "application/vnd.aim.preview+json",
           "package_profile": "aim-preview-package-v2",
           "package_byte_ceiling": 1048576,
-          "scan_policy": "aim-preview-policy-v1",
-          "scan_policy_version": "1.0.0",
+          "scan_policy": "aim-preview-policy-v2",
+          "scan_policy_version": "2.0.0",
           "scan_verdict": "passed",
           "scanned_at": "2026-09-17T00:00:00.000000Z",
           "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
           "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
           "signature_algorithm": "ed25519",
-          "signature": "IKytkflHJpMyQwf7SPqVBRQaMCIyV2kxkO-zN8wagxJxK01MJivWV185TaCQSm9h_Y_UnTpGIn0whI1bXsTOAw"
+          "signature": "CoAJ7Xows0PlZkFZWS9KihCijPwsZ1fb8g4Vk3FMXYvdaIjxlvRJ2_7UzyGmnlB4iYBu32BbuILOOhptXxX6BQ"
         }
       ]
     },
@@ -151,14 +151,14 @@
         "package_media_type": "application/vnd.aim.preview+json",
         "package_profile": "aim-preview-package-v2",
         "package_byte_ceiling": 1048576,
-        "scan_policy": "aim-preview-policy-v1",
-        "scan_policy_version": "1.0.0",
+        "scan_policy": "aim-preview-policy-v2",
+        "scan_policy_version": "2.0.0",
         "scan_verdict": "passed",
         "scanned_at": "2026-09-17T00:00:00.000000Z",
         "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
         "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
         "signature_algorithm": "ed25519",
-        "signature": "43sUI-NAB36XrbCKZXiWRScIOn3tFglGT68vXUZI71A69L54V8vSOeVI-ScsLBBSUb65WpFxYE5WnbdbK52wCA"
+        "signature": "gAwl5GbpI65UeqPBc7OfwoVNEa0hmvhWL36YOKNYkoU-TOFDkHOn4bO_gJh2TwqXxBKSkS2LH3KU1g9X7AVQBQ"
       },
       {
         "proof_id": "00000000-0000-4000-8000-000000000011",
@@ -176,14 +176,14 @@
         "package_media_type": "application/vnd.aim.preview+json",
         "package_profile": "aim-preview-package-v2",
         "package_byte_ceiling": 1048576,
-        "scan_policy": "aim-preview-policy-v1",
-        "scan_policy_version": "1.0.0",
+        "scan_policy": "aim-preview-policy-v2",
+        "scan_policy_version": "2.0.0",
         "scan_verdict": "passed",
         "scanned_at": "2026-09-17T00:00:00.000000Z",
         "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
         "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
         "signature_algorithm": "ed25519",
-        "signature": "IKytkflHJpMyQwf7SPqVBRQaMCIyV2kxkO-zN8wagxJxK01MJivWV185TaCQSm9h_Y_UnTpGIn0whI1bXsTOAw"
+        "signature": "CoAJ7Xows0PlZkFZWS9KihCijPwsZ1fb8g4Vk3FMXYvdaIjxlvRJ2_7UzyGmnlB4iYBu32BbuILOOhptXxX6BQ"
       }
     ]
   },
@@ -333,7 +333,7 @@
         "00000000-0000-4000-8000-000000000011"
       ],
       "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
-      "scan_attestation_digest": "74ecf7c15d55189d63558b2f107874a99418b5d9d7ebbe27896b26d2ca23f4f5",
+      "scan_attestation_digest": "b8ed4d2f4fb34638100ac4bfc46b41ecd00ea69da0d584d8505ac2def8d4368e",
       "rights_basis_digest": "5172e4f2f69f97a6258586767c9aeb883bdeeb7edc9d8b6a866b1236b9a84997",
       "rights_basis_code": "owner",
       "public_preview_permission": true,
@@ -349,7 +349,7 @@
       "signature_algorithm": "ed25519",
       "signature_profile": "aim-preview-disclosure-signature-v1"
     },
-    "seller_signature": "jtRRViupok0lEGOLwESYQuZP4hNoBtl4g4jWpMTajnODWeGdXJCp9OkdgedktE3ZSD5GL3zJtWPxdaCFBFaADg",
+    "seller_signature": "6NnoyagEIjZ-m4bwp45cRCpvlXzXWT3atPUw3BYJFrXf6-zkmk9bFxuvclw6zVrwVgzdIZRPdO2m1DO-bpoBCg",
     "commitment": {
       "commitment_id": "00000000-0000-4000-8000-000000000003",
       "listing_id": "00000000-0000-4000-8000-000000000004",
@@ -363,7 +363,7 @@
       "seller_attestation_digest": "WXK7X-lm7_00utagI_4s3x-7u3gSoy_bEiB9fdFC1VM",
       "aim_data_signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
       "signature_algorithm": "ed25519",
-      "seller_signature": "X6c6094CQAe_G6x_WenNEKFJJ1Oas-KJRUYCM_Ge05e2ZwxnAg3aWgMzrUbsmTsmZLSYNIesujN9e75kwc9kDA",
+      "seller_signature": "8Gfp_8R4yfhiGAHp7qQaTLh2nzyfX8AjpGh_51ac7aVe_zeWo2FnJysekt7NmrrffB_t3uF2upVnPUNe4N8YCA",
       "signed_at": "2026-09-17T00:00:00.000000Z",
       "proofs": [
         {
@@ -382,14 +382,14 @@
           "package_media_type": "application/vnd.aim.preview+json",
           "package_profile": "aim-preview-package-v2",
           "package_byte_ceiling": 1048576,
-          "scan_policy": "aim-preview-policy-v1",
-          "scan_policy_version": "1.0.0",
+          "scan_policy": "aim-preview-policy-v2",
+          "scan_policy_version": "2.0.0",
           "scan_verdict": "passed",
           "scanned_at": "2026-09-17T00:00:00.000000Z",
           "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
           "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
           "signature_algorithm": "ed25519",
-          "signature": "43sUI-NAB36XrbCKZXiWRScIOn3tFglGT68vXUZI71A69L54V8vSOeVI-ScsLBBSUb65WpFxYE5WnbdbK52wCA"
+          "signature": "gAwl5GbpI65UeqPBc7OfwoVNEa0hmvhWL36YOKNYkoU-TOFDkHOn4bO_gJh2TwqXxBKSkS2LH3KU1g9X7AVQBQ"
         },
         {
           "proof_id": "00000000-0000-4000-8000-000000000011",
@@ -407,14 +407,14 @@
           "package_media_type": "application/vnd.aim.preview+json",
           "package_profile": "aim-preview-package-v2",
           "package_byte_ceiling": 1048576,
-          "scan_policy": "aim-preview-policy-v1",
-          "scan_policy_version": "1.0.0",
+          "scan_policy": "aim-preview-policy-v2",
+          "scan_policy_version": "2.0.0",
           "scan_verdict": "passed",
           "scanned_at": "2026-09-17T00:00:00.000000Z",
           "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
           "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
           "signature_algorithm": "ed25519",
-          "signature": "IKytkflHJpMyQwf7SPqVBRQaMCIyV2kxkO-zN8wagxJxK01MJivWV185TaCQSm9h_Y_UnTpGIn0whI1bXsTOAw"
+          "signature": "CoAJ7Xows0PlZkFZWS9KihCijPwsZ1fb8g4Vk3FMXYvdaIjxlvRJ2_7UzyGmnlB4iYBu32BbuILOOhptXxX6BQ"
         }
       ]
     },
@@ -435,14 +435,14 @@
         "package_media_type": "application/vnd.aim.preview+json",
         "package_profile": "aim-preview-package-v2",
         "package_byte_ceiling": 1048576,
-        "scan_policy": "aim-preview-policy-v1",
-        "scan_policy_version": "1.0.0",
+        "scan_policy": "aim-preview-policy-v2",
+        "scan_policy_version": "2.0.0",
         "scan_verdict": "passed",
         "scanned_at": "2026-09-17T00:00:00.000000Z",
         "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
         "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
         "signature_algorithm": "ed25519",
-        "signature": "43sUI-NAB36XrbCKZXiWRScIOn3tFglGT68vXUZI71A69L54V8vSOeVI-ScsLBBSUb65WpFxYE5WnbdbK52wCA"
+        "signature": "gAwl5GbpI65UeqPBc7OfwoVNEa0hmvhWL36YOKNYkoU-TOFDkHOn4bO_gJh2TwqXxBKSkS2LH3KU1g9X7AVQBQ"
       },
       {
         "proof_id": "00000000-0000-4000-8000-000000000011",
@@ -460,14 +460,14 @@
         "package_media_type": "application/vnd.aim.preview+json",
         "package_profile": "aim-preview-package-v2",
         "package_byte_ceiling": 1048576,
-        "scan_policy": "aim-preview-policy-v1",
-        "scan_policy_version": "1.0.0",
+        "scan_policy": "aim-preview-policy-v2",
+        "scan_policy_version": "2.0.0",
         "scan_verdict": "passed",
         "scanned_at": "2026-09-17T00:00:00.000000Z",
         "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
         "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
         "signature_algorithm": "ed25519",
-        "signature": "IKytkflHJpMyQwf7SPqVBRQaMCIyV2kxkO-zN8wagxJxK01MJivWV185TaCQSm9h_Y_UnTpGIn0whI1bXsTOAw"
+        "signature": "CoAJ7Xows0PlZkFZWS9KihCijPwsZ1fb8g4Vk3FMXYvdaIjxlvRJ2_7UzyGmnlB4iYBu32BbuILOOhptXxX6BQ"
       }
     ]
   },
@@ -520,7 +520,7 @@
         "00000000-0000-4000-8000-000000000011"
       ],
       "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
-      "scan_attestation_digest": "74ecf7c15d55189d63558b2f107874a99418b5d9d7ebbe27896b26d2ca23f4f5",
+      "scan_attestation_digest": "b8ed4d2f4fb34638100ac4bfc46b41ecd00ea69da0d584d8505ac2def8d4368e",
       "rights_basis_digest": "5172e4f2f69f97a6258586767c9aeb883bdeeb7edc9d8b6a866b1236b9a84997",
       "rights_basis_code": "owner",
       "public_preview_permission": true,
@@ -536,7 +536,7 @@
       "signature_algorithm": "ed25519",
       "signature_profile": "aim-preview-disclosure-signature-v1"
     },
-    "seller_signature": "Zwa-i4Ce8u5mj4PZg1eTRS35MLUYGSHhQYvCmrEil9yD80Hzb8VNqEo9APVRkRaibs0ufuXG49Zvm3evQ3y1BQ",
+    "seller_signature": "41iFQnVKV_AaHSFpYqHEZ5NjHXRxIAeX4kyDzGes4w1_EiitdLUCVigjTppSzAVWqMXMfh06-dy_tskBVrbDAQ",
     "commitment": {
       "commitment_id": "00000000-0000-4000-8000-000000000003",
       "listing_id": "00000000-0000-4000-8000-000000000004",
@@ -550,7 +550,7 @@
       "seller_attestation_digest": "WXK7X-lm7_00utagI_4s3x-7u3gSoy_bEiB9fdFC1VM",
       "aim_data_signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
       "signature_algorithm": "ed25519",
-      "seller_signature": "X6c6094CQAe_G6x_WenNEKFJJ1Oas-KJRUYCM_Ge05e2ZwxnAg3aWgMzrUbsmTsmZLSYNIesujN9e75kwc9kDA",
+      "seller_signature": "8Gfp_8R4yfhiGAHp7qQaTLh2nzyfX8AjpGh_51ac7aVe_zeWo2FnJysekt7NmrrffB_t3uF2upVnPUNe4N8YCA",
       "signed_at": "2026-09-17T00:00:00.000000Z",
       "proofs": [
         {
@@ -569,14 +569,14 @@
           "package_media_type": "application/vnd.aim.preview+json",
           "package_profile": "aim-preview-package-v2",
           "package_byte_ceiling": 1048576,
-          "scan_policy": "aim-preview-policy-v1",
-          "scan_policy_version": "1.0.0",
+          "scan_policy": "aim-preview-policy-v2",
+          "scan_policy_version": "2.0.0",
           "scan_verdict": "passed",
           "scanned_at": "2026-09-17T00:00:00.000000Z",
           "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
           "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
           "signature_algorithm": "ed25519",
-          "signature": "43sUI-NAB36XrbCKZXiWRScIOn3tFglGT68vXUZI71A69L54V8vSOeVI-ScsLBBSUb65WpFxYE5WnbdbK52wCA"
+          "signature": "gAwl5GbpI65UeqPBc7OfwoVNEa0hmvhWL36YOKNYkoU-TOFDkHOn4bO_gJh2TwqXxBKSkS2LH3KU1g9X7AVQBQ"
         },
         {
           "proof_id": "00000000-0000-4000-8000-000000000011",
@@ -594,14 +594,14 @@
           "package_media_type": "application/vnd.aim.preview+json",
           "package_profile": "aim-preview-package-v2",
           "package_byte_ceiling": 1048576,
-          "scan_policy": "aim-preview-policy-v1",
-          "scan_policy_version": "1.0.0",
+          "scan_policy": "aim-preview-policy-v2",
+          "scan_policy_version": "2.0.0",
           "scan_verdict": "passed",
           "scanned_at": "2026-09-17T00:00:00.000000Z",
           "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
           "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
           "signature_algorithm": "ed25519",
-          "signature": "IKytkflHJpMyQwf7SPqVBRQaMCIyV2kxkO-zN8wagxJxK01MJivWV185TaCQSm9h_Y_UnTpGIn0whI1bXsTOAw"
+          "signature": "CoAJ7Xows0PlZkFZWS9KihCijPwsZ1fb8g4Vk3FMXYvdaIjxlvRJ2_7UzyGmnlB4iYBu32BbuILOOhptXxX6BQ"
         }
       ]
     },
@@ -622,14 +622,14 @@
         "package_media_type": "application/vnd.aim.preview+json",
         "package_profile": "aim-preview-package-v2",
         "package_byte_ceiling": 1048576,
-        "scan_policy": "aim-preview-policy-v1",
-        "scan_policy_version": "1.0.0",
+        "scan_policy": "aim-preview-policy-v2",
+        "scan_policy_version": "2.0.0",
         "scan_verdict": "passed",
         "scanned_at": "2026-09-17T00:00:00.000000Z",
         "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
         "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
         "signature_algorithm": "ed25519",
-        "signature": "43sUI-NAB36XrbCKZXiWRScIOn3tFglGT68vXUZI71A69L54V8vSOeVI-ScsLBBSUb65WpFxYE5WnbdbK52wCA"
+        "signature": "gAwl5GbpI65UeqPBc7OfwoVNEa0hmvhWL36YOKNYkoU-TOFDkHOn4bO_gJh2TwqXxBKSkS2LH3KU1g9X7AVQBQ"
       },
       {
         "proof_id": "00000000-0000-4000-8000-000000000011",
@@ -647,14 +647,14 @@
         "package_media_type": "application/vnd.aim.preview+json",
         "package_profile": "aim-preview-package-v2",
         "package_byte_ceiling": 1048576,
-        "scan_policy": "aim-preview-policy-v1",
-        "scan_policy_version": "1.0.0",
+        "scan_policy": "aim-preview-policy-v2",
+        "scan_policy_version": "2.0.0",
         "scan_verdict": "passed",
         "scanned_at": "2026-09-17T00:00:00.000000Z",
         "sampled_leaf_list_digest": "80iZxywN5dW80HOnMWmWPx9_0lazLkr1QBE-9eoDqAQ",
         "signer_reference": "00000000-0000-4000-8000-000000000001:56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
         "signature_algorithm": "ed25519",
-        "signature": "IKytkflHJpMyQwf7SPqVBRQaMCIyV2kxkO-zN8wagxJxK01MJivWV185TaCQSm9h_Y_UnTpGIn0whI1bXsTOAw"
+        "signature": "CoAJ7Xows0PlZkFZWS9KihCijPwsZ1fb8g4Vk3FMXYvdaIjxlvRJ2_7UzyGmnlB4iYBu32BbuILOOhptXxX6BQ"
       }
     ]
   }

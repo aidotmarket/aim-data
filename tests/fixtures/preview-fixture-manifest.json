@@ -31,19 +31,19 @@
   },
   {
     "path": "tests/fixtures/aim_preview_differential_v1.json",
-    "sha256": "a6684a718f57d841af5e591de20b1f58fa6716d0cfbeea2955b477569c729e57",
+    "sha256": "a0f9e30fa463232aff936ce66640557b5ad8c1f8b21533c5106f5c5cd887321c",
     "profile": "aim-preview-disclosure-v1",
     "purpose": "Independent Python and Node exact-byte/signature differential corpus"
   },
   {
     "path": "tests/fixtures/aim_preview_differential_v1.sha256",
-    "sha256": "713890b9535a1459ff05e53d787e4b0fc4e173714efd1dfecadec9794534739b",
+    "sha256": "26cafe2b05f8b292cab447d2d3e6e2c06b5ca27038134f03779b7f1c758c5542",
     "profile": "aim-preview-disclosure-v1",
     "purpose": "Original checksum pin for the independent differential corpus"
   },
   {
     "path": "tests/fixtures/aim_preview_manifest_budget_v1.json",
-    "sha256": "fa10ad02a49c5c4d08967d9deb760fbb155676917baab0e08c7ec31a2d89d598",
+    "sha256": "49caee71298fd02bc1c0b7b2d84c96f50ee1503b5491c01f0539bd83ceb0436e",
     "profile": "aim-listing-preview-v1",
     "purpose": "Conservative complete manifest sizing skeleton; placeholder signatures are not approval evidence"
   },
@@ -63,23 +63,29 @@
     "path": "tests/fixtures/aim_preview_policy_v1.json",
     "sha256": "ff8c85862c6aa90da271a1bb6204a229266dec2b5218b7b061d187119c22008b",
     "profile": "aim-preview-policy-v1",
-    "purpose": "Pinned local policy, detector identity, prohibited and safe synthetic content cases"
+    "purpose": "Legacy-accepted v1 input corpus retained byte-for-byte"
+  },
+  {
+    "path": "tests/fixtures/aim_preview_policy_v2.json",
+    "sha256": "6efb7dbe71f1c0b05c5fec3eff56646a9eb0143c172b9dc8eb5084024f6423dc",
+    "profile": "aim-preview-policy-v2",
+    "purpose": "Emitted seller-attested policy identity with empty rules and reasons"
   },
   {
     "path": "tests/fixtures/aim_preview_requests_v1.json",
-    "sha256": "164eced90fc11df44466b45df290c5f80e7fefc81044c9dfd45bb8a36e3cbe91",
+    "sha256": "995c0fe142edeed5b89da7aed3f2e85b1cd10789355cf1ca881871306e6d637c",
     "profile": "aim-preview-disclosure-v1",
     "purpose": "Closed approve, none, withdrawal, refresh and supersession request fixtures"
   },
   {
     "path": "tests/fixtures/aim_preview_signing_requests_v1.sha256",
-    "sha256": "0d00c4180436edc459c41ad7583c572eadd9c5bccc36f2b0450cef19c5411674",
+    "sha256": "83a2c221b7476d0a4cc61e57c28d37b81a509861c2d28a6457ba6764d2648924",
     "profile": "aim-preview-disclosure-v1",
     "purpose": "Original checksum pins for request and F2 signing corpora"
   },
   {
     "path": "tests/fixtures/aim_preview_signing_v1.json",
-    "sha256": "19674653e7fd353d5141189310b7a274be1ff48b4704e3598eef53bf34cf72d2",
+    "sha256": "df31f506eab886a1df17045b4aef809d1a66f0d01a5a4c1eed571bb7190cd026",
     "profile": "aim-preview-disclosure-v1",
     "purpose": "All five F2 signing profiles, exact preimages, synthetic public keys, log and checkpoint evidence"
   }

@@ -8,9 +8,9 @@ identity or completeness against an external source.
 ## What stays on your machine
 
 AIM Data reads the complete original dataset, checks its declared schema, builds
-a Merkle tree, lets you review complete rows, scans every selected value, and
-signs the resulting metadata. Source paths, source files, private keys, rights
-prose and scan notes stay local. Temporary row indexes are removed after package
+a Merkle tree, lets you review complete rows, records your explicit publication
+confirmations, and signs the resulting metadata. Source paths, source files,
+private keys and rights prose stay local. Temporary row indexes are removed after package
 creation, cancellation, failure or review expiry. A changed selection may require
 another full build. Review sessions expire after 30 minutes without an authorized
 owner interaction by default; an operator can set `PREVIEW_REVIEW_IDLE_SECONDS`.
@@ -18,9 +18,9 @@ owner interaction by default; an operator can set `PREVIEW_REVIEW_IDLE_SECONDS`.
 The preview package contains the **entire selected records**, including fields
 hidden by the display-column choice. You must explicitly confirm your rights,
 public-preview permission, metadata accuracy and restricted-content review for
-that exact selection. The local scan cannot override uncertainty or provide
-legal clearance. Missing detector models or a version mismatch blocks publication.
-The pinned English detector is Presidio 2.2.362, spaCy 3.7.2, model 3.7.1.
+that exact selection. You are responsible for what you publish. Preview
+publication does not call Presidio, spaCy or deterministic content rules;
+missing model packages and version differences do not affect publication.
 
 The preview can contain at most 100 rows, 25 complete-row fields and 250,000
 canonical row bytes. All limits apply together. The package must also fit within
@@ -38,21 +38,20 @@ rights/scan digests, your permission, and the package URL. It must not receive
 records, snippets, local paths, scan notes or rights prose. There is no platform
 proxy, server-rendered row fetch or cached-row fallback.
 
-**Before marketplace support is deployed, the current state is “Prepared locally;
-marketplace preview submission awaits backend support.”** Local candidate IDs,
-approval references and expected platform records are non-runtime fixtures. They
-are not platform allocations, approvals or proof of a live public listing sample.
-Ordinary listing publication keeps the existing No sample decision. Preparing or
-retrying a preview does not republish the listing. Legacy row samples are refused;
-old No sample decisions are never silently converted into consent.
+AIM Data sends this metadata contract directly to ai.market. It first reads the
+current At a glance draft, lets the seller review it, approves that exact backend
+record when needed, asks ai.market to allocate the preview candidate, signs the
+returned binding, and submits it. Candidate, summary, approval, content and
+listing identifiers therefore come from ai.market rather than local placeholders.
+Preparing or retrying a preview does not republish the listing.
 
 ## Preparing a preview
 
-In the dataset detail page, approve the listing metadata, then choose **Prepare
-verified preview** in the optional Public sample panel. No sample remains the
-default. Provide the full parser/schema declaration when requested, wait for the
+In the dataset detail page choose **Prepare verified preview** in the optional
+Public sample panel. No sample remains the default. Provide the full parser/schema
+declaration when requested, wait for the
 complete build, and review the selected leaf-index rows and every field. Confirm
-rights and permission, run the local scan, select the publication directory or
+rights and permission, record the seller confirmations, select the publication directory or
 export option, then verify the exact origin and signing fingerprint.
 
 New uploads retain their authenticated owner. Historic uploads without a verified
@@ -90,7 +89,7 @@ provided. Exported bytes must be hosted unchanged at the displayed path:
 
 The controlled origin supplied by AIM Data can sit behind your HTTPS reverse
 proxy. Expose only that isolated origin, never the main application. Configure
-these response headers on successful GET, OPTIONS and retirement responses:
+these compatibility headers on successful GET, OPTIONS and retirement responses:
 
 | Header | Required value |
 |---|---|
@@ -101,11 +100,12 @@ these response headers on successful GET, OPTIONS and retirement responses:
 | `Access-Control-Allow-Headers` | May be absent; this GET requests no custom headers |
 | `Access-Control-Allow-Credentials` | Absent or `false`, never `true` |
 
-Do not send `Set-Cookie`; do not compress the response. Disable intermediary
-caching and response-body logging. Verify the CDN/reverse proxy actually preserves
-these headers, including OPTIONS and 404/410. The verifier validates public DNS,
-pins the address and TLS hostname, downloads and hashes the exact package, then
-checks the credential-free OPTIONS preflight. A real anonymous browser check is
+The controlled origin does not send `Set-Cookie` or compress the response and
+disables response-body logging. External origin admission requires a
+credential-free GET, CORS allow-origin `https://ai.market` or `*`, a JSON-parsable
+body, and the exact expected decoded bytes/hash. Media type, no-store, cookies,
+compression and OPTIONS behavior are recorded observations rather than refusals.
+The verifier validates public DNS and pins the address and TLS hostname. A real anonymous browser check is
 still required at Gate-4.
 
 Each GET/OPTIONS receipt has exactly `url`, `method`, `status`, `captured_at`,
@@ -116,20 +116,13 @@ cookie value, arbitrary headers or truncated values are retained.
 
 ## Keys and changes over time
 
-Use the installation's existing encrypted Ed25519 key. Never create a replacement
-key to get past missing registration evidence. The operator supplies fresh,
-owner-authorized registry readback with exactly `install_id`, `seller_id`,
-`fingerprint`, `status`, `observed_at`. The signer rereads it before every signature,
-requires active status, matches owner/install/public-key fingerprint, and requires
-an observation less than one hour old. An install ID alone is insufficient.
-Neither the UI nor the evidence tool invents a registry endpoint or proves the
-provenance of a manually supplied readback. Real readback remains Gate-4 evidence.
-
-Rotation needs a new registered reference and signatures. Unknown, wrong-owner,
-rotated, revoked, stale or mismatched evidence blocks signing. Keys supplied by a
-package are never authority. Platform-envelope/checkpoint signatures in the local
-evidence bundle use a clearly named **public synthetic test key**, solely for
-contract verification; never install that key in a runtime trust store.
+AIM Data signs with the installation's existing encrypted Ed25519 key and the
+`install_id` and `seller_id` already stored by sign-in and registration. No
+operator file or freshness ceremony is part of preview publication. ai.market is
+the authority: submission resolves the install registration and refuses a
+revoked, rotated, inactive, wrong-owner or mismatched key. Sign in and register
+the install again if that happens; never create an unregistered replacement key
+to bypass it. Keys supplied by a package are never authority.
 
 Withdrawal creates a newly signed candidate identifying the current head; it
 never reuses an approval signature. The controlled origin tombstones and removes
@@ -141,8 +134,7 @@ Refresh creates a new immutable evidence revision linked to the same sample and
 commitment, with renewed seller consent/time/cadence. Supersession explicitly
 revokes the prior head. Changes to dataset values, schema, membership or duplicate
 counts require a full rebuild, fresh proofs and new approval. Do not relabel an
-old package. After T exists, every live action must use its newly allocated
-candidate; the fixture candidates cannot be promoted by changing their labels.
+old package. Every live action uses its newly allocated ai.market candidate.
 
 A preview becomes stale at `last_attested_by_seller_at` plus
 `min(90, max(7, 2 × update_cadence_days))` days. With no cadence, use 90 days.
@@ -151,69 +143,9 @@ Without an authorized expiry policy, `freshness_expires_at` remains null. An
 explicit approval, summary or policy expiry can make it ineligible. Platform
 freshness is derived; it is not inserted into the seller-signed binding.
 
-## Building the operator evidence bundle
+## Synthetic contract evidence
 
-Run from the exact approved producer checkout using its installed Python
-dependencies. Use canonical absolute paths with no symlink components (on macOS,
-`/private/var/...` rather than `/var/...`). The source is one complete local file;
-the declaration JSON has exactly `parsing` and `schema_descriptors`. Review the
-selected sorted leaf indices locally first. Supply the existing keystore
-passphrase through the operator's protected environment as
-`PREVIEW_KEYSTORE_PASSPHRASE`; never put it on the command line or in the bundle.
-
-```sh
-rtk proxy python scripts/build_preview_producer_evidence.py build \
-  --dataset /seller/source.ndjson --declaration /seller/declaration.json \
-  --origin https://preview.seller.example --output /seller/evidence-new \
-  --registration-evidence /seller/private/registry-readback.json \
-  --keystore /seller/private/keystore.json \
-  --rights-file /seller/private/rights.txt --rights-code owner \
-  --leaf-indices 0,1 --confirm-public-preview
-```
-
-The confirmation asserts exact-row rights, public permission, metadata accuracy
-and restricted-content review. The output directory must be new. The tool performs
-the bounded full worker build, real strict scan, package export, signing and
-signature verification; it never sends a marketplace request. Source bytes and
-parser options are hashed without exporting their paths. Rights prose is digested
-and not copied. The `.private` directory contains local journals, not exported
-keys; temporary full-row indexes are cleaned by the worker.
-
-The bundle contains the local candidate, signed commitment/proofs/disclosure,
-complete descriptors, seller attestation, registration readback, package,
-manifest-size receipt, all five F2 preimages, and explicitly synthetic expected
-platform envelope/log/checkpoint. It also constructs signed withdrawal, refresh
-and supersession candidates and records local retry/409/head and stale-boundary
-expectations. Each exported artifact has a SHA-256 in `manifest.json`.
-
-After hosting the exact exported package using the authorized seller tools:
-
-```sh
-rtk proxy python scripts/build_preview_producer_evidence.py check-host --output /seller/evidence-new
-```
-
-For a controlled origin, serve `/seller/evidence-new/public` with the matching
-journal `/seller/evidence-new/.private/publication` using
-`scripts/serve-preview-origin.py`. The operator independently supplies HTTPS.
-When the seller has authorized retirement:
-
-```sh
-rtk proxy python scripts/build_preview_producer_evidence.py retire --output /seller/evidence-new
-```
-
-This removes the local hosted package and checks remote absence. A copied remote
-object must also be removed by the seller. Failed checks never create successful
-receipts; external retirement remains pending. Save any authorized local package
-inspection evidence before retirement; the manifest then describes the remaining
-metadata and receipt files, while `publication.json` retains the package checksum.
-
-Keep the bundle on the seller machine: it contains public row bytes until
-retirement. Central evidence must contain only reviewed identities, hashes,
-counts, timestamps, headers and outcomes. No secrets or real rows belong in Git.
-The CI driver uses deterministic test identities, a real policy engine and a real
-loopback HTTP origin; its receipts explicitly do not prove public HTTPS or real
-owner registration. Only its SHA reference is committed.
-
-The release controller follows [release readiness](release-aim-data-v1.24.0.md).
-Real owner-bound readback, Sergey's dataset/consent, live HTTPS receipts, actual
-RC/stable installation and the later T integration remain separate gates.
+The repository's producer-evidence script and fixtures are CI-only contract
+oracles. They use deterministic test identities and a loopback origin and never
+submit to ai.market. They are not part of the seller runtime, do not authorize a
+listing, and must never be relabelled as live marketplace proof.

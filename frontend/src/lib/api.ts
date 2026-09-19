@@ -185,7 +185,7 @@ async function apiFetch<T>(
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
     // Support both flat { detail: "..." } and structured { error: { safe_message: "..." } } formats
-    const message = error.detail?.code || error.detail || error.error?.safe_message || error.error?.title || `API error: ${response.status}`;
+    const message = error.detail?.message || error.detail?.code || error.detail || error.error?.safe_message || error.error?.title || `API error: ${response.status}`;
     throw new Error(message);
   }
 
@@ -1622,9 +1622,10 @@ export interface PreviewBuildStatus {
   policy: PreviewPolicy | null;
   publication: { destination: 'local' | 'export'; relative_path: string; local_directory: string; package_sha256: string; byte_count: number; sample_hash: string; disclosure_version: string } | null;
   origin: string | null; receipts: PreviewOriginReceipt[];
-  candidate: { kind: 'fixture_candidate'; request_digest: string; key_fingerprint: string; sample_hash: string; disclosure_version: string } | null;
+  candidate: { kind: 'marketplace_candidate'; request_digest: string; key_fingerprint: string; sample_hash: string; disclosure_version: string } | null;
+  marketplace?: { state: 'pending' | 'visible' | 'withdrawn'; listing_url?: string; manifest_url?: string; disclosure_version?: string | null } | null;
+  policy_compatibility?: 'legacy_v1_completion' | null;
   outcome: string | null;
-  approved_metadata_digest?: string | null;
   prior_job_id?: string | null;
   signing?: { fingerprint: string | null; code: string | null };
 }
@@ -1632,14 +1633,15 @@ export interface LocalPreviewRow {
   leaf_index: number; canonical_bytes: number; code: string | null; cells: Record<string, unknown> | null;
 }
 export interface LocalPreviewPage { items: LocalPreviewRow[]; total: number; next: number | null }
+export interface MarketplaceSummaryPreview { summary_id: string; state: string; status: string; at_a_glance: Record<string, unknown>; approval_text: string }
 const previewPath = (id: string) => `/api/marketplace/preview-builds/${encodeURIComponent(id)}`;
 const previewPost = <T>(id: string, action: string, body: unknown = {}) =>
   apiFetch<T>(`${previewPath(id)}/${action}`, { method: 'POST', body: JSON.stringify(body) });
 export const previewBuildApi = {
-  approveMetadata: (dataset_id: string, approved_metadata_digest: string) => apiFetch<{kind: 'local_metadata_approval'; approval_id: string}>('/api/marketplace/preview-builds/metadata-approval', {method:'POST',body:JSON.stringify({dataset_id,approved_metadata_digest})}),
   create: (body: PreviewCreateOptions) => apiFetch<PreviewBuildStatus>('/api/marketplace/preview-builds', { method: 'POST', body: JSON.stringify(body) }),
   latest: (dataset: string) => apiFetch<PreviewBuildStatus | null>(`/api/marketplace/preview-builds?dataset_id=${encodeURIComponent(dataset)}`),
   status: (id: string) => apiFetch<PreviewBuildStatus>(previewPath(id)),
+  marketplaceSummary: (id: string) => apiFetch<MarketplaceSummaryPreview>(`${previewPath(id)}/marketplace-summary`, { cache: 'no-store' }),
   rows: (id: string, start = 0) => apiFetch<LocalPreviewPage>(`${previewPath(id)}/rows?start=${start}&count=25`, { cache: 'no-store' }),
   cancel: (id: string) => previewPost<PreviewBuildStatus>(id, 'cancel'),
   selection: (id: string, leaf_indices: number[], display_columns: string[]) =>

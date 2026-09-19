@@ -33,13 +33,10 @@ from app.services.preview_content_policy import (
     POLICY,
     VERSION,
     PolicyError,
-    check_text,
-    walk_selection,
 )
 from app.services.preview_origin_service import validate_url, verify_hosted_package
 from app.services.preview_lifecycle import capture_rights, PreviewJournal
 
-AWAITING = "Prepared locally; marketplace preview submission awaits backend support"
 RIGHTS = {
     "owner": "I own the rights to these complete selected records.",
     "licensed": "My license permits public preview of these complete selected records.",
@@ -49,8 +46,8 @@ RIGHTS = {
 
 
 class BuildError(ValueError):
-    def __init__(self, code, status=409, job_id=None):
-        self.code, self.status, self.job_id = code, status, job_id
+    def __init__(self, code, status=409, job_id=None, message=None):
+        self.code, self.status, self.job_id, self.message = code, status, job_id, message
         super().__init__(code)
 
 
@@ -116,7 +113,7 @@ def schema_has_binary(descriptors):
 
 
 class PreviewBuildService:
-    def __init__(self, root, processing, upload_root, *, idle_seconds=None):
+    def __init__(self, root, processing, upload_root, *, idle_seconds=None, transport_factory=None):
         self.idle_seconds = float(
             idle_seconds
             if idle_seconds is not None
@@ -128,6 +125,7 @@ class PreviewBuildService:
         with directory_fd(self.root, private=True):
             pass
         self.processing, self.upload_root = processing, upload_root
+        self.transport_factory = transport_factory
         self.lock = threading.RLock()
         self.live = {}
         self.db_path = self.root / "jobs.sqlite"
@@ -181,6 +179,17 @@ class PreviewBuildService:
         if row[0] != owner:
             raise BuildError("job_owner_mismatch", 403)
         job = json.loads(row[1])
+        scan = job.get("scan") or {}
+        if (
+            scan.get("scan_policy") == "aim-preview-policy-v1"
+            and scan.get("scan_policy_version") == "1.0.0"
+            and job.get("policy_compatibility") != "legacy_v1_completion"
+        ):
+            # A packaged/hosted v1 job cannot be rewritten without breaking its
+            # signed package binding. The backend and viewers accept v1, so let
+            # the upgraded install complete it and emit v2 for every new job.
+            job["policy_compatibility"] = "legacy_v1_completion"
+            self.save(job)
         if interaction:
             owned_dataset(self.processing, job["dataset_id"], owner)
             with self.lock:
@@ -211,6 +220,7 @@ class PreviewBuildService:
                         "packaged",
                         "hosted",
                         "signed_candidate",
+                        "submitted",
                         "cancelled",
                         "withdrawn",
                         "retired",
@@ -285,6 +295,7 @@ class PreviewBuildService:
                 receipts=[],
                 candidate=None,
                 prepared=False,
+                marketplace=None,
                 commitment_id=str(uuid4()),
                 disclosure_version=str(uuid4()),
                 proof_ids=[],
@@ -441,10 +452,26 @@ class PreviewBuildService:
                 "receipts": job["receipts"],
                 "candidate": job["candidate"],
                 "signing": signing,
-                "approved_metadata_digest": job.get("approval_digest"),
+                "marketplace": job.get("marketplace"),
+                "policy_compatibility": job.get("policy_compatibility"),
                 "prior_job_id": job.get("prior_job_id"),
-                "outcome": AWAITING if job["prepared"] else None,
+                "outcome": job.get("outcome"),
             }
+
+    def transport(self):
+        if self.transport_factory:
+            return self.transport_factory()
+        from app.services.preview_marketplace_transport import PreviewMarketplaceTransport
+
+        return PreviewMarketplaceTransport()
+
+    @staticmethod
+    def transport_error(exc):
+        from app.services.preview_marketplace_transport import PreviewTransportError
+
+        if isinstance(exc, PreviewTransportError):
+            raise BuildError(exc.code, exc.status, message=exc.message) from None
+        raise exc
 
     def check_source(self, job):
         if job["state"] == "expired":
@@ -499,18 +526,6 @@ class PreviewBuildService:
                 "cells": None,
             }
         entry = builder._entry(index)
-        try:
-            from app.services.preview_package_service import _logical_record
-
-            scan_row = _logical_record(
-                json.loads(builder.schema.canonical_row(entry["row"])),
-                builder.schema.descriptors,
-                for_scan=True,
-            )
-            for text, numeric in walk_selection([scan_row]):
-                check_text(text, numeric)
-        except PolicyError as exc:
-            code = str(exc)
         return {
             "leaf_index": index,
             "canonical_bytes": size,
@@ -657,7 +672,7 @@ class PreviewBuildService:
                 return self.status(job_id, owner)
             live = self.active(job)
             if not live["package"]:
-                raise BuildError("rescan_required")
+                raise BuildError("policy_confirmation_required")
             store = self.store(job, destination)
             result = store.export(live["package"])
             relative = store.path(result["disclosure_version"], result["sample_hash"])
@@ -715,70 +730,38 @@ class PreviewBuildService:
             self.save(job)
             return self.status(job_id, owner)
 
-    def approve_metadata(self, body, owner):
-        # Human-approved browser projection digest, never a platform P1 allocation.
-        # This private, labelled fixture context cannot enter any live endpoint.
-        with self.lock:
-            record = owned_dataset(self.processing, body.dataset_id, owner)
-            _, version = source_identity(record, self.upload_root)
-            old = record.metadata.get("preview_local_approval")
-            if (
-                old
-                and old["owner"] == owner
-                and old["digest"] == body.approved_metadata_digest
-                and old["references"]["source_revision"] == version
-            ):
-                return {
-                    "kind": "local_metadata_approval",
-                    "approval_id": old["references"]["summary_approval_id"],
-                }
-            references = {
-                key: str(uuid4())
-                for key in (
-                    "summary_id",
-                    "summary_approval_id",
-                    "content_revision",
-                    "listing_id",
-                )
-            }
-            # Local listing identity remains fixture-only until T allocates its binding.
-            references.update(
-                listing_version_id=None,
-                source_revision=version,
-                summary_hash=body.approved_metadata_digest,
-                render_hash=body.approved_metadata_digest,
-                aggregate_hash=body.approved_metadata_digest,
-            )
-            record.metadata["preview_local_approval"] = {
-                "kind": "local_metadata_approval",
-                "owner": owner,
-                "digest": body.approved_metadata_digest,
-                "references": references,
-            }
-            self.processing._save_record(record, record.upload_path.name)
-            return {
-                "kind": "local_metadata_approval",
-                "approval_id": references["summary_approval_id"],
-            }
-
     def signer(self, job):
-        from datetime import timedelta
         from app.config import settings
         from app.core.crypto import DeviceCrypto
-        from app.services.registration_service import read_preview_registration_evidence
+        from app.services.serial_store import get_serial_store
         from app.services.preview_signing_service import PreviewSigningService
 
-        evidence_path = self.root / "registration-evidence.json"
-        evidence = read_preview_registration_evidence(evidence_path)
-        if evidence.seller_id != job["owner"]:
+        registration = get_serial_store().state
+        if (
+            not registration.vz_install_id
+            or not registration.ai_market_seller_id
+            or registration.ai_market_seller_id != job["owner"]
+        ):
             raise BuildError("registration_owner_mismatch", 403)
         return PreviewSigningService(
             DeviceCrypto(settings.keystore_path, settings.keystore_passphrase),
-            install_id=evidence.install_id,
+            install_id=registration.vz_install_id,
             seller_id=job["owner"],
-            evidence_reader=lambda: read_preview_registration_evidence(evidence_path),
-            evidence_max_age=timedelta(hours=1),
         )
+
+    def marketplace_summary(self, job_id, owner):
+        with self.lock:
+            job = self.load(job_id, owner)
+            record = owned_dataset(self.processing, job["dataset_id"], owner)
+            if not record.listing_id:
+                raise BuildError(
+                    "listing_not_published",
+                    message="Publish this dataset to ai.market before adding a verified preview.",
+                )
+            try:
+                return self.transport().preview_summary(record.listing_id)
+            except Exception as exc:
+                self.transport_error(exc)
 
     def candidate(self, job_id, owner, consent):
         from app.services.preview_signing_service import (
@@ -802,29 +785,43 @@ class PreviewBuildService:
                 not job.get("rights")
                 or job["rights"]["rights_basis_code"] != consent.rights_basis
             ):
-                raise BuildError("rescan_required")
+                raise BuildError("confirmation_changed")
             if (
                 job["state"] not in {"hosted", "signed_candidate"}
                 or not job["receipts"]
             ):
                 raise BuildError("origin_check_required")
             record = owned_dataset(self.processing, job["dataset_id"], owner)
-            context = record.metadata.get("preview_local_approval")
-            if not context or context.get("owner") != owner:
-                raise BuildError("metadata_approval_required")
-            if context["references"]["source_revision"] != job["source_version"]:
-                raise BuildError("metadata_approval_changed")
+            if not record.listing_id:
+                raise BuildError(
+                    "listing_not_published",
+                    message="Publish this dataset to ai.market before adding a verified preview.",
+                )
             if job["candidate"]:
-                if context["digest"] != job.get("approval_digest"):
-                    raise BuildError("metadata_approval_changed")
                 return self.status(job_id, owner)
-            p1 = context["references"]
+            transport = self.transport()
+            try:
+                summary = transport.ensure_summary(record.listing_id)
+            except Exception as exc:
+                self.transport_error(exc)
             signer = self.signer(job)
             reference = signer.signer_reference
             now, dummy = stamp(), encode_base64url(bytes(64))
+            prior = job.get("prior_binding")
+            p1 = dict(
+                summary_id=summary["summary_id"],
+                summary_approval_id=str(uuid4()),
+                summary_hash=summary["summary_hash"],
+                render_hash=summary["render_hash"],
+                aggregate_hash="0" * 64,
+                content_revision=str(uuid4()),
+                source_revision=summary["source_revision"],
+                listing_id=record.listing_id,
+                listing_version_id=None,
+            )
             c = dict(
                 commitment_id=job["commitment_id"],
-                listing_id=p1["listing_id"],
+                listing_id=record.listing_id,
                 seller_dataset_version=job["source_version"],
                 schema_digest=job["commitment"]["schema_digest"],
                 dataset_merkle_root=job["commitment"]["dataset_merkle_root"],
@@ -886,7 +883,7 @@ class PreviewBuildService:
                 for proof, pid in zip(job["proofs"], job["proof_ids"])
             ]
             c["proofs"] = proofs
-            proofs = [signer.sign_proof(c, p) for p in proofs]
+            proofs = [signer.sign_proof(c, proof) for proof in proofs]
             c["proofs"] = proofs
             c = signer.sign_commitment(c)
             binding = dict(
@@ -913,35 +910,30 @@ class PreviewBuildService:
                 last_attested_by_seller_at=now,
                 update_cadence_days=None,
                 approval_expires_at=None,
-                supersedes=None,
+                supersedes=prior["disclosure_version"] if prior else None,
                 request_id=str(uuid4()),
-                expected_current_disclosure_id=None,
+                expected_current_disclosure_id=prior["disclosure_version"] if prior else None,
                 signer_reference=reference,
                 signature_algorithm="ed25519",
                 signature_profile="aim-preview-disclosure-signature-v1",
             )
-            if job.get("prior_binding"):
-                from app.services.preview_lifecycle import refresh_candidate
-
-                refreshed = refresh_candidate(
-                    job["prior_binding"],
-                    disclosure_version=job["disclosure_version"],
-                    request_id=binding["request_id"],
-                    attested_at=now,
-                    cadence_days=None,
-                ).binding()
-                binding.update(
-                    supersedes=refreshed["supersedes"],
-                    expected_current_disclosure_id=refreshed[
-                        "expected_current_disclosure_id"
-                    ],
+            try:
+                allocated = transport.allocate(record.listing_id, LocalCandidate.validate(binding).binding())
+            except Exception as exc:
+                self.transport_error(exc)
+            candidate = LocalCandidate.validate(allocated)
+            p1 = {
+                key: allocated[key]
+                for key in (
+                    "summary_id", "summary_approval_id", "summary_hash", "render_hash",
+                    "aggregate_hash", "content_revision", "source_revision", "listing_id",
+                    "listing_version_id",
                 )
-            candidate = LocalCandidate.validate(binding)
+            }
             request = construct_request(
                 candidate, c, proofs, signer=signer, approved_p1=p1
             )
             self.freeze(job, candidate, request)
-            job["approval_digest"] = context["digest"]
             self.save(job)
             return self.status(job_id, owner)
 
@@ -956,7 +948,7 @@ class PreviewBuildService:
             state="signed_candidate",
             journal_key=list(key),
             candidate={
-                "kind": "fixture_candidate",
+                "kind": "marketplace_candidate",
                 "request_digest": request_digest(request),
                 "key_fingerprint": request["binding"]["signer_reference"][37:],
                 "sample_hash": request["binding"]["sample_hash"],
@@ -966,59 +958,91 @@ class PreviewBuildService:
         self.save(job)
 
     def submit(self, job_id, owner):
-        # Intentionally has no transport or submit_preview_request call.
         with self.release_on_exit(job_id), self.lock:
             job = self.load(job_id, owner)
             self.check_source(job)
             if not job["candidate"]:
                 raise BuildError("signed_candidate_required")
             record = owned_dataset(self.processing, job["dataset_id"], owner)
-            if (record.metadata.get("preview_local_approval") or {}).get(
-                "digest"
-            ) != job.get("approval_digest"):
-                raise BuildError("metadata_approval_changed")
-            self.journal.read(tuple(job["journal_key"]))
-            job.update(prepared=True)
+            frozen = json.loads(self.journal.read(tuple(job["journal_key"]))["request"])
+            try:
+                result = self.transport().submit(record.listing_id, frozen)
+                live = self.transport().live_state(record.listing_id)
+            except Exception as exc:
+                self.transport_error(exc)
+            if self.journal.read(tuple(job["journal_key"]))["state"] == "signed_candidate":
+                self.journal.transition(tuple(job["journal_key"]), "submitted")
+            job.update(
+                prepared=True,
+                state="submitted",
+                marketplace={**live, **result},
+                outcome=(
+                    "Verified preview is visible on ai.market."
+                    if live["state"] == "visible"
+                    else "Verified preview was approved; ai.market visibility is pending."
+                ),
+            )
             self.save(job)
             return self.status(job_id, owner)
 
     def withdraw(self, job_id, owner):
         from app.services.preview_lifecycle import withdrawal_candidate
-        from app.services.preview_signing_service import construct_request
+        from app.services.preview_signing_service import construct_request, LocalCandidate
 
         with self.release_on_exit(job_id), self.lock:
             job = self.load(job_id, owner)
             pub = job["publication"]
             if not pub:
                 raise BuildError("package_required")
+            publication_journal_key = (
+                tuple(job.get("publication_journal_key") or job["journal_key"])
+                if job["candidate"]
+                else None
+            )
             if job["candidate"] and job["state"] not in {"withdrawn", "retired"}:
-                old = json.loads(
-                    self.journal.read(tuple(job["journal_key"]))["candidate"]
+                job["publication_journal_key"] = list(publication_journal_key)
+                old_request = json.loads(
+                    self.journal.read(publication_journal_key)["request"]
                 )
-                candidate = withdrawal_candidate(
-                    old,
-                    disclosure_version=str(uuid4()),
-                    request_id=str(uuid4()),
-                    approved_at=stamp(),
-                )
-                p1 = {
-                    k: old[k]
-                    for k in (
-                        "summary_id",
-                        "summary_approval_id",
-                        "summary_hash",
-                        "render_hash",
-                        "aggregate_hash",
-                        "content_revision",
-                        "source_revision",
-                        "listing_id",
-                        "listing_version_id",
+                if old_request["binding"]["decision"] == "withdraw":
+                    req = old_request
+                else:
+                    proposed = withdrawal_candidate(
+                        old_request["binding"],
+                        disclosure_version=str(uuid4()),
+                        request_id=str(uuid4()),
+                        approved_at=stamp(),
                     )
-                }
-                req = construct_request(
-                    candidate, None, [], signer=self.signer(job), approved_p1=p1
-                )
-                self.freeze(job, candidate, req)
+                    try:
+                        allocated = self.transport().allocate(
+                            old_request["binding"]["listing_id"], proposed.binding()
+                        )
+                    except Exception as exc:
+                        self.transport_error(exc)
+                    candidate = LocalCandidate.validate(allocated)
+                    p1 = {
+                        k: allocated[k]
+                        for k in (
+                            "summary_id", "summary_approval_id", "summary_hash", "render_hash",
+                            "aggregate_hash", "content_revision", "source_revision", "listing_id",
+                            "listing_version_id",
+                        )
+                    }
+                    req = construct_request(
+                        candidate, None, [], signer=self.signer(job), approved_p1=p1
+                    )
+                    self.freeze(job, candidate, req)
+                try:
+                    result = self.transport().submit(
+                        req["binding"]["listing_id"], req, withdraw=True
+                    )
+                except Exception as exc:
+                    self.transport_error(exc)
+                withdrawal_key = tuple(job["journal_key"])
+                if self.journal.read(withdrawal_key)["state"] == "signed_candidate":
+                    self.journal.transition(withdrawal_key, "submitted")
+                job["marketplace"] = {"state": "withdrawn", **result}
+                job["outcome"] = "Verified preview was withdrawn from ai.market."
             job.update(
                 state="withdrawn",
                 prepared=False,
@@ -1042,7 +1066,7 @@ class PreviewBuildService:
 
             if job["candidate"] and job["origin"]:
                 receipts = self.journal.retire(
-                    tuple(job["journal_key"]),
+                    publication_journal_key,
                     publication_store=self.store(job),
                     disclosure_version=pub["disclosure_version"],
                     sample_hash=pub["sample_hash"],
@@ -1064,7 +1088,7 @@ class PreviewBuildService:
         with self.lock:
             old = self.load(job_id, owner)
             self.check_source(old)
-            if not old["candidate"] or old["state"] != "signed_candidate":
+            if not old["candidate"] or old["state"] != "submitted":
                 raise BuildError("signed_candidate_required")
             if (
                 not consent.metadata_accuracy_confirmed
@@ -1073,9 +1097,19 @@ class PreviewBuildService:
                 or consent.rights_basis != old["rights"]["rights_basis_code"]
             ):
                 raise BuildError("approval_required", 422)
-            prior = json.loads(
-                self.journal.read(tuple(old["journal_key"]))["candidate"]
+            prior_request = json.loads(
+                self.journal.read(tuple(old["journal_key"]))["request"]
             )
+            prior = prior_request["binding"]
+            if prior["decision"] != "approve":
+                raise BuildError("refresh_requires_approval")
+            try:
+                old["marketplace"] = self.transport().live_state(
+                    prior["listing_id"]
+                )
+                self.save(old)
+            except Exception as exc:
+                self.transport_error(exc)
             live = self.live.get(job_id)
             if live:
                 live["cancel"].set()

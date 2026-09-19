@@ -37,7 +37,17 @@ jobs:
         run: |
           python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt -r requirements-dev.txt
       - name: Check pinned fixture bytes
-        run: python scripts/check_preview_fixture_parity.py
+        run: |
+          python scripts/check_preview_fixture_parity.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          emitted = json.loads(Path('tests/fixtures/aim_preview_policy_v2.json').read_text())
+          legacy = json.loads(Path('tests/fixtures/aim_preview_policy_v1.json').read_text())
+          assert (emitted['scan_policy'], emitted['scan_policy_version']) == ('aim-preview-policy-v2', '2.0.0')
+          assert emitted['rules'] == emitted['reason_codes'] == []
+          assert (legacy['scan_policy'], legacy['scan_policy_version']) == ('aim-preview-policy-v1', '1.0.0')
+          PY
       - name: Independent Node differential verifier
         run: node tests/preview_differential_check.cjs
       - name: Focused 2a through 2e backend contracts
@@ -46,6 +56,7 @@ jobs:
           tests/test_dataset_canonicalization.py tests/test_dataset_merkle_service.py
           tests/test_preview_content_policy.py tests/test_preview_package_service.py
           tests/test_preview_origin_service.py tests/test_preview_signing_service.py
+          tests/test_preview_marketplace_transport.py
           tests/test_preview_disclosure_schemas.py tests/test_marketplace_commitment_push.py
           tests/test_preview_lifecycle.py tests/test_preview_build_routes.py
           tests/test_vz_publish_proxy.py tests/test_dataset_publish_signed_proxy.py

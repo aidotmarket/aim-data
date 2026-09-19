@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.models.dataset_commitment_schemas import CommitmentProof
+from app.services import preview_content_policy
 from app.services.dataset_canonicalization import CanonicalSchema
 from app.services.dataset_merkle_service import (
     canonical_json_bytes,
@@ -26,9 +27,7 @@ from app.services.dataset_merkle_service import (
     encode_base64url,
     verify_inclusion_proof,
 )
-from app.services import preview_content_policy
-from app.services.pii_service import PIIService
-from app.services.preview_content_policy import NumericText, PolicyError, scan_selection
+from app.services.preview_content_policy import NumericText, scan_selection
 
 PROFILE = "aim-preview-package-v2"
 MEDIA_TYPE = "application/vnd.aim.preview+json"
@@ -136,8 +135,8 @@ def expected_manifest_fixture(envelope, descriptors, package_url):
                 "package_media_type": MEDIA_TYPE,
                 "package_profile": PROFILE,
                 "package_byte_ceiling": CAPS["envelope_bytes"],
-                "scan_policy": "aim-preview-policy-v1",
-                "scan_policy_version": "1.0.0",
+                "scan_policy": preview_content_policy.POLICY,
+                "scan_policy_version": preview_content_policy.VERSION,
                 "scan_verdict": "passed",
                 "scanned_at": timestamp,
                 "sampled_leaf_list_digest": digest,
@@ -495,9 +494,8 @@ class CommitmentPreviewBuilder:
         restricted_content_confirmed=False,
         **unsupported_options,
     ):
-        # Reject the retired injection API with the same closed diagnostic.
-        if unsupported_options:
-            raise PolicyError("detector_unavailable")
+        # Legacy detector injection is ignored: detectors are not preview gates.
+        del unsupported_options
         if (
             not indices
             or any(type(i) is not int for i in indices)
@@ -537,17 +535,9 @@ class CommitmentPreviewBuilder:
             )
             for e in entries
         ]
-        try:
-            preview_content_policy.detector_identity()
-            detector = PIIService()
-            if not isinstance(detector, PIIService) or type(detector) is not PIIService:
-                raise PolicyError("detector_unavailable")
-        except Exception:
-            raise PolicyError("detector_unavailable") from None
         scan = scan_selection(
             rows,
             entries,
-            detector=detector,
             scanned_at=scanned_at,
             rights_confirmed=rights_confirmed,
             public_preview_permission=public_preview_permission,

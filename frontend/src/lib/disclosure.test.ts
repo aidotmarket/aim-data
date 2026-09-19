@@ -9,6 +9,8 @@ import {
 import {
   DisclosureSnapshotRequestError,
   marketplaceApi,
+  previewBuildApi,
+  storeAuthTokens,
   type ApiDataset,
   type DatasetListingMetadata,
 } from "./api";
@@ -89,6 +91,41 @@ afterEach(() => {
 });
 
 describe("disclosure payload builder", () => {
+  it("keeps AIM Data auth tokens when marketplace auth returns the reserved local status", async () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: vi.fn((key: string) => values.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => values.set(key, value)),
+      removeItem: vi.fn((key: string) => values.delete(key)),
+    };
+    vi.stubGlobal("localStorage", storage);
+    storeAuthTokens({
+      access_token: "local-access",
+      refresh_token: "local-refresh",
+      token_type: "bearer",
+      auth_mode: "password",
+      user: { id: "seller" },
+    } as never);
+    storage.removeItem.mockClear();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: vi.fn().mockResolvedValue({
+        detail: {
+          code: "seller_session_required",
+          message: "Sign in to ai.market in AIM Data, then try again.",
+        },
+      }),
+    } as unknown as Response);
+
+    await expect(previewBuildApi.marketplaceSummary("job")).rejects.toThrow(
+      "Sign in to ai.market in AIM Data, then try again.",
+    );
+    expect(storage.removeItem).not.toHaveBeenCalled();
+    expect(values.get("aim_data_access_token")).toBe("local-access");
+    expect(values.get("aim_data_refresh_token")).toBe("local-refresh");
+  });
+
   it("maps approved metadata to approved_fields", () => {
     const approved = buildApprovedMetadataDraft(form, metadata, dataset);
 
