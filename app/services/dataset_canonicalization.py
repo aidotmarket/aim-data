@@ -465,7 +465,12 @@ def _json(raw):
             parse_float=Decimal,
             parse_constant=lambda _: (_ for _ in ()).throw(Error("invalid_number")),
         )
-    except (ValueError, RecursionError, UnicodeError) as exc:
+    except UnicodeError:
+        raise Error(
+            "source_encoding_error",
+            "The source is not valid UTF-8. Save or export it as UTF-8, then try again.",
+        ) from None
+    except (ValueError, RecursionError) as exc:
         if isinstance(exc, Error):
             raise
         raise Error("invalid_json") from None
@@ -551,7 +556,10 @@ def iter_records(
         with os.fdopen(fd, "rb") as source:
             before = os.fstat(source.fileno())
             if not stat.S_ISREG(before.st_mode):
-                raise Error("invalid_source")
+                raise Error(
+                    "invalid_source",
+                    "The source file could not be read. Re-upload it or restore access, then try again.",
+                )
             fmt = declaration.format
             if fmt == "parquet":
                 yield from _parquet(source, schema, declaration)
@@ -568,39 +576,78 @@ def iter_records(
                 old_limit = csv.field_size_limit(MAX_RECORD_BYTES)
                 try:
                     consumed = [0]
+                    physical_line = [0]
 
                     def lines():
                         while raw := source.readline(MAX_RECORD_BYTES + 1):
+                            physical_line[0] += 1
                             consumed[0] += len(raw)
                             if consumed[0] > MAX_RECORD_BYTES:
                                 raise Error("record_resource_limit")
-                            yield raw.decode("utf-8")
+                            try:
+                                yield raw.decode("utf-8")
+                            except UnicodeDecodeError:
+                                raise Error(
+                                    "source_encoding_error",
+                                    f"The source is not valid UTF-8 near line {physical_line[0]}. Save or export it as UTF-8, then try again.",
+                                ) from None
 
-                    reader = csv.reader(
-                        lines(),
-                        delimiter=declaration.delimiter,
-                        quotechar=declaration.quote,
-                        escapechar=declaration.escape or None,
-                        strict=True,
+                    # Equal quote/escape declares RFC4180 doubled quotes, not a
+                    # second role for the quote byte in Python's CSV reader.
+                    effective_escape = (
+                        None
+                        if not declaration.escape
+                        or declaration.escape == declaration.quote
+                        else declaration.escape
                     )
-                    names = schema.source_names
-                    if declaration.header:
-                        names = [nfc(k) for k in next(reader)]
-                        if len(names) != len(set(names)):
-                            raise Error("duplicate_field")
-                        if set(names) != {f[0] for f in schema.descriptors}:
-                            raise Error("invalid_header")
-                    consumed[0] = 0
-                    for row in reader:
+                    reader = None
+                    try:
+                        reader = csv.reader(
+                            lines(),
+                            delimiter=declaration.delimiter,
+                            quotechar=declaration.quote,
+                            escapechar=effective_escape,
+                            strict=True,
+                        )
+                        names = schema.source_names
+                        if declaration.header:
+                            try:
+                                names = [nfc(k) for k in next(reader)]
+                            except StopIteration:
+                                raise Error("invalid_header") from None
+                            if len(names) != len(set(names)):
+                                raise Error("duplicate_field")
+                            if set(names) != {f[0] for f in schema.descriptors}:
+                                raise Error("invalid_header")
                         consumed[0] = 0
-                        if len(row) != len(names):
-                            raise Error("invalid_record")
-                        if sum(len(x.encode("utf-8")) for x in row) > MAX_RECORD_BYTES:
-                            raise Error("record_resource_limit")
-                        yield {
-                            key: None if val == declaration.null_token else val
-                            for key, val in zip(names, row)
-                        }
+                        for row in reader:
+                            consumed[0] = 0
+                            if len(row) != len(names):
+                                raise Error("invalid_record")
+                            if (
+                                sum(len(x.encode("utf-8")) for x in row)
+                                > MAX_RECORD_BYTES
+                            ):
+                                raise Error("record_resource_limit")
+                            yield {
+                                key: None if val == declaration.null_token else val
+                                for key, val in zip(names, row)
+                            }
+                    except Error:
+                        raise
+                    except csv.Error:
+                        line = max(
+                            physical_line[0], reader.line_num if reader else 0, 1
+                        )
+                        raise Error(
+                            "csv_parse_error",
+                            f"CSV parsing failed near line {line}. Check the delimiter, quote, and escape settings, then try again.",
+                        ) from None
+                    except ValueError:
+                        raise Error(
+                            "csv_parse_error",
+                            "The CSV dialect is invalid. Use different delimiter and quote characters; use an empty escape for ordinary CSV or a distinct escape character.",
+                        ) from None
                 finally:
                     csv.field_size_limit(old_limit)
             # Compare the original descriptor identity with the final path identity.
@@ -621,8 +668,16 @@ def iter_records(
                 raise Error("source_changed")
     except Error:
         raise
-    except (OSError, ValueError, csv.Error, UnicodeError, StopIteration):
-        raise Error("invalid_source") from None
+    except UnicodeError:
+        raise Error(
+            "source_encoding_error",
+            "The source is not valid UTF-8. Save or export it as UTF-8, then try again.",
+        ) from None
+    except (OSError, ValueError, StopIteration):
+        raise Error(
+            "invalid_source",
+            "The source file could not be read. Re-upload it or restore access, then try again.",
+        ) from None
 
 
 def _parquet(source, schema, declaration):

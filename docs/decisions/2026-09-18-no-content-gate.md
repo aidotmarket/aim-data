@@ -39,3 +39,8 @@ continues to emit the stricter compatibility headers.
 
 No cryptographic, non-custodial, size/resource, ownership, or explicit seller
 confirmation control is relaxed by this decision.
+
+## Owner extension — 2026-09-19
+
+“We are not content police. Remove things that keep the user from having a
+successful experience.”

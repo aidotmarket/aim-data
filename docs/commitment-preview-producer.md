@@ -64,7 +64,18 @@ requires a complete source-manifest resolver and fails closed without one.
 CSV/TSV, JSON arrays, NDJSON/JSONL and Parquet are supported with explicit parsing
 and complete schema declarations. Missing JSON properties remain different from
 explicit nulls. CSV/TSV require UTF-8, delimiter, quote/escape, header, locale and
-null-token declarations. Timestamps require an unambiguous UTC/offset declaration.
+null-token declarations. For ordinary RFC4180 CSV, declare an empty escape; doubled
+quotes inside a quoted field remain the quote convention:
+
+```json
+{"format":"csv","encoding":"utf-8","delimiter":",","quote":"\"","escape":"","header":true,"locale":"C","null_token":""}
+```
+
+An equal quote/escape declaration selects the same RFC4180 doubled-quote parser
+mode as an empty escape. This does not preserve the old interpretation of quote
+characters inside unquoted fields: the old parser consumed one such character as
+an escape, while the RFC4180 mode retains it. A genuinely distinct escape character
+remains active. Timestamps require an unambiguous UTC/offset declaration.
 No source preview or inferred sample schema substitutes for the full dataset.
 
 **FLOAT/DOUBLE/REAL are ineligible**, even when finite. There is no approved

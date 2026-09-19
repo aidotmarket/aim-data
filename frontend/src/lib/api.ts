@@ -1613,7 +1613,7 @@ export interface PreviewOriginReceipt {
 }
 export interface PreviewBuildStatus {
   job_id: string; dataset_id: string; source_version: string;
-  state: string; code: string | null; review_ready: boolean;
+  state: string; code: string | null; message?: string | null; review_ready: boolean;
   progress: { phase: string; records: number; canonical_bytes: number; elapsed_seconds: number };
   columns: string[];
   selection: { leaf_indices: number[]; display_columns: string[]; rows: number; fields: number; canonical_bytes: number; row_sizes?: Record<number, number> };

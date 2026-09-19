@@ -673,6 +673,50 @@ def test_exact_csv_date_and_city_reproduction_produces_package(setup):
     assert package.json()["state"] == "packaged"
 
 
+@pytest.mark.parametrize(
+    "contents,code,message_fragment",
+    [
+        (b'"private,broken\n', "csv_parse_error", "near line 1"),
+        (b"private-\xff\n", "source_encoding_error", "valid UTF-8 near line 1"),
+    ],
+)
+def test_csv_build_failure_reports_safe_actionable_message(
+    setup, contents, code, message_fragment
+):
+    client, service, app, record = setup
+    source = record.upload_path.with_name("seller.csv")
+    source.write_bytes(contents)
+    record.upload_path = source
+    response = client.post(
+        "/marketplace/preview-builds",
+        json={
+            "dataset_id": "dataset",
+            "parsing": {
+                "format": "csv",
+                "encoding": "utf-8",
+                "delimiter": ",",
+                "quote": '"',
+                "escape": "",
+                "header": False,
+                "locale": "C",
+                "null_token": "",
+            },
+            "schema_descriptors": [["value", "string", False, {}]],
+        },
+    )
+    assert response.status_code == 200, response.text
+    job_id = response.json()["job_id"]
+    for _ in range(200):
+        status = client.get(f"/marketplace/preview-builds/{job_id}").json()
+        if status["state"] == "failed":
+            break
+        time.sleep(0.05)
+    assert status["code"] == code
+    assert message_fragment in status["message"]
+    assert "private" not in status["message"]
+    assert str(source) not in status["message"]
+
+
 @pytest.mark.parametrize("action", ["cancel", "idle"])
 def test_queued_build_is_live_cancellable_and_bounded(setup, action):
     from app.services.dataset_merkle_service import private_job

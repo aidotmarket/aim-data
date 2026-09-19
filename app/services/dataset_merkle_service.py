@@ -45,9 +45,10 @@ _RFC3339_UTC_PATTERN = re.compile(
 class CommitmentValidationError(ValueError):
     """A stable, non-content validation failure."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, safe_message: str | None = None) -> None:
         super().__init__(code)
         self.code = code
+        self.safe_message = safe_message
 
 
 def encode_base64url(value: bytes) -> str:
@@ -795,9 +796,9 @@ def _worker(
         connection.send(
             (
                 "error",
-                exc.code
+                {"code": exc.code, "message": exc.safe_message}
                 if isinstance(exc, CommitmentValidationError)
-                else "worker_failed",
+                else {"code": "worker_failed", "message": None},
             )
         )
     finally:
@@ -873,7 +874,9 @@ def run_commitment_job(
                     except EOFError:
                         break
                     if kind == "error":
-                        raise CommitmentValidationError(payload)
+                        raise CommitmentValidationError(
+                            payload["code"], payload.get("message")
+                        )
                     if kind == "progress":
                         last_bytes = payload["canonical_bytes"]
                         if progress:
