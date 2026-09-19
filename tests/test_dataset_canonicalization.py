@@ -536,6 +536,30 @@ def test_csv_equal_quote_escape_preserves_quotes_in_unquoted_field(tmp_path):
     )
 
 
+def test_csv_equal_quote_escape_refuses_quote_escaped_delimiter(tmp_path):
+    path = tmp_path / "quote-escaped-delimiter.csv"
+    path.write_text('value\na","a\n')
+    schema = CanonicalSchema([["value", "string", False, {}]])
+    declaration = ParsingDeclaration(
+        "csv",
+        encoding="utf-8",
+        delimiter=",",
+        quote='"',
+        escape='"',
+        header=True,
+        locale="C",
+        null_token="",
+    )
+
+    with pytest.raises(Error, match="^csv_parse_error$") as failure:
+        list(iter_records(path, declaration, schema))
+
+    assert failure.value.safe_message == (
+        "CSV parsing failed near line 2. Check the delimiter, quote, and escape "
+        "settings, then try again."
+    )
+
+
 def test_csv_distinct_escape_character_is_honoured(tmp_path):
     path = tmp_path / "escaped.csv"
     path.write_text('id,text\n1,"say \\"hello\\""\n')
