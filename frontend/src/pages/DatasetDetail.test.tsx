@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { datasetsApi, marketplaceApi, previewBuildApi, piiApi, type ApiDataset, type DatasetListingMetadata, type PIIScanResponse } from "@/lib/api";
+import { DatasetReattestationRequestError, datasetsApi, marketplaceApi, previewBuildApi, piiApi, type ApiDataset, type DatasetListingMetadata, type PIIScanResponse } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY } from "@/lib/disclosure";
 import DatasetDetail, { DisclosureSnapshotFailurePanel, ListingPreparation, DirectoryMembers } from "./DatasetDetail";
@@ -305,8 +305,8 @@ describe("publish completion", () => {
 
 
 describe("dataset detail publication state", () => {
-  async function renderDetail(listingId: string | null) {
-    vi.spyOn(datasetsApi, "get").mockResolvedValue({ ...dataset(listingMetadata), listing_id: listingId });
+  async function renderDetail(listingId: string | null, metadata: ApiDataset["metadata"] = dataset(listingMetadata).metadata) {
+    vi.spyOn(datasetsApi, "get").mockResolvedValue({ ...dataset(listingMetadata), listing_id: listingId, metadata });
     vi.spyOn(datasetsApi, "getSample").mockResolvedValue({ dataset_id: "ds-1", sample: [], count: 0 });
     vi.spyOn(datasetsApi, "getStatistics").mockRejectedValue(new Error("Unavailable"));
     vi.spyOn(datasetsApi, "getReadiness").mockRejectedValue(new Error("Unavailable"));
@@ -344,6 +344,55 @@ describe("dataset detail publication state", () => {
     expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeInTheDocument();
     expect(screen.queryByText("Published")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Marketplace" })).not.toBeInTheDocument();
+  });
+
+  it("shows last confirmation and replaces a doomed retry with publish-new-version", async () => {
+    const metadata = {
+      ...dataset(listingMetadata).metadata,
+      published_dataset_commitment: {
+        commitment_id: "commitment-1", listing_id: "listing-1", seller_dataset_version: "v1",
+        schema_digest: "s", dataset_merkle_root: "r", leaf_count: 2,
+        sample_hash: "1".repeat(64), rights_basis_digest: "2".repeat(64),
+      },
+      dataset_reattestation: {
+        status: "complete" as const, last_confirmed_at: "2026-09-20T10:00:00Z",
+        last_error: null, retryable: false,
+      },
+    };
+    vi.spyOn(marketplaceApi, "reattestDatasetCommitment").mockRejectedValue(
+      new DatasetReattestationRequestError(
+        "The data changed. Publish a new version.", 409, "dataset_changed", false,
+      ),
+    );
+    await renderDetail("listing-1", metadata);
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Marketplace" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText(/Last confirmed current/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm current" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The data changed. Publish a new version.");
+    expect(screen.queryByRole("button", { name: "Confirm current" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish a new version" })).toBeInTheDocument();
+  });
+
+  it("keeps confirm-current available for a non-retryable auth failure", async () => {
+    const metadata = {
+      ...dataset(listingMetadata).metadata,
+      published_dataset_commitment: {
+        commitment_id: "commitment-1", listing_id: "listing-1", seller_dataset_version: "v1",
+        schema_digest: "s", dataset_merkle_root: "r", leaf_count: 2,
+        sample_hash: "1".repeat(64), rights_basis_digest: "2".repeat(64),
+      },
+    };
+    vi.spyOn(marketplaceApi, "reattestDatasetCommitment").mockRejectedValue(
+      new DatasetReattestationRequestError(
+        "Your ai.market sign-in has expired. Sign in and confirm again.", 403, "seller_auth_required", false,
+      ),
+    );
+    await renderDetail("listing-1", metadata);
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Marketplace" }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm current" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your ai.market sign-in has expired. Sign in and confirm again.");
+    expect(screen.queryByRole("button", { name: "Publish a new version" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm current" })).toBeInTheDocument();
   });
 });
 

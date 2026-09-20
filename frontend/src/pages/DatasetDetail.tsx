@@ -58,6 +58,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   datasetsApi,
+  DatasetReattestationRequestError,
   marketplaceApi,
   piiApi,
   type ApiDataset,
@@ -101,6 +102,100 @@ import {
   type DisclosureSnapshotFailure,
   type DisclosureSnapshotPayload,
 } from "@/lib/disclosure";
+
+function DatasetFreshnessControl({
+  dataset,
+  onDatasetRefresh,
+  onPublishNewVersion,
+}: {
+  dataset: ApiDataset;
+  onDatasetRefresh: (dataset: ApiDataset) => void;
+  onPublishNewVersion: () => void;
+}) {
+  const commitment = dataset.metadata?.published_dataset_commitment;
+  const persisted = dataset.metadata?.dataset_reattestation;
+  const [checking, setChecking] = useState(false);
+  const [failure, setFailure] = useState<{
+    code: string;
+    message: string;
+  } | null>(null);
+
+  if (!commitment || !dataset.listing_id) return null;
+  const lastConfirmed = persisted?.last_confirmed_at;
+  const changed = persisted?.status === "new_commitment_required"
+    || failure?.code === "dataset_changed"
+    || failure?.code === "new_commitment_required";
+
+  const confirmCurrent = async () => {
+    setChecking(true);
+    setFailure(null);
+    const progressPoll = window.setInterval(() => {
+      void datasetsApi.get(dataset.id).then(onDatasetRefresh).catch(() => {});
+    }, 1000);
+    try {
+      await marketplaceApi.reattestDatasetCommitment(
+        dataset.listing_id!,
+        commitment.commitment_id,
+        dataset.id,
+      );
+      onDatasetRefresh(await datasetsApi.get(dataset.id));
+      toast({ title: "Listing confirmed current" });
+    } catch (error) {
+      if (error instanceof DatasetReattestationRequestError) {
+        setFailure({ code: error.code, message: error.message });
+      } else {
+        setFailure({ code: "reattestation_failed", message: "Could not confirm the listing. Try again." });
+      }
+      try {
+        onDatasetRefresh(await datasetsApi.get(dataset.id));
+      } catch {
+        // Keep the actionable response even if the local refresh also fails.
+      }
+    } finally {
+      window.clearInterval(progressPoll);
+      setChecking(false);
+    }
+  };
+
+  return (
+    <Card className="bg-card border-border">
+      <CardContent className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-foreground">Listing freshness</p>
+          <p className="text-sm text-muted-foreground">
+            {lastConfirmed
+              ? `Last confirmed current ${new Date(lastConfirmed).toLocaleString()}`
+              : "Not confirmed since publication"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Confirms the current schema, complete data root, and sample membership. It does not re-check the rights basis recorded when this version was published.
+          </p>
+          {checking && persisted?.progress && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {persisted.progress.phase === "ready" ? "Finishing" : "Checking"}
+              {` · ${persisted.progress.records.toLocaleString()} rows`}
+            </p>
+          )}
+          {(failure?.message || persisted?.last_error) && (
+            <p role="alert" className={changed ? "mt-1 text-sm text-destructive" : "mt-1 text-sm text-muted-foreground"}>
+              {failure?.message || persisted?.last_error}
+            </p>
+          )}
+        </div>
+        {changed ? (
+          <Button type="button" size="sm" variant="outline" onClick={onPublishNewVersion}>
+            Publish a new version
+          </Button>
+        ) : (
+          <Button type="button" size="sm" variant="outline" disabled={checking} onClick={confirmCurrent}>
+            {checking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {checking ? "Checking local data…" : "Confirm current"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface DisclosureSnapshotFailurePanelProps {
   failure: DisclosureSnapshotFailure;
@@ -2273,6 +2368,12 @@ const DatasetDetail = () => {
                 </div>
               </CardContent>
             </Card>
+
+            <DatasetFreshnessControl
+              dataset={apiDataset}
+              onDatasetRefresh={setApiDataset}
+              onPublishNewVersion={() => setPublishModalOpen(true)}
+            />
 
             {/* Stats are available only when marketplace data is known. */}
             {marketplaceData && <>

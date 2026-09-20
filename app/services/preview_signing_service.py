@@ -19,6 +19,7 @@ from app.models.dataset_commitment_schemas import (
     Timestamp,
     HexDigest,
     DatasetCommitmentContract,
+    DatasetReattestationContract,
     DatasetPreviewProofContract,
     TransparencyCheckpointContract,
 )
@@ -108,6 +109,13 @@ def commitment_bytes(commitment):
     c = closed(DatasetCommitmentContract, commitment)
     c.pop("seller_signature")
     return b"aim-dataset-commitment-signature-v1\0" + canonical_json_bytes(c)
+
+
+def reattestation_bytes(reattestation):
+    """Canonical unchanged-root signature preimage, isolated from commitments."""
+    value = closed(DatasetReattestationContract, reattestation)
+    value.pop("seller_signature")
+    return b"aim-dataset-reattestation-signature-v1\0" + canonical_json_bytes(value)
 
 
 def disclosure_bytes(binding):
@@ -230,6 +238,10 @@ class PreviewSigningService:
         except Exception:
             raise SigningError("signing_authority_unavailable") from None
 
+    def check_available(self):
+        """Open and validate the existing keystore without producing a signature."""
+        self._keys()
+
     @property
     def signer_reference(self):
         return self.install_id + ":" + fingerprint(public_bytes(self._keys()[1]))
@@ -258,6 +270,13 @@ class PreviewSigningService:
             commitment_bytes(c), c["aim_data_signer_reference"]
         )
         return c
+
+    def sign_reattestation(self, reattestation):
+        value = closed(DatasetReattestationContract, reattestation)
+        value["seller_signature"] = self._sign(
+            reattestation_bytes(value), value["aim_data_signer_reference"]
+        )
+        return closed(DatasetReattestationContract, value)
 
     def sign_disclosure(self, binding):
         from app.models.preview_disclosure_schemas import DisclosureBinding
