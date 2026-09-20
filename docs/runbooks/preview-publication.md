@@ -199,3 +199,30 @@ On upgrade, a packaged or hosted v1/1.0.0 job is marked
 `legacy_v1_completion` and may finish unchanged because rewriting its package or
 attestation would break immutable evidence. The backend accepts that legacy
 input. Every newly created job emits v2/2.0.0.
+
+## Published dataset freshness confirmation
+
+For a published dataset with a retained commitment, **Confirm current** rereads
+the complete managed local source using the stored parsing declaration and
+schema, rebuilds the canonical Merkle commitment, and signs only when the schema
+digest, root, and leaf count still match. Any deterministic parser or schema
+refusal is treated as changed data and requires **Publish a new version**. Only
+`resource_limit`, `disk_resource_limit`, `cancelled`, `worker_failed`,
+`job_already_running`, `source_changed`, `unsafe_temp_directory`, and
+`source_unavailable` are retryable local failures. All local refusals happen
+before AIM Data constructs an HTTP client or calls ai.market.
+
+Authentication, registration-owner, dataset-owner, and missing-dataset failures
+retain **Confirm current** and show the structured repair message; they never
+direct the seller to republish. Timeouts and other HTTP transport failures persist
+a retryable local state. A response is signed with the original publish-time
+`sample_hash` and `rights_basis_digest`. This confirmation re-verifies schema,
+the complete data root, and sample membership only; it does **not** re-verify the
+rights basis. If the seller's rights basis has changed, publish a new version.
+
+The wire contract and canonical preimages were compared with ai-market-backend
+`ed435fc8d`. The golden SHA-256 digests are
+`641f97b6a56cdb3b64b8135b4878f692ca647dccb4e62e6bd926d5d34deb1b41`
+for `update_cadence_days: null` and
+`da6dcd085830aa95457a83a7e920a46a3415ade472888621a10c821853f3f577`
+for `update_cadence_days: 30`.

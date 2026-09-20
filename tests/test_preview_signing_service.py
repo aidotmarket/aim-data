@@ -1,13 +1,18 @@
 """Synthetic keys only; no customer keystore is opened by these tests."""
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 import pytest
+from pydantic import ValidationError
 from app.core.crypto import DeviceCrypto
+from app.models.dataset_commitment_schemas import DatasetReattestationContract
 from app.services.preview_signing_service import (
     PreviewSigningService,
     SigningError,
     public_bytes,
     fingerprint,
+    commitment_bytes,
+    reattestation_bytes,
 )
 import copy
 import json
@@ -31,6 +36,7 @@ from tests.preview_fixture_factory import (
     request_fixture,
     test_key,
     uid,
+    material,
 )
 
 NOW = datetime(2026, 9, 17, tzinfo=timezone.utc)
@@ -134,6 +140,123 @@ def test_golden_corpus():
             row["signature"],
             bytes.fromhex(row["signed_bytes_hex"]),
         )
+
+
+def reattestation_fixture(reference):
+    from app.services.dataset_merkle_service import encode_base64url
+
+    bound = dict(
+        listing_id=uid(4),
+        seller_dataset_version="fixture-v1",
+        schema_digest=encode_base64url(bytes([3]) * 32),
+        dataset_merkle_root=encode_base64url(bytes([4]) * 32),
+        leaf_count=2,
+        signed_at="2026-09-17T00:00:00.000000Z",
+    )
+    return dict(
+        commitment_id=uid(3),
+        **bound,
+        seller_attestation=dict(
+            **bound,
+            sample_hash="1" * 64,
+            rights_basis_digest="2" * 64,
+            public_preview_permission=True,
+            metadata_accuracy_confirmed=True,
+        ),
+        aim_data_signer_reference=reference,
+        signature_algorithm="ed25519",
+        seller_signature="A" * 86,
+        update_cadence_days=None,
+    )
+
+
+def test_reattestation_preimage_golden_vector():
+    value = reattestation_fixture(uid(1) + ":" + "a" * 64)
+    expected = (
+        b"aim-dataset-reattestation-signature-v1\0"
+        b'{"aim_data_signer_reference":"00000000-0000-4000-8000-000000000001:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
+        b'"commitment_id":"00000000-0000-4000-8000-000000000003","dataset_merkle_root":"BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",'
+        b'"leaf_count":2,"listing_id":"00000000-0000-4000-8000-000000000004","schema_digest":"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",'
+        b'"seller_attestation":{"dataset_merkle_root":"BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ","leaf_count":2,'
+        b'"listing_id":"00000000-0000-4000-8000-000000000004","metadata_accuracy_confirmed":true,"public_preview_permission":true,'
+        b'"rights_basis_digest":"2222222222222222222222222222222222222222222222222222222222222222",'
+        b'"sample_hash":"1111111111111111111111111111111111111111111111111111111111111111",'
+        b'"schema_digest":"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM","seller_dataset_version":"fixture-v1",'
+        b'"signed_at":"2026-09-17T00:00:00.000000Z"},"seller_dataset_version":"fixture-v1","signature_algorithm":"ed25519",'
+        b'"signed_at":"2026-09-17T00:00:00.000000Z","update_cadence_days":null}'
+    )
+    actual = reattestation_bytes(value)
+    assert actual == expected
+    assert hashlib.sha256(actual).hexdigest() == "641f97b6a56cdb3b64b8135b4878f692ca647dccb4e62e6bd926d5d34deb1b41"
+
+
+def test_reattestation_non_null_cadence_preimage_golden_vector():
+    value = reattestation_fixture(uid(1) + ":" + "a" * 64)
+    value["update_cadence_days"] = 30
+    actual = reattestation_bytes(value)
+    expected = (
+        b"aim-dataset-reattestation-signature-v1\0"
+        b'{"aim_data_signer_reference":"00000000-0000-4000-8000-000000000001:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
+        b'"commitment_id":"00000000-0000-4000-8000-000000000003","dataset_merkle_root":"BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",'
+        b'"leaf_count":2,"listing_id":"00000000-0000-4000-8000-000000000004","schema_digest":"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",'
+        b'"seller_attestation":{"dataset_merkle_root":"BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ","leaf_count":2,'
+        b'"listing_id":"00000000-0000-4000-8000-000000000004","metadata_accuracy_confirmed":true,"public_preview_permission":true,'
+        b'"rights_basis_digest":"2222222222222222222222222222222222222222222222222222222222222222",'
+        b'"sample_hash":"1111111111111111111111111111111111111111111111111111111111111111",'
+        b'"schema_digest":"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM","seller_dataset_version":"fixture-v1",'
+        b'"signed_at":"2026-09-17T00:00:00.000000Z"},"seller_dataset_version":"fixture-v1","signature_algorithm":"ed25519",'
+        b'"signed_at":"2026-09-17T00:00:00.000000Z","update_cadence_days":30}'
+    )
+    assert actual == expected
+    assert hashlib.sha256(actual).hexdigest() == "da6dcd085830aa95457a83a7e920a46a3415ade472888621a10c821853f3f577"
+
+
+def test_reattestation_rejects_nested_binding_mismatch():
+    value = reattestation_fixture(uid(1) + ":" + "a" * 64)
+    value["seller_attestation"]["schema_digest"] = "A" * 43
+    with pytest.raises(ValidationError, match="reattestation_binding_mismatch"):
+        DatasetReattestationContract.model_validate(value)
+
+
+def test_reattestation_round_trip_and_commitment_domain_isolation(signer):
+    service, _ = signer
+    value = reattestation_fixture(service.signer_reference)
+    signed = service.sign_reattestation(value)
+    raw_key = public_bytes(service._keys()[1])
+    assert verify_bytes(raw_key, signed["seller_signature"], reattestation_bytes(signed))
+
+    key, commitment, _ = material()
+    commitment_signature = commitment["seller_signature"]
+    corresponding = reattestation_fixture(commitment["aim_data_signer_reference"])
+    corresponding["schema_digest"] = commitment["schema_digest"]
+    corresponding["dataset_merkle_root"] = commitment["dataset_merkle_root"]
+    corresponding["seller_attestation"]["schema_digest"] = commitment["schema_digest"]
+    corresponding["seller_attestation"]["dataset_merkle_root"] = commitment["dataset_merkle_root"]
+    raw_fixture_key = public_bytes(key.public_key())
+    from app.services.dataset_merkle_service import encode_base64url
+    reattestation_signature = encode_base64url(key.sign(reattestation_bytes(corresponding)))
+    assert not verify_bytes(raw_fixture_key, reattestation_signature, commitment_bytes(commitment))
+    assert not verify_bytes(raw_fixture_key, commitment_signature, reattestation_bytes(corresponding))
+    reattestation_preimage = reattestation_bytes(corresponding)
+    commitment_preimage = commitment_bytes(commitment)
+    same_reattestation_payload_wrong_domain = (
+        b"aim-dataset-commitment-signature-v1\0"
+        + reattestation_preimage.split(b"\0", 1)[1]
+    )
+    same_commitment_payload_wrong_domain = (
+        b"aim-dataset-reattestation-signature-v1\0"
+        + commitment_preimage.split(b"\0", 1)[1]
+    )
+    assert not verify_bytes(
+        raw_fixture_key,
+        encode_base64url(key.sign(same_reattestation_payload_wrong_domain)),
+        reattestation_preimage,
+    )
+    assert not verify_bytes(
+        raw_fixture_key,
+        encode_base64url(key.sign(same_commitment_payload_wrong_domain)),
+        commitment_preimage,
+    )
 
 
 def mutations(value, path=()):

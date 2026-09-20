@@ -278,6 +278,7 @@ class DatasetCommitmentContract(WireModel):
         default_factory=list, max_length=100
     )
 
+
     @model_validator(mode="after")
     def matching_proofs(self):
         if len({p.proof_id for p in self.proofs}) != len(self.proofs) or any(
@@ -294,6 +295,50 @@ class DatasetCommitmentContract(WireModel):
             raise ValueError("proof_limit")
         if len(canonical_json_bytes([p.model_dump() for p in self.proofs])) > 262144:
             raise ValueError("manifest_limit")
+        return self
+
+
+class ReattestationSellerAttestation(WireModel):
+    listing_id: UUIDText
+    seller_dataset_version: Code
+    schema_digest: Digest
+    dataset_merkle_root: Digest
+    leaf_count: int = Field(ge=1, le=SAFE_INTEGER)
+    sample_hash: HexDigest
+    rights_basis_digest: HexDigest
+    public_preview_permission: Literal[True]
+    metadata_accuracy_confirmed: Literal[True]
+    signed_at: Timestamp
+
+
+class DatasetReattestationContract(WireModel):
+    commitment_id: UUIDText
+    listing_id: UUIDText
+    seller_dataset_version: Code
+    schema_digest: Digest
+    dataset_merkle_root: Digest
+    leaf_count: int = Field(ge=1, le=SAFE_INTEGER)
+    seller_attestation: ReattestationSellerAttestation
+    aim_data_signer_reference: SignerReference
+    signature_algorithm: Literal["ed25519"] = "ed25519"
+    seller_signature: Signature
+    signed_at: Timestamp
+    update_cadence_days: int | None = Field(default=None, gt=0, le=SAFE_INTEGER)
+
+    @model_validator(mode="after")
+    def attestation_matches_contract(self):
+        if any(
+            getattr(self.seller_attestation, field) != getattr(self, field)
+            for field in (
+                "listing_id",
+                "seller_dataset_version",
+                "schema_digest",
+                "dataset_merkle_root",
+                "leaf_count",
+                "signed_at",
+            )
+        ):
+            raise ValueError("reattestation_binding_mismatch")
         return self
 
 

@@ -250,7 +250,35 @@ export interface ApiDataset {
     pii_scan?: { overall_risk: string; columns_with_pii: number };
     directory?: { member_count: number; data_member_count: number; sample_member_count: number; total_data_bytes: number; manifest_hash: string };
     listing_metadata?: DatasetListingMetadata;
+    published_dataset_commitment?: PublishedDatasetCommitment;
+    dataset_reattestation?: DatasetReattestationState;
   };
+}
+
+export interface PublishedDatasetCommitment {
+  commitment_id: string;
+  listing_id: string;
+  seller_dataset_version: string;
+  schema_digest: string;
+  dataset_merkle_root: string;
+  leaf_count: number;
+  sample_hash: string;
+  rights_basis_digest: string;
+}
+
+export interface DatasetReattestationState {
+  status: 'checking' | 'complete' | 'new_commitment_required' | 'retryable_error' | 'failed';
+  last_confirmed_at?: string | null;
+  last_attempt_at?: string | null;
+  last_error?: string | null;
+  retryable?: boolean;
+  attestation_id?: string | null;
+  progress?: {
+    phase: string;
+    records: number;
+    canonical_bytes: number;
+    elapsed_seconds: number;
+  } | null;
 }
 
 export interface DatasetListResponse {
@@ -700,6 +728,27 @@ export class DisclosureSnapshotRequestError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'DisclosureSnapshotRequestError';
+  }
+}
+
+export interface DatasetReattestationProxyResponse {
+  status: 'complete';
+  listing_id: string;
+  commitment_id: string;
+  attestation_id: string;
+  signed_at: string;
+  retryable: false;
+}
+
+export class DatasetReattestationRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = 'DatasetReattestationRequestError';
   }
 }
 
@@ -1184,6 +1233,35 @@ export const marketplaceApi = {
       throw new DisclosureSnapshotRequestError(message, response.status);
     }
 
+    return response.json();
+  },
+
+  reattestDatasetCommitment: async (
+    listingId: string,
+    commitmentId: string,
+    datasetId: string,
+  ): Promise<DatasetReattestationProxyResponse> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const credential = getStoredAccessToken();
+    if (credential) headers.Authorization = `Bearer ${credential}`;
+    const response = await fetch(
+      `${getApiUrl()}/api/marketplace/listings/${encodeURIComponent(listingId)}/commitments/${encodeURIComponent(commitmentId)}/reattest`,
+      { method: 'POST', headers, body: JSON.stringify({ dataset_id: datasetId }) },
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: null })) as {
+        detail?: { code?: string; message?: string; retryable?: boolean } | string | null;
+      };
+      const structured = typeof error.detail === 'object' && error.detail ? error.detail : null;
+      const message = structured?.message
+        ?? (typeof error.detail === 'string' ? error.detail : `Confirmation failed: ${response.status}`);
+      throw new DatasetReattestationRequestError(
+        message,
+        response.status,
+        structured?.code ?? 'reattestation_failed',
+        structured?.retryable === true,
+      );
+    }
     return response.json();
   },
 };

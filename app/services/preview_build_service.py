@@ -978,6 +978,14 @@ class PreviewBuildService:
             frozen = json.loads(self.journal.read(tuple(job["journal_key"]))["request"])
             try:
                 result = self.transport().submit(record.listing_id, frozen)
+                if frozen.get("commitment"):
+                    from app.services.dataset_reattestation_service import (
+                        persist_published_commitment,
+                    )
+
+                    persist_published_commitment(
+                        self.processing, record, job, frozen["commitment"]
+                    )
                 live = self.transport().live_state(record.listing_id)
             except Exception as exc:
                 self.transport_error(exc)

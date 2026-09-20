@@ -512,6 +512,21 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
     assert response.json()["marketplace"]["state"] == "visible"
     assert "blue" not in response.text and "green" not in response.text
     assert id not in service.live and not response.json()["review_ready"]
+    persisted = record.metadata["published_dataset_commitment"]
+    assert set(persisted) >= {
+        "commitment_id",
+        "listing_id",
+        "seller_dataset_version",
+        "schema_digest",
+        "dataset_merkle_root",
+        "leaf_count",
+        "sample_hash",
+        "rights_basis_digest",
+    }
+    assert persisted["listing_id"] == LISTING
+    assert persisted["sample_hash"] == pub["sample_hash"]
+    assert persisted["rights_basis_digest"] == service.load(id, OWNER)["rights"]["rights_basis_digest"]
+    assert record.metadata["dataset_reattestation"]["last_confirmed_at"]
     assert (
         client.post(base + "/submit", json={}).json()["candidate"]
         == signed.json()["candidate"]

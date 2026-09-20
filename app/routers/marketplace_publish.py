@@ -21,6 +21,7 @@ from typing import Annotated, Any, Literal, Optional
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.api_key_auth import get_current_user
 from app.config import settings
@@ -123,6 +124,27 @@ class DisclosureSnapshotProxyResponse(BaseModel):
     status: str
     listing_id: str
     disclosure_version: Optional[str] = None
+
+
+class DatasetReattestationProxyRequest(BaseModel):
+    model_config = {"extra": "forbid", "hide_input_in_errors": True}
+    dataset_id: str = Field(..., min_length=1)
+
+
+class DatasetReattestationProxyResponse(BaseModel):
+    status: Literal["complete"]
+    listing_id: str
+    commitment_id: str
+    attestation_id: str
+    signed_at: str
+    retryable: Literal[False] = False
+
+
+def _reattestation_error(status_code: int, code: str, message: str, retryable: bool = False):
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": code, "message": message, "retryable": retryable},
+    )
 
 
 class VersionPublishEmit(BaseModel):
@@ -531,6 +553,27 @@ def _seller_auth_headers(request: Request) -> dict[str, str]:
     return {}
 
 
+def _preview_signer(owner: str):
+    from app.services.preview_signing_service import PreviewSigningService
+
+    registration = get_serial_store().state
+    if (
+        not registration.vz_install_id
+        or not registration.ai_market_seller_id
+        or registration.ai_market_seller_id != owner
+    ):
+        raise _reattestation_error(
+            403,
+            "registration_owner_mismatch",
+            "This AIM Data install is registered to a different seller. Sign in with the matching ai.market account.",
+        )
+    return PreviewSigningService(
+        _get_crypto(),
+        install_id=registration.vz_install_id,
+        seller_id=owner,
+    )
+
+
 def _payload_hash(value: Any) -> str:
     return hashlib.sha256(_jcs_canonical_bytes(value)).hexdigest()
 
@@ -692,6 +735,263 @@ async def create_disclosure_snapshot(
         status="complete",
         listing_id=listing_id,
         disclosure_version=str(disclosure_version) if disclosure_version else None,
+    )
+
+
+@router.post(
+    "/marketplace/listings/{listing_id}/commitments/{commitment_id}/reattest",
+    response_model=DatasetReattestationProxyResponse,
+)
+async def reattest_dataset_commitment(
+    listing_id: str,
+    commitment_id: str,
+    body: DatasetReattestationProxyRequest,
+    request: Request,
+    user=Depends(get_current_user),
+    processing: ProcessingService = Depends(get_processing_service),
+):
+    """Recompute the local commitment before signing an unchanged-root claim."""
+    from app.services.dataset_reattestation_service import (
+        ReattestationError,
+        build_signed_reattestation,
+        persist_reattestation_state,
+        stored_commitment,
+        verify_unchanged_dataset,
+    )
+    from app.services.preview_signing_service import SigningError
+
+    record = processing.get_dataset(body.dataset_id)
+    if not record:
+        raise _reattestation_error(
+            404, "dataset_not_found", "The local dataset could not be found."
+        )
+    if record.listing_id != listing_id:
+        raise _reattestation_error(
+            409,
+            "new_commitment_required",
+            "The listing no longer matches this dataset. Publish a new version.",
+        )
+    owner = getattr(user, "user_id", None)
+    if not owner or record.metadata.get("preview_owner_id") != owner:
+        raise _reattestation_error(
+            403,
+            "dataset_owner_unverified",
+            "This signed-in seller does not own the local dataset.",
+        )
+
+    try:
+        stored = stored_commitment(
+            record, listing_id=listing_id, commitment_id=commitment_id
+        )
+    except ReattestationError as exc:
+        raise _reattestation_error(
+            409,
+            exc.code,
+            "The published commitment is unavailable or no longer matches. Publish a new version.",
+        ) from None
+
+    auth_headers = _seller_auth_headers(request)
+    if not auth_headers:
+        raise _reattestation_error(
+            403,
+            "seller_auth_required",
+            "Your ai.market sign-in has expired or is unavailable. Sign in and confirm again.",
+        )
+
+    try:
+        signer = await run_in_threadpool(_preview_signer, owner)
+        await run_in_threadpool(signer.check_available)
+        await run_in_threadpool(
+            verify_unchanged_dataset,
+            processing,
+            record,
+            stored,
+            upload_root=settings.upload_directory,
+            temp_root=settings.data_directory,
+        )
+        payload = await run_in_threadpool(build_signed_reattestation, stored, signer)
+    except ReattestationError as exc:
+        changed = exc.code in {"dataset_changed", "new_commitment_required"}
+        persist_reattestation_state(
+            processing,
+            record,
+            status="new_commitment_required" if changed else "retryable_error",
+            last_error=(
+                "The data changed. Publish a new version."
+                if changed
+                else "The local freshness check could not finish. Try again."
+            ),
+            retryable=not changed,
+            progress=None,
+        )
+        raise HTTPException(
+            status_code=409 if changed else 503,
+            detail={
+                "code": exc.code,
+                "message": (
+                    "The data changed. Publish a new version."
+                    if changed
+                    else "The local freshness check could not finish. Try again."
+                ),
+                "retryable": not changed,
+            },
+        ) from None
+    except SigningError as exc:
+        persist_reattestation_state(
+            processing,
+            record,
+            status="retryable_error",
+            last_error=str(exc),
+            retryable=True,
+            progress=None,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": str(exc),
+                "message": "The signing authority is unavailable. Try again.",
+                "retryable": True,
+            },
+        ) from None
+    except HTTPException as exc:
+        retryable = exc.status_code >= 500
+        persist_reattestation_state(
+            processing,
+            record,
+            status="retryable_error" if retryable else "failed",
+            last_error=str(exc.detail),
+            retryable=retryable,
+            progress=None,
+        )
+        raise
+
+    url = (
+        f"{settings.ai_market_url}/api/v1/listings/{listing_id}"
+        f"/commitments/{commitment_id}/reattest"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                url,
+                json=payload,
+                headers={**auth_headers, "Content-Type": "application/json"},
+            )
+    except httpx.TimeoutException as exc:
+        persist_reattestation_state(
+            processing,
+            record,
+            status="retryable_error",
+            last_error=str(exc),
+            retryable=True,
+            progress=None,
+        )
+        raise HTTPException(
+            status_code=504,
+            detail={
+                "code": "timeout",
+                "message": "ai.market timed out. Try again.",
+                "retryable": True,
+            },
+        ) from None
+    except httpx.TransportError as exc:
+        persist_reattestation_state(
+            processing,
+            record,
+            status="retryable_error",
+            last_error=str(exc)[:500],
+            retryable=True,
+            progress=None,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "transport_error",
+                "message": "The connection to ai.market was interrupted. Try again.",
+                "retryable": True,
+            },
+        ) from None
+
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+    detail = data.get("detail") or data.get("error") or response.text
+    if response.status_code == 409 and detail == "new_commitment_required":
+        persist_reattestation_state(
+            processing,
+            record,
+            status="new_commitment_required",
+            last_error="The data changed. Publish a new version.",
+            retryable=False,
+            progress=None,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "new_commitment_required",
+                "message": "The data changed. Publish a new version.",
+                "retryable": False,
+            },
+        )
+    if response.status_code not in (200, 201):
+        retryable = response.status_code >= 500
+        persist_reattestation_state(
+            processing,
+            record,
+            status="retryable_error" if retryable else "failed",
+            last_error=str(detail or f"ai.market returned {response.status_code}"),
+            retryable=retryable,
+            progress=None,
+        )
+        raise HTTPException(
+            status_code=response.status_code,
+            detail={
+                "code": "reattestation_rejected",
+                "message": str(detail or f"ai.market returned {response.status_code}"),
+                "retryable": retryable,
+            },
+        )
+
+    signed_at = str(data.get("signed_at") or payload["signed_at"])
+    raw_attestation_id = data.get("attestation_id")
+    if not raw_attestation_id:
+        message = "ai.market did not return an attestation ID. Try again."
+        persist_reattestation_state(
+            processing,
+            record,
+            status="retryable_error",
+            last_attempt_at=payload["signed_at"],
+            last_error=message,
+            retryable=True,
+            progress=None,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "upstream_invalid_response",
+                "message": message,
+                "retryable": True,
+            },
+        )
+    attestation_id = str(raw_attestation_id)
+    persist_reattestation_state(
+        processing,
+        record,
+        status="complete",
+        last_confirmed_at=signed_at,
+        last_attempt_at=payload["signed_at"],
+        last_error=None,
+        retryable=False,
+        progress=None,
+        attestation_id=attestation_id,
+    )
+    return DatasetReattestationProxyResponse(
+        status="complete",
+        listing_id=listing_id,
+        commitment_id=commitment_id,
+        attestation_id=attestation_id,
+        signed_at=signed_at,
+        retryable=False,
     )
 
 
