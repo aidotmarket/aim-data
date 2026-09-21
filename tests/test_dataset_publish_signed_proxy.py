@@ -79,6 +79,18 @@ def _listing_metadata() -> ListingMetadata:
     )
 
 
+def _schema_columns(metadata: ListingMetadata) -> list[dict]:
+    return [
+        {
+            "name": column.name,
+            "type": column.type,
+            "null_percentage": column.null_percentage,
+            "uniqueness_ratio": column.uniqueness_ratio,
+        }
+        for column in metadata.column_summary
+    ]
+
+
 def _compliance_report(dataset_id: str) -> ComplianceReport:
     return ComplianceReport(
         dataset_id=dataset_id,
@@ -283,6 +295,85 @@ async def test_dataset_publish_honors_metadata_override_without_dropping_schema(
             "uniqueness_ratio": 0.87,
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_dataset_publish_category_only_overrides_loaded_category_without_dropping_schema(monkeypatch):
+    dataset_id = f"ds-{uuid4()}"
+    record = _processing_record(dataset_id)
+    captured = {}
+
+    monkeypatch.setattr(datasets, "load_listing_metadata", lambda _base_path: _listing_metadata())
+    monkeypatch.setattr(datasets, "load_compliance_report", lambda _base_path: None)
+    monkeypatch.setattr(datasets, "load_attestation", lambda _base_path: None)
+
+    async def _publish(body, _request, _user):
+        captured["body"] = body
+        return {"listing_id": "listing-category-override"}
+
+    monkeypatch.setattr(datasets, "publish_via_signed_proxy", _publish)
+
+    await datasets.publish_to_marketplace(
+        dataset_id,
+        _request(),
+        body=datasets.PublishDatasetRequest(category="financial"),
+        processing=_Processing(record),
+        user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+        _meter=None,
+    )
+
+    body = captured["body"]
+    metadata = _listing_metadata()
+    assert body.category == "financial"
+    assert body.secondary_categories is None
+    assert body.schema_info["columns"] == _schema_columns(metadata)
+    assert body.schema_info["row_count"] == metadata.row_count
+    assert body.schema_info["column_count"] == metadata.column_count
+    assert body.schema_info["file_format"] == metadata.file_format
+    assert body.schema_info["size_bytes"] == metadata.size_bytes
+    assert body.row_count == metadata.row_count
+    assert body.file_format == metadata.file_format
+    assert body.file_size_bytes == metadata.size_bytes
+
+
+@pytest.mark.asyncio
+async def test_dataset_publish_title_only_keeps_loaded_categories_and_schema(monkeypatch):
+    dataset_id = f"ds-{uuid4()}"
+    record = _processing_record(dataset_id)
+    captured = {}
+
+    monkeypatch.setattr(datasets, "load_listing_metadata", lambda _base_path: _listing_metadata())
+    monkeypatch.setattr(datasets, "load_compliance_report", lambda _base_path: None)
+    monkeypatch.setattr(datasets, "load_attestation", lambda _base_path: None)
+
+    async def _publish(body, _request, _user):
+        captured["body"] = body
+        return {"listing_id": "listing-title-override"}
+
+    monkeypatch.setattr(datasets, "publish_via_signed_proxy", _publish)
+
+    await datasets.publish_to_marketplace(
+        dataset_id,
+        _request(),
+        body=datasets.PublishDatasetRequest(title="Manual Title"),
+        processing=_Processing(record),
+        user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+        _meter=None,
+    )
+
+    body = captured["body"]
+    metadata = _listing_metadata()
+    assert body.title == "Manual Title"
+    assert body.category == metadata.data_categories[0]
+    assert body.secondary_categories == metadata.data_categories[1:]
+    assert body.schema_info["columns"] == _schema_columns(metadata)
+    assert body.schema_info["row_count"] == metadata.row_count
+    assert body.schema_info["column_count"] == metadata.column_count
+    assert body.schema_info["file_format"] == metadata.file_format
+    assert body.schema_info["size_bytes"] == metadata.size_bytes
+    assert body.row_count == metadata.row_count
+    assert body.file_format == metadata.file_format
+    assert body.file_size_bytes == metadata.size_bytes
 
 
 @pytest.mark.asyncio

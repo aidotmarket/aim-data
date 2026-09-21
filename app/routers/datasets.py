@@ -1429,9 +1429,12 @@ async def publish_to_marketplace(
                         body.description or f"Dataset file: {record.original_filename}"
                     ).strip(),
                     "tags": [tag.strip() for tag in body.tags if tag.strip()][:20],
-                    "data_categories": [publish_category] if publish_category else [],
                     "generated_at": datetime.now(timezone.utc).isoformat(),
                 }
+            )
+        if body and body.category is not None:
+            listing_metadata = listing_metadata.model_copy(
+                update={"data_categories": [body.category]}
             )
         compliance = load_compliance_report(base_path)
         attestation = load_attestation(base_path)
