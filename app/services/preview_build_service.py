@@ -834,6 +834,7 @@ class PreviewBuildService:
                 commitment_id=job["commitment_id"],
                 listing_id=record.listing_id,
                 seller_dataset_version=job["source_version"],
+                previous_commitment_id=(prior["commitment_id"] if prior else None),
                 schema_digest=job["commitment"]["schema_digest"],
                 dataset_merkle_root=job["commitment"]["dataset_merkle_root"],
                 leaf_count=job["commitment"]["leaf_count"],

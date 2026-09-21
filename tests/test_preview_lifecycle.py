@@ -1,5 +1,6 @@
 from tests import test_preview_package_service as package_tests
 import copy
+import json
 from datetime import timedelta
 from unittest.mock import Mock
 import pytest
@@ -42,6 +43,20 @@ def test_atomic_retry_and_recovery(tmp_path):
     j.transition(key, "submitted")
     assert j.read(key)["state"] == "submitted"
     assert j.read(key)["request"] == first[0]
+
+
+def test_journal_round_trips_previous_commitment_id(tmp_path):
+    request = request_fixture()
+    request["commitment"]["previous_commitment_id"] = uid(40)
+    journal = PreviewJournal(tmp_path / "journal.sqlite")
+    key = ready(journal, LocalCandidate.validate(request["binding"]))
+    journal.freeze(key, request)
+
+    recovered = PreviewJournal(journal.path).read(key)
+
+    assert json.loads(recovered["request"])["commitment"][
+        "previous_commitment_id"
+    ] == uid(40)
 
 
 def test_withdrawal_refresh_supersession():
