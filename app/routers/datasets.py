@@ -36,7 +36,12 @@ from app.models.listing_metadata_schemas import ListingMetadata
 from app.services.pipeline_service import PipelineService, get_pipeline_service
 from app.services.sketch_service import get_sketch_service
 from app.services.quality_contract_service import get_quality_contract_service
-from app.services.marketplace_push_service import load_attestation, load_compliance_report, load_listing_metadata
+from app.services.marketplace_push_service import (
+    MarketplacePushError,
+    load_attestation,
+    load_compliance_report,
+    load_listing_metadata,
+)
 from app.services.batch_service import get_batch_service, BatchService
 from app.services.preview_service import get_preview_service, PreviewService
 from app.services.notification_service import get_notification_service
@@ -1387,23 +1392,47 @@ async def publish_to_marketplace(
     publish_category = body.category if body and body.category else category
     publish_model_provider = body.model_provider if body and body.model_provider else model_provider
 
-    metadata_override = None
-    if body and (body.title or body.description or body.tags):
-        metadata_override = ListingMetadata(
-            title=(body.title or record.original_filename).strip(),
-            description=(body.description or f"Dataset file: {record.original_filename}").strip(),
-            tags=[tag.strip() for tag in body.tags if tag.strip()][:20],
-            row_count=int(record.metadata.get("row_count") or 0) if isinstance(record.metadata, dict) else 0,
-            column_count=int(record.metadata.get("column_count") or 0) if isinstance(record.metadata, dict) else 0,
-            file_format=record.file_type or "",
-            size_bytes=record.file_size_bytes or 0,
-            data_categories=[publish_category] if publish_category else [],
-            generated_at=datetime.now(timezone.utc).isoformat(),
-        )
-
     try:
         base_path = Path(f"/data/processed/{dataset_id}")
-        listing_metadata = metadata_override or load_listing_metadata(base_path)
+        has_metadata_override = bool(body and (body.title or body.description or body.tags))
+        try:
+            listing_metadata = load_listing_metadata(base_path)
+        except MarketplacePushError:
+            if not has_metadata_override:
+                raise
+            listing_metadata = ListingMetadata(
+                title=(body.title or record.original_filename).strip(),
+                description=(
+                    body.description or f"Dataset file: {record.original_filename}"
+                ).strip(),
+                tags=[tag.strip() for tag in body.tags if tag.strip()][:20],
+                row_count=(
+                    int(record.metadata.get("row_count") or 0)
+                    if isinstance(record.metadata, dict)
+                    else 0
+                ),
+                column_count=(
+                    int(record.metadata.get("column_count") or 0)
+                    if isinstance(record.metadata, dict)
+                    else 0
+                ),
+                file_format=record.file_type or "",
+                size_bytes=record.file_size_bytes or 0,
+                data_categories=[publish_category] if publish_category else [],
+                generated_at=datetime.now(timezone.utc).isoformat(),
+            )
+        if has_metadata_override:
+            listing_metadata = listing_metadata.model_copy(
+                update={
+                    "title": (body.title or record.original_filename).strip(),
+                    "description": (
+                        body.description or f"Dataset file: {record.original_filename}"
+                    ).strip(),
+                    "tags": [tag.strip() for tag in body.tags if tag.strip()][:20],
+                    "data_categories": [publish_category] if publish_category else [],
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         compliance = load_compliance_report(base_path)
         attestation = load_attestation(base_path)
         publish_body = _build_publish_request_from_processing_outputs(

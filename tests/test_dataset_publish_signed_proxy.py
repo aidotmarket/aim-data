@@ -226,12 +226,19 @@ async def test_dataset_publish_rejects_non_preview_ready_before_publish(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_dataset_publish_honors_metadata_override(monkeypatch):
+async def test_dataset_publish_honors_metadata_override_without_dropping_schema(monkeypatch, tmp_path):
     dataset_id = f"ds-{uuid4()}"
     record = _processing_record(dataset_id)
+    record.metadata = None
     captured = {}
+    processed_path = tmp_path / "processed" / dataset_id
+    processed_path.mkdir(parents=True)
+    (processed_path / "listing_metadata.json").write_text(
+        _listing_metadata().model_dump_json(),
+        encoding="utf-8",
+    )
 
-    monkeypatch.setattr(datasets, "load_listing_metadata", lambda _base_path: pytest.fail("metadata override should be used"))
+    monkeypatch.setattr(datasets, "Path", lambda _path: processed_path)
     monkeypatch.setattr(datasets, "load_compliance_report", lambda _base_path: None)
     monkeypatch.setattr(datasets, "load_attestation", lambda _base_path: None)
 
@@ -260,6 +267,62 @@ async def test_dataset_publish_honors_metadata_override(monkeypatch):
     assert body.tags == ["one", "two"]
     assert body.price_cents == 2500
     assert body.schema_info["row_count"] == 1200
+    assert body.row_count == 1200
+    assert body.schema_info["column_count"] == 2
+    assert body.schema_info["columns"] == [
+        {
+            "name": "customer_segment",
+            "type": "string",
+            "null_percentage": 0.0,
+            "uniqueness_ratio": 0.92,
+        },
+        {
+            "name": "monthly_spend",
+            "type": "float",
+            "null_percentage": 1.2,
+            "uniqueness_ratio": 0.87,
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_dataset_publish_body_without_title_keeps_filename_fallback(monkeypatch):
+    dataset_id = f"ds-{uuid4()}"
+    record = _processing_record(dataset_id)
+    captured = {}
+
+    monkeypatch.setattr(datasets, "load_listing_metadata", lambda _base_path: _listing_metadata())
+    monkeypatch.setattr(datasets, "load_compliance_report", lambda _base_path: None)
+    monkeypatch.setattr(datasets, "load_attestation", lambda _base_path: None)
+
+    async def _publish(body, _request, _user):
+        captured["body"] = body
+        return {"listing_id": "listing-loaded"}
+
+    monkeypatch.setattr(datasets, "publish_via_signed_proxy", _publish)
+
+    await datasets.publish_to_marketplace(
+        dataset_id,
+        _request(),
+        body=datasets.PublishDatasetRequest(
+            description="Seller description",
+            tags=[" seller-tag "],
+            price=30.0,
+            model_provider="seller-model",
+        ),
+        processing=_Processing(record),
+        user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+        _meter=None,
+    )
+
+    body = captured["body"]
+    assert body.title == "customers.csv"
+    assert body.description == "Seller description"
+    assert body.tags == ["seller-tag"]
+    assert body.schema_info["row_count"] == 1200
+    assert len(body.schema_info["columns"]) == 2
+    assert body.price_cents == 3000
+    assert body.model_provider == "seller-model"
 
 # S1717 local sender cases. The S3 byte golden intentionally omits all additions.
 from tests.test_member_upload_client import local_dataset
