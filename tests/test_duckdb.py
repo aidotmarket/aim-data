@@ -14,6 +14,7 @@ def duckdb_service(tmp_path):
     """Create a DuckDB service with a temp data directory."""
     with patch("app.services.duckdb_service.settings") as mock_settings:
         mock_settings.data_directory = str(tmp_path / "data")
+        mock_settings.processed_directory = str(tmp_path / "processed")
         mock_settings.duckdb_memory_limit = "256MB"
         mock_settings.duckdb_threads = 2
         service = DuckDBService()
@@ -65,6 +66,44 @@ def test_detect_file_type(duckdb_service):
     assert duckdb_service.detect_file_type(Path("test.json")) == "json"
     assert duckdb_service.detect_file_type(Path("test.parquet")) == "parquet"
     assert duckdb_service.detect_file_type(Path("test.txt")) is None
+
+
+def test_get_dataset_by_id_finds_processed_parquet(duckdb_service, tmp_path):
+    """Canonical processed files are resolved before the data directory."""
+    processed_file = tmp_path / "processed" / "dataset-id.parquet"
+    processed_file.parent.mkdir()
+    duckdb_service.write_parquet(processed_file, [(1, "value")], ["id", "name"])
+
+    result = duckdb_service.get_dataset_by_id("dataset-id")
+
+    assert result is not None
+    assert result["filepath"] == str(processed_file)
+
+
+def test_get_dataset_by_id_falls_back_to_data_directory(duckdb_service):
+    """Legacy files directly under data_directory remain discoverable."""
+    data_file = duckdb_service.data_dir / "dataset-id.csv"
+    data_file.write_text("id,name\n1,value\n")
+
+    result = duckdb_service.get_dataset_by_id("dataset-id")
+
+    assert result is not None
+    assert result["filepath"] == str(data_file)
+
+
+def test_get_dataset_by_id_rejects_prefix_and_unsupported_extension(duckdb_service):
+    """Lookup requires an exact stem and a supported extension."""
+    processed_dir = duckdb_service.data_dir.parent / "processed"
+    processed_dir.mkdir()
+    (processed_dir / "dataset-id_readings.csv").write_text("id\n1\n")
+    (processed_dir / "dataset-id.txt").write_text("value")
+
+    assert duckdb_service.get_dataset_by_id("dataset-id") is None
+
+
+def test_get_dataset_by_id_returns_none_when_absent(duckdb_service):
+    """Missing datasets return None when processed_directory does not exist."""
+    assert duckdb_service.get_dataset_by_id("missing") is None
 
 
 def test_get_file_metadata(duckdb_service, sample_csv):

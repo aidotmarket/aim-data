@@ -278,6 +278,16 @@ class DuckDBService:
     
     def get_dataset_by_id(self, dataset_id: str) -> Optional[Dict[str, Any]]:
         """Get a specific dataset by its ID (filename without extension)."""
+        processed_dir = Path(settings.processed_directory)
+        if processed_dir.exists():
+            for filepath in processed_dir.iterdir():
+                if (
+                    filepath.is_file()
+                    and filepath.stem == dataset_id
+                    and filepath.suffix.lower() in self.SUPPORTED_EXTENSIONS
+                ):
+                    return self.get_file_metadata(filepath)
+
         for filepath in self.data_dir.iterdir():
             if filepath.is_file() and filepath.stem == dataset_id:
                 if filepath.suffix.lower() in self.SUPPORTED_EXTENSIONS:

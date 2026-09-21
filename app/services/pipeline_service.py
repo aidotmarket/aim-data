@@ -459,7 +459,7 @@ class PipelineService:
 
         return {
             "dataset_id": dataset_id,
-            "status": computed_status,
+            "status": PIPELINE_FAILED if state.get("status") == PIPELINE_FAILED else computed_status,
             "message": state.get("message", ""),
             "started_at": state.get("started_at"),
             "updated_at": state.get("updated_at"),

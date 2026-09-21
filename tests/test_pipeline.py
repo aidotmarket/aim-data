@@ -62,6 +62,7 @@ def pipeline_service(pipeline_dir, sample_csv):
 
         mock_settings.data_directory = str(pipeline_dir)
         duck_settings.data_directory = str(pipeline_dir)
+        duck_settings.processed_directory = str(pipeline_dir / "canonical")
         duck_settings.duckdb_memory_limit = "256MB"
         duck_settings.duckdb_threads = 2
 
@@ -258,6 +259,52 @@ class TestAtomicWrites:
 # ---------------------------------------------------------------------------
 
 class TestCanonicalStatusField:
+
+    def test_persisted_failure_overrides_pending_steps(self, pipeline_service):
+        """An early pipeline failure is not hidden by all-pending steps."""
+        pipeline_service._init_pipeline_state("failed_early", ["first", "second"])
+        pipeline_service._update_status("failed_early", PIPELINE_FAILED, "Dataset lookup failed.")
+
+        result = pipeline_service.get_pipeline_status("failed_early")
+
+        assert result["status"] == PIPELINE_FAILED
+        assert result["message"] == "Dataset lookup failed."
+        assert all(step["status"] == "pending" for step in result["steps"].values())
+
+    def test_nonfailed_state_uses_computed_step_status(self, pipeline_service):
+        """Step results remain authoritative unless top-level state is failed."""
+        pipeline_service._init_pipeline_state("completed_steps", ["first", "second"])
+        pipeline_service._set_step_status("completed_steps", "first", STEP_SUCCESS)
+        pipeline_service._set_step_status("completed_steps", "second", STEP_SUCCESS)
+
+        result = pipeline_service.get_pipeline_status("completed_steps")
+
+        assert result["status"] == PIPELINE_SUCCESS
+
+    @pytest.mark.asyncio
+    async def test_run_pipeline_resolves_file_from_processed_directory(self, pipeline_service):
+        """Extended pipeline gets past lookup for a canonical processed file."""
+        processed_file = (
+            pipeline_service.duckdb_service.data_dir
+            / "canonical"
+            / "processed-only.parquet"
+        )
+        processed_file.parent.mkdir(parents=True, exist_ok=True)
+        pipeline_service.duckdb_service.write_parquet(
+            processed_file,
+            [(1, "value")],
+            ["id", "name"],
+        )
+        pipeline_service.duckdb_service.get_enhanced_metadata = MagicMock(
+            side_effect=RuntimeError("lookup passed")
+        )
+
+        await pipeline_service.run_pipeline("processed-only")
+        result = pipeline_service.get_pipeline_status("processed-only")
+
+        pipeline_service.duckdb_service.get_enhanced_metadata.assert_called_once_with(processed_file)
+        assert result["status"] == PIPELINE_FAILED
+        assert result["message"] == "DuckDB analysis failed. Halting pipeline."
 
     @pytest.mark.asyncio
     async def test_get_pipeline_status_uses_status_not_overall_status(self, pipeline_service, sample_csv):
