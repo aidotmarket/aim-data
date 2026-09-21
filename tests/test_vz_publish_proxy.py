@@ -282,6 +282,7 @@ async def test_ui_publish_fills_schema_from_pipeline_outputs(monkeypatch, tmp_pa
     )
     record = DatasetRecord(dataset_id, "seller.parquet", "parquet")
     record.status = ProcessingStatus.PREVIEW_READY
+    record.metadata["source_type"] = "document"
     processing = _Processing(record)
 
     monkeypatch.setattr(marketplace_publish.settings, "processed_directory", str(processed_root))
@@ -399,6 +400,107 @@ async def test_ui_publish_fills_schema_from_processed_parquet(monkeypatch, tmp_p
     assert outbound.compliance_details is None
     assert outbound.compliance_status is None
     assert "sample_values" not in str(outbound.schema_info)
+
+
+@pytest.mark.asyncio
+async def test_ui_publish_malformed_pipeline_metadata_falls_back_to_processed_file(
+    monkeypatch, tmp_path, caplog
+):
+    dataset_id = "malformed-pipeline-metadata"
+    processed_root = tmp_path / "processed"
+    output_dir = processed_root / dataset_id
+    output_dir.mkdir(parents=True)
+    (output_dir / "listing_metadata.json").write_text('{"title":', encoding="utf-8")
+    processed_path = tmp_path / f"{dataset_id}.parquet"
+    processed_path.write_bytes(b"parquet-placeholder")
+    record = DatasetRecord(dataset_id, "seller.csv", "csv")
+    record.status = ProcessingStatus.PREVIEW_READY
+    record.processed_path = processed_path
+    processing = _Processing(record)
+    enhanced = {
+        "row_count": 3,
+        "column_count": 1,
+        "file_type": "parquet",
+        "size_bytes": 42,
+        "column_profiles": [
+            {
+                "name": "seller_column",
+                "type": "VARCHAR",
+                "null_percentage": 0.0,
+                "uniqueness_ratio": 1.0,
+            }
+        ],
+    }
+    duckdb = SimpleNamespace(get_enhanced_metadata=lambda path: enhanced)
+    monkeypatch.setattr(marketplace_publish.settings, "processed_directory", str(processed_root))
+    monkeypatch.setattr(
+        marketplace_publish,
+        "ephemeral_duckdb_service",
+        lambda: nullcontext(duckdb),
+    )
+
+    outbound = await _capture_router_publish(
+        monkeypatch,
+        _publish_body(vz_dataset_id=dataset_id),
+        processing,
+    )
+
+    assert outbound.schema_info["columns"][0]["name"] == "seller_column"
+    assert outbound.row_count == 3
+    warnings = [record for record in caplog.records if record.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert dataset_id in warnings[0].getMessage()
+    assert "JSONDecodeError" in warnings[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_ui_publish_corrupt_processed_file_is_unchanged(monkeypatch, tmp_path, caplog):
+    dataset_id = "corrupt-processed-file"
+    processed_path = tmp_path / f"{dataset_id}.parquet"
+    processed_path.write_bytes(b"not-a-supported-parquet")
+    record = DatasetRecord(dataset_id, "seller.csv", "csv")
+    record.status = ProcessingStatus.PREVIEW_READY
+    record.processed_path = processed_path
+    original = _publish_body(vz_dataset_id=dataset_id, row_count=None, column_names=None)
+
+    def _raise_corrupt_file(_path):
+        raise RuntimeError("corrupt parquet")
+
+    duckdb = SimpleNamespace(get_enhanced_metadata=_raise_corrupt_file)
+    monkeypatch.setattr(
+        marketplace_publish,
+        "ephemeral_duckdb_service",
+        lambda: nullcontext(duckdb),
+    )
+
+    outbound = await _capture_router_publish(monkeypatch, original, _Processing(record))
+
+    assert outbound.model_dump() == original.model_dump()
+    warnings = [record for record in caplog.records if record.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert dataset_id in warnings[0].getMessage()
+    assert "RuntimeError" in warnings[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_ui_publish_document_skips_processed_block_columns(monkeypatch, tmp_path):
+    dataset_id = "document-dataset"
+    processed_path = tmp_path / f"{dataset_id}.parquet"
+    processed_path.write_bytes(b"parquet-placeholder")
+    record = DatasetRecord(dataset_id, "seller.pdf", "pdf")
+    record.status = ProcessingStatus.PREVIEW_READY
+    record.processed_path = processed_path
+    record.metadata["source_type"] = "document"
+    original = _publish_body(vz_dataset_id=dataset_id, row_count=None, column_names=None)
+    monkeypatch.setattr(
+        marketplace_publish,
+        "ephemeral_duckdb_service",
+        lambda: pytest.fail("document block columns must not be published"),
+    )
+
+    outbound = await _capture_router_publish(monkeypatch, original, _Processing(record))
+
+    assert outbound.model_dump() == original.model_dump()
 
 
 @pytest.mark.asyncio

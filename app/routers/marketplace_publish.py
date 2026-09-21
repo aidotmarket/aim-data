@@ -213,9 +213,9 @@ def _build_publish_request_from_processing_outputs(
     listing_metadata: ListingMetadata,
     compliance: Optional[ComplianceReport],
     attestation: Optional[QualityAttestation],
-    price: float,
-    category: str,
-    model_provider: str,
+    price: Optional[float] = None,
+    category: Optional[str] = None,
+    model_provider: Optional[str] = None,
     base_request: Optional[MarketplacePublishRequest] = None,
 ) -> MarketplacePublishRequest:
     """Map local processing outputs to the canonical signed publish request."""
@@ -272,6 +272,11 @@ def _build_publish_request_from_processing_outputs(
                 "compliance_status": compliance_status,
                 "privacy_score": listing_metadata.privacy_score,
             }
+        )
+
+    if price is None or category is None or model_provider is None:
+        raise ValueError(
+            "price, category, and model_provider are required without base_request"
         )
 
     primary_category = category
@@ -747,22 +752,29 @@ async def _fill_single_file_publish_schema(
 
     base_path = Path(settings.processed_directory) / body.vz_dataset_id
     if (base_path / "listing_metadata.json").exists():
-        listing_metadata = load_listing_metadata(base_path)
-        enriched = _build_publish_request_from_processing_outputs(
-            dataset_id=body.vz_dataset_id,
-            listing_metadata=listing_metadata,
-            compliance=load_compliance_report(base_path),
-            attestation=load_attestation(base_path),
-            price=body.price_cents / 100,
-            category=body.category or "tabular",
-            model_provider=body.model_provider or "local",
-            base_request=body,
-        )
-        logger.info(
-            "Filled marketplace publish schema from pipeline outputs for dataset %s",
-            body.vz_dataset_id,
-        )
-        return enriched
+        try:
+            listing_metadata = load_listing_metadata(base_path)
+            enriched = _build_publish_request_from_processing_outputs(
+                dataset_id=body.vz_dataset_id,
+                listing_metadata=listing_metadata,
+                compliance=load_compliance_report(base_path),
+                attestation=load_attestation(base_path),
+                base_request=body,
+            )
+            logger.info(
+                "Filled marketplace publish schema from pipeline outputs for dataset %s",
+                body.vz_dataset_id,
+            )
+            return enriched
+        except Exception as exc:
+            logger.warning(
+                "Pipeline publish schema enrichment failed for dataset %s: %s",
+                body.vz_dataset_id,
+                type(exc).__name__,
+            )
+
+    if source_type in {"document", "text"}:
+        return body
 
     processed_path = getattr(record, "processed_path", None)
     if not processed_path:
@@ -775,42 +787,52 @@ async def _fill_single_file_publish_schema(
         with ephemeral_duckdb_service() as duckdb:
             return duckdb.get_enhanced_metadata(processed_path)
 
-    enhanced = await run_in_threadpool(_metadata_from_processed_file)
-    columns = ListingMetadataService()._build_column_summaries(
-        enhanced.get("column_profiles", [])
-    )
-    row_count = int(enhanced.get("row_count", 0))
-    file_format = str(
-        enhanced.get("file_type") or getattr(record, "file_type", "") or processed_path.suffix.lstrip(".")
-    )
-    size_bytes = int(enhanced.get("size_bytes", processed_path.stat().st_size))
-    schema_info = {
-        "columns": [
-            {
-                "name": column.name,
-                "type": column.type,
-                "null_percentage": column.null_percentage,
-                "uniqueness_ratio": column.uniqueness_ratio,
-            }
-            for column in columns
-        ],
-        "row_count": row_count,
-        "column_count": int(enhanced.get("column_count", len(columns))),
-        "file_format": file_format,
-        "size_bytes": size_bytes,
-    }
-    logger.info(
-        "Filled marketplace publish schema from processed file metadata for dataset %s",
-        body.vz_dataset_id,
-    )
-    return body.model_copy(
-        update={
-            "schema_info": schema_info,
+    try:
+        enhanced = await run_in_threadpool(_metadata_from_processed_file)
+        columns = ListingMetadataService()._build_column_summaries(
+            enhanced.get("column_profiles", [])
+        )
+        row_count = int(enhanced.get("row_count", 0))
+        file_format = str(
+            enhanced.get("file_type")
+            or getattr(record, "file_type", "")
+            or processed_path.suffix.lstrip(".")
+        )
+        size_bytes = int(enhanced.get("size_bytes", processed_path.stat().st_size))
+        schema_info = {
+            "columns": [
+                {
+                    "name": column.name,
+                    "type": column.type,
+                    "null_percentage": column.null_percentage,
+                    "uniqueness_ratio": column.uniqueness_ratio,
+                }
+                for column in columns
+            ],
             "row_count": row_count,
+            "column_count": int(enhanced.get("column_count", len(columns))),
             "file_format": file_format,
-            "file_size_bytes": size_bytes,
+            "size_bytes": size_bytes,
         }
-    )
+        logger.info(
+            "Filled marketplace publish schema from processed file metadata for dataset %s",
+            body.vz_dataset_id,
+        )
+        return body.model_copy(
+            update={
+                "schema_info": schema_info,
+                "row_count": row_count,
+                "file_format": file_format,
+                "file_size_bytes": size_bytes,
+            }
+        )
+    except Exception as exc:
+        logger.warning(
+            "Processed-file publish schema enrichment failed for dataset %s: %s",
+            body.vz_dataset_id,
+            type(exc).__name__,
+        )
+        return body
 
 
 # ---------------------------------------------------------------------------
