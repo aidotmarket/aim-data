@@ -48,7 +48,10 @@ from app.services.notification_service import get_notification_service
 from app.schemas.batch import ConfirmRequest
 from app.auth.api_key_auth import get_current_user, AuthenticatedUser
 from app.services.serial_metering import metered, MeterDecision
-from app.routers.marketplace_publish import MarketplacePublishRequest, publish_via_signed_proxy
+from app.routers.marketplace_publish import (
+    _build_publish_request_from_processing_outputs,
+    publish_via_signed_proxy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -385,85 +388,6 @@ class PublishDatasetRequest(BaseModel):
     price: Optional[float] = Field(None, ge=25.0)
     category: Optional[str] = Field(None, max_length=100)
     model_provider: Optional[str] = Field(None, max_length=64)
-
-
-def _build_publish_request_from_processing_outputs(
-    *,
-    dataset_id: str,
-    listing_metadata: ListingMetadata,
-    compliance: Optional[ComplianceReport],
-    attestation: Optional[QualityAttestation],
-    price: float,
-    category: str,
-    model_provider: str,
-) -> MarketplacePublishRequest:
-    """Map local processing outputs to the canonical signed publish request."""
-    schema_info = {
-        "columns": [
-            {
-                "name": col.name,
-                "type": col.type,
-                "null_percentage": col.null_percentage,
-                "uniqueness_ratio": col.uniqueness_ratio,
-            }
-            for col in listing_metadata.column_summary
-        ],
-        "row_count": listing_metadata.row_count,
-        "column_count": listing_metadata.column_count,
-        "file_format": listing_metadata.file_format,
-        "size_bytes": listing_metadata.size_bytes,
-    }
-
-    if attestation:
-        schema_info["attestation"] = {
-            "data_hash": attestation.data_hash,
-            "attestation_hash": attestation.attestation_hash,
-            "completeness_score": attestation.completeness_score,
-            "type_consistency_score": attestation.type_consistency_score,
-            "freshness_score": attestation.freshness_score,
-            "quality_grade": attestation.quality_grade,
-            "generated_at": attestation.generated_at,
-        }
-
-    compliance_status = "not_checked"
-    compliance_details = None
-    if compliance:
-        if compliance.compliance_score >= 90:
-            compliance_status = "low_risk"
-        elif compliance.compliance_score >= 60:
-            compliance_status = "medium_risk"
-        else:
-            compliance_status = "high_risk"
-        compliance_details = {
-            "score": compliance.compliance_score,
-            "pii_entities": compliance.pii_entities_found,
-            "flags": [flag.model_dump() for flag in compliance.flags],
-        }
-
-    primary_category = category
-    secondary_categories = None
-    if listing_metadata.data_categories:
-        primary_category = listing_metadata.data_categories[0]
-        if len(listing_metadata.data_categories) > 1:
-            secondary_categories = listing_metadata.data_categories[1:]
-
-    return MarketplacePublishRequest(
-        title=listing_metadata.title[:200],
-        description=listing_metadata.description[:5000],
-        tags=listing_metadata.tags[:20],
-        category=primary_category,
-        price_cents=round(max(price, 25.0) * 100),
-        row_count=listing_metadata.row_count,
-        file_format=listing_metadata.file_format or None,
-        file_size_bytes=listing_metadata.size_bytes,
-        schema_info=schema_info,
-        compliance_details=compliance_details,
-        compliance_status=compliance_status,
-        privacy_score=listing_metadata.privacy_score if listing_metadata.privacy_score is not None else None,
-        secondary_categories=secondary_categories,
-        model_provider=model_provider,
-        vz_dataset_id=dataset_id,
-    )
 
 
 @router.post("/upload-summary")

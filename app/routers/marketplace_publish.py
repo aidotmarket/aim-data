@@ -31,8 +31,19 @@ from app.core.database import get_session_context
 from app.models.dataset import DatasetRecord, DatasetMember
 from app.models.published_manifest import PublishedManifest
 from app.services.dataset_manifest import build_manifest
+from app.services.directory_processing import directory_record
+from app.services.duckdb_service import ephemeral_duckdb_service
+from app.services.listing_metadata_service import ListingMetadataService
+from app.models.attestation_schemas import QualityAttestation
+from app.models.compliance_schemas import ComplianceReport
+from app.models.listing_metadata_schemas import ListingMetadata
 from app.services.sample_upload_client import validate_sample_members, upload_samples
-from app.services.marketplace_push_service import upload_member_chunks
+from app.services.marketplace_push_service import (
+    load_attestation,
+    load_compliance_report,
+    load_listing_metadata,
+    upload_member_chunks,
+)
 from app.models.s3_connection import S3Connection
 from app.models.s3_object_metadata import S3ObjectMetadata
 from app.models.s3_scan_job import S3ScanJob
@@ -194,6 +205,99 @@ class MarketplaceVersionConfirmResponse(BaseModel):
     status: str
     quarantine_reason: Optional[str] = None
     result: str
+
+
+def _build_publish_request_from_processing_outputs(
+    *,
+    dataset_id: str,
+    listing_metadata: ListingMetadata,
+    compliance: Optional[ComplianceReport],
+    attestation: Optional[QualityAttestation],
+    price: float,
+    category: str,
+    model_provider: str,
+    base_request: Optional[MarketplacePublishRequest] = None,
+) -> MarketplacePublishRequest:
+    """Map local processing outputs to the canonical signed publish request."""
+    schema_info = {
+        "columns": [
+            {
+                "name": col.name,
+                "type": col.type,
+                "null_percentage": col.null_percentage,
+                "uniqueness_ratio": col.uniqueness_ratio,
+            }
+            for col in listing_metadata.column_summary
+        ],
+        "row_count": listing_metadata.row_count,
+        "column_count": listing_metadata.column_count,
+        "file_format": listing_metadata.file_format,
+        "size_bytes": listing_metadata.size_bytes,
+    }
+
+    if attestation:
+        schema_info["attestation"] = {
+            "data_hash": attestation.data_hash,
+            "attestation_hash": attestation.attestation_hash,
+            "completeness_score": attestation.completeness_score,
+            "type_consistency_score": attestation.type_consistency_score,
+            "freshness_score": attestation.freshness_score,
+            "quality_grade": attestation.quality_grade,
+            "generated_at": attestation.generated_at,
+        }
+
+    compliance_status = "not_checked"
+    compliance_details = None
+    if compliance:
+        if compliance.compliance_score >= 90:
+            compliance_status = "low_risk"
+        elif compliance.compliance_score >= 60:
+            compliance_status = "medium_risk"
+        else:
+            compliance_status = "high_risk"
+        compliance_details = {
+            "score": compliance.compliance_score,
+            "pii_entities": compliance.pii_entities_found,
+            "flags": [flag.model_dump() for flag in compliance.flags],
+        }
+
+    if base_request is not None:
+        return base_request.model_copy(
+            update={
+                "row_count": listing_metadata.row_count,
+                "file_format": listing_metadata.file_format or None,
+                "file_size_bytes": listing_metadata.size_bytes,
+                "schema_info": schema_info,
+                "compliance_details": compliance_details,
+                "compliance_status": compliance_status,
+                "privacy_score": listing_metadata.privacy_score,
+            }
+        )
+
+    primary_category = category
+    secondary_categories = None
+    if listing_metadata.data_categories:
+        primary_category = listing_metadata.data_categories[0]
+        if len(listing_metadata.data_categories) > 1:
+            secondary_categories = listing_metadata.data_categories[1:]
+
+    return MarketplacePublishRequest(
+        title=listing_metadata.title[:200],
+        description=listing_metadata.description[:5000],
+        tags=listing_metadata.tags[:20],
+        category=primary_category,
+        price_cents=round(max(price, 25.0) * 100),
+        row_count=listing_metadata.row_count,
+        file_format=listing_metadata.file_format or None,
+        file_size_bytes=listing_metadata.size_bytes,
+        schema_info=schema_info,
+        compliance_details=compliance_details,
+        compliance_status=compliance_status,
+        privacy_score=listing_metadata.privacy_score,
+        secondary_categories=secondary_categories,
+        model_provider=model_provider,
+        vz_dataset_id=dataset_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -621,6 +725,94 @@ def _persist_disclosure_decision(
     processing._save_record(record, storage_fn)
 
 
+async def _fill_single_file_publish_schema(
+    body: MarketplacePublishRequest,
+    processing: ProcessingService,
+) -> MarketplacePublishRequest:
+    """Fill missing UI schema from local single-file processing evidence."""
+    if body.schema_info is not None:
+        return body
+    if directory_record(body.vz_dataset_id) is not None:
+        return body
+    if _local_publish_snapshot(body.vz_dataset_id) is not None:
+        return body
+
+    record = processing.get_dataset(body.vz_dataset_id)
+    if record is None:
+        return body
+    metadata = getattr(record, "metadata", None)
+    source_type = metadata.get("source_type") if isinstance(metadata, dict) else None
+    if source_type in {"s3", "database", "workspace"}:
+        return body
+
+    base_path = Path(settings.processed_directory) / body.vz_dataset_id
+    if (base_path / "listing_metadata.json").exists():
+        listing_metadata = load_listing_metadata(base_path)
+        enriched = _build_publish_request_from_processing_outputs(
+            dataset_id=body.vz_dataset_id,
+            listing_metadata=listing_metadata,
+            compliance=load_compliance_report(base_path),
+            attestation=load_attestation(base_path),
+            price=body.price_cents / 100,
+            category=body.category or "tabular",
+            model_provider=body.model_provider or "local",
+            base_request=body,
+        )
+        logger.info(
+            "Filled marketplace publish schema from pipeline outputs for dataset %s",
+            body.vz_dataset_id,
+        )
+        return enriched
+
+    processed_path = getattr(record, "processed_path", None)
+    if not processed_path:
+        return body
+    processed_path = Path(processed_path)
+    if not processed_path.exists():
+        return body
+
+    def _metadata_from_processed_file() -> dict[str, Any]:
+        with ephemeral_duckdb_service() as duckdb:
+            return duckdb.get_enhanced_metadata(processed_path)
+
+    enhanced = await run_in_threadpool(_metadata_from_processed_file)
+    columns = ListingMetadataService()._build_column_summaries(
+        enhanced.get("column_profiles", [])
+    )
+    row_count = int(enhanced.get("row_count", 0))
+    file_format = str(
+        enhanced.get("file_type") or getattr(record, "file_type", "") or processed_path.suffix.lstrip(".")
+    )
+    size_bytes = int(enhanced.get("size_bytes", processed_path.stat().st_size))
+    schema_info = {
+        "columns": [
+            {
+                "name": column.name,
+                "type": column.type,
+                "null_percentage": column.null_percentage,
+                "uniqueness_ratio": column.uniqueness_ratio,
+            }
+            for column in columns
+        ],
+        "row_count": row_count,
+        "column_count": int(enhanced.get("column_count", len(columns))),
+        "file_format": file_format,
+        "size_bytes": size_bytes,
+    }
+    logger.info(
+        "Filled marketplace publish schema from processed file metadata for dataset %s",
+        body.vz_dataset_id,
+    )
+    return body.model_copy(
+        update={
+            "schema_info": schema_info,
+            "row_count": row_count,
+            "file_format": file_format,
+            "file_size_bytes": size_bytes,
+        }
+    )
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -633,6 +825,9 @@ async def publish_to_marketplace(
     processing: ProcessingService = Depends(get_processing_service),
 ):
     """Publish a dataset listing to ai.market via signed JWT proxy."""
+    if not hasattr(processing, "get_dataset"):
+        processing = get_processing_service()
+    body = await _fill_single_file_publish_schema(body, processing)
     data = await publish_via_signed_proxy(body, request, user)
     listing_id = data.get("listing_id")
     if listing_id and not (settings.multi_file_datasets_enabled and data.get("version")) and hasattr(processing, "get_dataset"):

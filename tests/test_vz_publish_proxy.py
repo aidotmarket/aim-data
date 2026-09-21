@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -9,6 +10,8 @@ from pydantic import ValidationError
 from starlette.requests import Request
 
 from app.routers import marketplace_publish
+from app.models.compliance_schemas import ComplianceReport
+from app.models.listing_metadata_schemas import ColumnSummary, ListingMetadata
 from app.services.processing_service import DatasetRecord, ProcessingStatus
 from app.services import registration_service
 from app.services.s3_publish_source_resolver import (
@@ -225,6 +228,219 @@ def _publish_body(**overrides) -> marketplace_publish.MarketplacePublishRequest:
     }
     data.update(overrides)
     return marketplace_publish.MarketplacePublishRequest(**data)
+
+
+async def _capture_router_publish(monkeypatch, body, processing):
+    captured = {}
+
+    async def _publish(outbound, request, user):
+        captured["body"] = outbound
+        return {"listing_id": "listing-1", "status": "published"}
+
+    monkeypatch.setattr(marketplace_publish, "publish_via_signed_proxy", _publish)
+    await marketplace_publish.publish_to_marketplace(
+        body,
+        _publish_request(),
+        user=SimpleNamespace(user_id="seller-uuid", key_id="ai_market_bearer"),
+        processing=processing,
+    )
+    return captured["body"]
+
+
+@pytest.mark.asyncio
+async def test_ui_publish_fills_schema_from_pipeline_outputs(monkeypatch, tmp_path):
+    dataset_id = "pipeline-dataset"
+    processed_root = tmp_path / "processed"
+    output_dir = processed_root / dataset_id
+    output_dir.mkdir(parents=True)
+    (output_dir / "listing_metadata.json").write_text("{}", encoding="utf-8")
+    listing_metadata = ListingMetadata(
+        title="Generated title",
+        description="Generated description",
+        tags=["generated"],
+        column_summary=[
+            ColumnSummary(
+                name="amount",
+                type="DOUBLE",
+                null_percentage=1.5,
+                uniqueness_ratio=0.75,
+                sample_values=["private-value"],
+            )
+        ],
+        row_count=42,
+        column_count=1,
+        file_format="parquet",
+        size_bytes=1234,
+        privacy_score=9.0,
+    )
+    compliance = ComplianceReport(
+        dataset_id=dataset_id,
+        compliance_score=95,
+        pii_entities_found=[],
+        flags=[],
+        generated_at="2026-09-21T12:00:00Z",
+    )
+    record = DatasetRecord(dataset_id, "seller.parquet", "parquet")
+    record.status = ProcessingStatus.PREVIEW_READY
+    processing = _Processing(record)
+
+    monkeypatch.setattr(marketplace_publish.settings, "processed_directory", str(processed_root))
+    monkeypatch.setattr(marketplace_publish, "load_listing_metadata", lambda path: listing_metadata)
+    monkeypatch.setattr(marketplace_publish, "load_compliance_report", lambda path: compliance)
+    monkeypatch.setattr(marketplace_publish, "load_attestation", lambda path: None)
+
+    outbound = await _capture_router_publish(
+        monkeypatch,
+        _publish_body(
+            vz_dataset_id=dataset_id,
+            title="Seller title",
+            description="Seller description",
+            tags=["seller-tag"],
+            category="seller-category",
+            price_cents=7300,
+        ),
+        processing,
+    )
+
+    assert isinstance(outbound, marketplace_publish.MarketplacePublishRequest)
+    assert (outbound.title, outbound.description, outbound.tags) == (
+        "Seller title",
+        "Seller description",
+        ["seller-tag"],
+    )
+    assert (outbound.category, outbound.price_cents) == ("seller-category", 7300)
+    assert outbound.schema_info == {
+        "columns": [
+            {
+                "name": "amount",
+                "type": "DOUBLE",
+                "null_percentage": 1.5,
+                "uniqueness_ratio": 0.75,
+            }
+        ],
+        "row_count": 42,
+        "column_count": 1,
+        "file_format": "parquet",
+        "size_bytes": 1234,
+    }
+    assert outbound.compliance_status == "low_risk"
+    assert outbound.compliance_details == {"score": 95.0, "pii_entities": [], "flags": []}
+    assert "sample_values" not in str(outbound.schema_info)
+
+
+@pytest.mark.asyncio
+async def test_ui_publish_fills_schema_from_processed_parquet(monkeypatch, tmp_path):
+    dataset_id = "parquet-only-dataset"
+    processed_path = tmp_path / f"{dataset_id}.parquet"
+    processed_path.write_bytes(b"parquet-placeholder")
+    record = DatasetRecord(dataset_id, "seller.csv", "csv")
+    record.status = ProcessingStatus.PREVIEW_READY
+    record.processed_path = processed_path
+    processing = _Processing(record)
+    enhanced = {
+        "row_count": 17,
+        "column_count": 2,
+        "file_type": "parquet",
+        "size_bytes": 987,
+        "column_profiles": [
+            {
+                "name": "customer_id",
+                "type": "BIGINT",
+                "null_percentage": 0.0,
+                "uniqueness_ratio": 1.0,
+                "sample_values": ["123"],
+            },
+            {
+                "name": "segment",
+                "type": "VARCHAR",
+                "null_percentage": 2.0,
+                "uniqueness_ratio": 0.2,
+                "sample_values": ["private"],
+            },
+        ],
+    }
+    duckdb = SimpleNamespace(get_enhanced_metadata=lambda path: enhanced)
+    monkeypatch.setattr(
+        marketplace_publish,
+        "ephemeral_duckdb_service",
+        lambda: nullcontext(duckdb),
+    )
+
+    outbound = await _capture_router_publish(
+        monkeypatch,
+        _publish_body(vz_dataset_id=dataset_id),
+        processing,
+    )
+
+    assert isinstance(outbound, marketplace_publish.MarketplacePublishRequest)
+    assert outbound.row_count == 17
+    assert outbound.file_format == "parquet"
+    assert outbound.file_size_bytes == 987
+    assert outbound.schema_info == {
+        "columns": [
+            {
+                "name": "customer_id",
+                "type": "BIGINT",
+                "null_percentage": 0.0,
+                "uniqueness_ratio": 1.0,
+            },
+            {
+                "name": "segment",
+                "type": "VARCHAR",
+                "null_percentage": 2.0,
+                "uniqueness_ratio": 0.2,
+            },
+        ],
+        "row_count": 17,
+        "column_count": 2,
+        "file_format": "parquet",
+        "size_bytes": 987,
+    }
+    assert outbound.compliance_details is None
+    assert outbound.compliance_status is None
+    assert "sample_values" not in str(outbound.schema_info)
+
+
+@pytest.mark.asyncio
+async def test_ui_publish_without_local_evidence_is_unchanged(monkeypatch, tmp_path):
+    dataset_id = "no-local-evidence"
+    record = DatasetRecord(dataset_id, "seller.csv", "csv")
+    record.status = ProcessingStatus.PREVIEW_READY
+    record.processed_path = tmp_path / "missing.parquet"
+    original = _publish_body(vz_dataset_id=dataset_id, row_count=None, column_names=None)
+
+    outbound = await _capture_router_publish(monkeypatch, original, _Processing(record))
+
+    assert isinstance(outbound, marketplace_publish.MarketplacePublishRequest)
+    assert outbound.model_dump() == original.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_ui_publish_preserves_caller_supplied_schema(monkeypatch, tmp_path):
+    dataset_id = "caller-schema"
+    processed_root = tmp_path / "processed"
+    output_dir = processed_root / dataset_id
+    output_dir.mkdir(parents=True)
+    (output_dir / "listing_metadata.json").write_text("{}", encoding="utf-8")
+    processed_path = tmp_path / f"{dataset_id}.parquet"
+    processed_path.write_bytes(b"parquet-placeholder")
+    record = DatasetRecord(dataset_id, "seller.csv", "csv")
+    record.status = ProcessingStatus.PREVIEW_READY
+    record.processed_path = processed_path
+    supplied_schema = {"columns": [{"name": "seller_column", "type": "seller_type"}]}
+    original = _publish_body(vz_dataset_id=dataset_id, schema_info=supplied_schema)
+
+    monkeypatch.setattr(marketplace_publish.settings, "processed_directory", str(processed_root))
+    monkeypatch.setattr(
+        marketplace_publish,
+        "load_listing_metadata",
+        lambda path: pytest.fail("caller-supplied schema must bypass local enrichment"),
+    )
+    outbound = await _capture_router_publish(monkeypatch, original, _Processing(record))
+
+    assert isinstance(outbound, marketplace_publish.MarketplacePublishRequest)
+    assert outbound.model_dump() == original.model_dump()
+    assert outbound.schema_info is original.schema_info
 
 
 def _rich_listing_fields() -> dict:
