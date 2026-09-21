@@ -187,7 +187,9 @@ ai.market during submission and produce a concrete sign-in/registration fix.
 
 **Refresh attestation** starts another bounded local preparation, retaining source,
 leaf/proof identities and sample hash while creating a new package/evidence
-revision linked to the backend's predecessor disclosure. Review and
+revision linked to the backend's predecessor disclosure. The new signed dataset
+commitment sets `previous_commitment_id` to the prior binding's `commitment_id`;
+first-time commitments retain a null predecessor. Review and
 consent are required again. **Retire previous package** is separate. **Withdraw
 preview** freezes a newly signed withdrawal when a signed candidate exists,
 records retirement pending, invokes the 2c journal/2b store, and checks GET
