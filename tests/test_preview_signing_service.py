@@ -7,8 +7,10 @@ from pydantic import ValidationError
 from app.core.crypto import DeviceCrypto
 from app.models.dataset_commitment_schemas import DatasetReattestationContract
 from app.services.preview_signing_service import (
+    LocalCandidate,
     PreviewSigningService,
     SigningError,
+    disclosure_bytes,
     public_bytes,
     fingerprint,
     commitment_bytes,
@@ -140,6 +142,41 @@ def test_golden_corpus():
             row["signature"],
             bytes.fromhex(row["signed_bytes_hex"]),
         )
+
+
+def test_candidate_accepts_aggregate_hash_profile_and_round_trips():
+    _, _, binding = material()
+    binding["aggregate_hash_profile"] = "aim-approved-aggregates-v2"
+
+    assert LocalCandidate.validate(binding).binding() == binding
+
+
+def test_legacy_binding_omits_aggregate_hash_profile_from_signed_wire():
+    _, _, binding = material()
+    candidate = LocalCandidate.validate(binding)
+
+    assert b"aggregate_hash_profile" not in candidate.binding_bytes
+    assert b"aggregate_hash_profile" not in disclosure_bytes(binding)
+
+
+def test_profiled_binding_preserves_field_across_candidate_bytes():
+    _, _, binding = material()
+    binding["aggregate_hash_profile"] = "aim-approved-aggregates-v1"
+    candidate = LocalCandidate.validate(binding)
+
+    assert b'"aggregate_hash_profile":"aim-approved-aggregates-v1"' in (
+        candidate.binding_bytes
+    )
+    round_tripped = LocalCandidate.validate(json.loads(candidate.binding_bytes))
+    assert round_tripped.binding() == binding
+
+
+def test_candidate_rejects_unknown_aggregate_hash_profile():
+    _, _, binding = material()
+    binding["aggregate_hash_profile"] = "aim-approved-aggregates-v3"
+
+    with pytest.raises(SigningError, match="contract_mismatch"):
+        LocalCandidate.validate(binding)
 
 
 def reattestation_fixture(reference):

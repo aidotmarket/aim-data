@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 import unicodedata
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 from app.models.dataset_commitment_schemas import (
     WireModel,
     Code,
@@ -41,6 +41,11 @@ class DisclosureBinding(WireModel):
     sample_decision: Literal["none", "approved"]
     sample_hash: HexDigest | None
     aggregate_hash: HexDigest
+    # Historical records omitted this field and remain v1. Every newly
+    # allocated candidate is upgraded explicitly to v2 before seller signing.
+    aggregate_hash_profile: Literal[
+        "aim-approved-aggregates-v1", "aim-approved-aggregates-v2"
+    ] | None = None
     commitment_id: UUIDText | None
     schema_digest: Digest | None
     seller_dataset_version: Code | None
@@ -65,6 +70,13 @@ class DisclosureBinding(WireModel):
     signer_reference: SignerReference
     signature_algorithm: Literal["ed25519"]
     signature_profile: Literal["aim-preview-disclosure-signature-v1"]
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_aggregate_hash_wire(self, handler):
+        result = handler(self)
+        if self.aggregate_hash_profile is None:
+            result.pop("aggregate_hash_profile", None)
+        return result
 
     @model_validator(mode="after")
     def binding_rules(self):
