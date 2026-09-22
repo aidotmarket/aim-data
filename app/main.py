@@ -143,6 +143,14 @@ async def lifespan(app: FastAPI):
         API_VERSION,
     )
 
+    from app.routers.marketplace_publish import (
+        _marketplace_supports_license_selection,
+        activate_listing_license_routes,
+    )
+    if await _marketplace_supports_license_selection():
+        from app.middleware.auth import require_admin
+        activate_listing_license_routes(app, [Depends(require_admin)])
+
     # BQ-123A: Load error registry + issue tracker
     error_registry.load()
     issue_tracker.reload()
@@ -399,6 +407,7 @@ def create_app() -> FastAPI:
             "url": "https://ai.market/license",
         },
     )
+    app.state.listing_licenses_enabled = False
     
     # CORS middleware
     app.add_middleware(
