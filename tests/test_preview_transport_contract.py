@@ -13,7 +13,7 @@ from app.services.preview_marketplace_transport import (
 LISTING = "00000000-0000-4000-8000-000000000004"
 CORRELATION_ID = "00000000-0000-4000-8000-000000000099"
 
-# ERROR_STATUS_BY_CODE at ai-market-backend 801170e6. Only the 409, 413, and
+# ERROR_STATUS_BY_CODE at ai-market-backend 801170e6 (merged to main as e165d023, PR #444). Only the 409, 413, and
 # 422 refusal codes require seller-actionable AIM Data messages.
 BACKEND_REFUSAL_CODES = {
     "stale_source_revision",
