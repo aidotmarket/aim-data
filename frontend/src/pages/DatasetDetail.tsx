@@ -67,6 +67,9 @@ import {
   type DatasetStatisticsResponse,
   type DatasetReadinessResponse,
   type DatasetListingMetadata,
+  type LicenseSelection,
+  type MarketplaceLicenseDocument,
+  type MarketplaceLicenseOptions,
   type PIIColumnAction,
   type PIIScanResponse,
 } from "@/lib/api";
@@ -327,6 +330,140 @@ function StepIcon({ state }: { state: ListingStepState }) {
   return <Clock className="h-4 w-4 text-muted-foreground" />;
 }
 
+const STANDARD_SELLER_SUMMARY = [
+  "Not the contract — read the full licence before choosing it.",
+  "You remain the owner and licensor of the delivered dataset version.",
+  "The buyer may use it internally and commercialise models, outputs and derived work that do not expose or reconstruct the raw data.",
+  "The buyer may not redistribute or resell the dataset itself, and AI/ML training follows your displayed switch.",
+  "You promise that you have the rights, sourced the data lawfully, stated the listing facts accurately and included no regulated personal or special-category data.",
+  "A material mismatch reported within seven days is remedied by fix or refund; liability is capped as the full licence states.",
+  "ai.market is not a party and gives no legal advice; New York law governs.",
+];
+
+const CUSTOM_LICENSE_NOTICE = "The seller's own terms. ai.market did not write these; review them before you accept. The separate ai.market AI-Training Rider and Marketplace Listing Covenant also form part of your record. ai.market is not a party and gives no legal advice.";
+
+function LicenceSelectionFields({
+  kind,
+  aiTraining,
+  options,
+  customDocument,
+  signerName,
+  signerTitle,
+  authorityConfirmed,
+  disabled,
+  uploading,
+  error,
+  onKindChange,
+  onAiTrainingChange,
+  onUpload,
+  onSignerNameChange,
+  onSignerTitleChange,
+  onAuthorityChange,
+  onReviewed,
+}: {
+  kind: "standard" | "custom";
+  aiTraining: boolean;
+  options: MarketplaceLicenseOptions | null;
+  customDocument: MarketplaceLicenseDocument | null;
+  signerName: string;
+  signerTitle: string;
+  authorityConfirmed: boolean;
+  disabled: boolean;
+  uploading: boolean;
+  error: string | null;
+  onKindChange: (kind: "standard" | "custom") => void;
+  onAiTrainingChange: (allowed: boolean) => void;
+  onUpload: (file: File) => void;
+  onSignerNameChange: (value: string) => void;
+  onSignerTitleChange: (value: string) => void;
+  onAuthorityChange: (confirmed: boolean) => void;
+  onReviewed: () => void;
+}) {
+  const selectedDocument = kind === "standard" ? options?.standard : customDocument;
+  return (
+    <section className="space-y-4 rounded-md border p-4" aria-labelledby="licence-choice-heading">
+      <div>
+        <h3 id="licence-choice-heading" className="font-medium">How can buyers use this data?</h3>
+        <p className="text-sm text-muted-foreground">Choose the licence that will be attached to this listing.</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2" role="radiogroup" aria-label="Licence choice">
+        <label className={cn("cursor-pointer rounded-md border p-3", kind === "standard" && "border-primary bg-primary/5")}>
+          <input type="radio" name="licence-kind" value="standard" checked={kind === "standard"}
+            disabled={disabled} onChange={() => onKindChange("standard")} />
+          <span className="ml-2 font-medium">Standard</span>
+          <Badge className="ml-2" variant="secondary">Recommended</Badge>
+          <p className="mt-2 text-sm text-muted-foreground">ai.market Standard Data Licence v1.0</p>
+        </label>
+        <label className={cn("cursor-pointer rounded-md border p-3", kind === "custom" && "border-primary bg-primary/5")}>
+          <input type="radio" name="licence-kind" value="custom" checked={kind === "custom"}
+            disabled={disabled} onChange={() => onKindChange("custom")} />
+          <span className="ml-2 font-medium">My own licence</span>
+          <p className="mt-2 text-sm text-muted-foreground">Upload your English-language terms as text or PDF.</p>
+        </label>
+      </div>
+      <label className="flex items-center justify-between gap-3 rounded-md border p-3">
+        <span>
+          <span className="block font-medium">Allow AI/ML training</span>
+          <span className="block text-sm text-muted-foreground">{aiTraining ? "Allow" : "Do not allow"}</span>
+        </span>
+        <input type="checkbox" role="switch" aria-label="Allow AI/ML training" checked={aiTraining}
+          disabled={disabled} onChange={(event) => onAiTrainingChange(event.target.checked)} />
+      </label>
+      {kind === "custom" && (
+        <div className="space-y-2">
+          <Label htmlFor="custom-licence-upload">Custom licence document</Label>
+          <Input id="custom-licence-upload" type="file" accept=".txt,.pdf,text/plain,application/pdf"
+            disabled={disabled || uploading} onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onUpload(file);
+            }} />
+          <p className="text-sm text-amber-700">{CUSTOM_LICENSE_NOTICE}</p>
+          {uploading && <p role="status" className="text-sm">Uploading and checking licence…</p>}
+        </div>
+      )}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {selectedDocument && (
+        <details className="rounded-md border p-3" onToggle={event => {
+          if (event.currentTarget.open) onReviewed();
+        }}>
+          <summary className="cursor-pointer font-medium">Review summary and full licence text</summary>
+          <div className="mt-3 space-y-3 text-sm">
+            {kind === "standard" ? (
+              <ul className="list-disc space-y-1 pl-5">{STANDARD_SELLER_SUMMARY.map(line => <li key={line}>{line}</li>)}</ul>
+            ) : <p>{CUSTOM_LICENSE_NOTICE}</p>}
+            {selectedDocument.full_text ? (
+              <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded bg-muted p-3">{selectedDocument.full_text}</pre>
+            ) : selectedDocument.download_url ? (
+              <a className="text-primary underline" href={selectedDocument.download_url} target="_blank" rel="noreferrer">Open the full licence document</a>
+            ) : (
+              <p>The uploaded licence document will be shown verbatim to buyers.</p>
+            )}
+            <h4 className="font-medium">Marketplace Listing Covenant</h4>
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded bg-muted p-3">{options?.covenant.full_text}</pre>
+            {kind === "custom" && (
+              <>
+                <h4 className="font-medium">AI-Training Rider</h4>
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded bg-muted p-3">{options?.rider.full_text}</pre>
+              </>
+            )}
+          </div>
+        </details>
+      )}
+      <div className="grid gap-3 md:grid-cols-2">
+        <div><Label htmlFor="licence-signer-name">Your full name</Label><Input id="licence-signer-name" value={signerName}
+          disabled={disabled} onChange={event => onSignerNameChange(event.target.value)} /></div>
+        <div><Label htmlFor="licence-signer-title">Your title</Label><Input id="licence-signer-title" value={signerTitle}
+          disabled={disabled} onChange={event => onSignerTitleChange(event.target.value)} /></div>
+      </div>
+      <label className="flex items-start gap-3 rounded-md border p-3">
+        <Checkbox checked={authorityConfirmed} disabled={disabled}
+          onCheckedChange={checked => onAuthorityChange(checked === true)} aria-label="Confirm licence covenant and authority" />
+        <span className="text-sm leading-5">I have the rights and authority to licence this dataset, it contains no regulated personal or special-category data, and I accept the ai.market Marketplace Listing Covenant.</span>
+      </label>
+    </section>
+  );
+}
+
 const PII_ACTIONS: Array<{ value: PIIColumnAction; label: string }> = [
   { value: "exclude", label: "Exclude" },
   { value: "redact", label: "Redact" },
@@ -456,6 +593,17 @@ export function ListingPreparation({
   const [publishComplete, setPublishComplete] = useState(false);
   const [publishedListingUrl, setPublishedListingUrl] = useState<string | null>(null);
   const [retrySnapshotPayload, setRetrySnapshotPayload] = useState<DisclosureSnapshotPayload | null>(null);
+  const [listingLicensesEnabled, setListingLicensesEnabled] = useState(false);
+  const [licenseKind, setLicenseKind] = useState<"standard" | "custom">("standard");
+  const [aiTraining, setAiTraining] = useState(true);
+  const [licenseOptions, setLicenseOptions] = useState<MarketplaceLicenseOptions | null>(null);
+  const [customLicense, setCustomLicense] = useState<MarketplaceLicenseDocument | null>(null);
+  const [licenseSignerName, setLicenseSignerName] = useState("");
+  const [licenseSignerTitle, setLicenseSignerTitle] = useState("");
+  const [licenseAuthorityConfirmed, setLicenseAuthorityConfirmed] = useState(false);
+  const [licenseTermsReviewed, setLicenseTermsReviewed] = useState(false);
+  const [licenseUploading, setLicenseUploading] = useState(false);
+  const [licenseError, setLicenseError] = useState<string | null>(null);
 
   const datasetReady = dataset.status === "preview_ready";
   const flaggedColumns = piiScan?.column_results ?? [];
@@ -468,6 +616,74 @@ export function ListingPreparation({
   const canContinuePrivacy = directoryScanCompleted && Boolean(piiScan) && (flaggedColumns.length === 0 || allFlaggedColumnsSaved || privacyAttested);
   const persistedPrivacySatisfied = directoryScanCompleted && (privacyAttested || (Boolean(piiScan) && allFlaggedColumnsSaved));
   const draftListingId = initialDraftListingId ?? metadata?.listing_id ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    marketplaceApi.publishStatus().then(async status => {
+      if (!status.listing_licenses || cancelled) return;
+      setListingLicensesEnabled(true);
+      try {
+        const options = await marketplaceApi.licenseOptions(true);
+        if (!cancelled) setLicenseOptions(options);
+      } catch (error) {
+        if (!cancelled) setLicenseError(error instanceof Error ? error.message : "Could not load licence terms.");
+      }
+    }).catch(() => {
+      // An older or flag-off marketplace exposes no licence capability.
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const changeAiTraining = async (allowed: boolean) => {
+    setAiTraining(allowed);
+    setLicenseAuthorityConfirmed(false);
+    setLicenseTermsReviewed(false);
+    setLicenseError(null);
+    try {
+      setLicenseOptions(await marketplaceApi.licenseOptions(allowed));
+    } catch (error) {
+      setLicenseOptions(null);
+      setLicenseError(error instanceof Error ? error.message : "Could not load licence terms.");
+    }
+  };
+
+  const uploadCustomLicense = async (file: File) => {
+    setLicenseUploading(true);
+    setLicenseError(null);
+    setCustomLicense(null);
+    setLicenseAuthorityConfirmed(false);
+    setLicenseTermsReviewed(false);
+    try {
+      setCustomLicense(await marketplaceApi.uploadCustomLicense(file, file.name));
+    } catch (error) {
+      setLicenseError(error instanceof Error ? error.message : "Custom licence upload failed.");
+    } finally {
+      setLicenseUploading(false);
+    }
+  };
+
+  const licenseSelection: LicenseSelection | undefined = (() => {
+    if (!listingLicensesEnabled || !licenseOptions || !licenseTermsReviewed || !licenseAuthorityConfirmed ||
+        !licenseSignerName.trim() || !licenseSignerTitle.trim()) return undefined;
+    const document = licenseKind === "standard" ? licenseOptions.standard : customLicense;
+    if (!document?.sha256 || (licenseKind === "custom" && !document.license_document_id)) return undefined;
+    return {
+      kind: licenseKind,
+      version: "1.0",
+      ai_training: aiTraining,
+      license_document_id: licenseKind === "custom" ? document.license_document_id! : null,
+      license_sha256: document.sha256,
+      rider_sha256: licenseKind === "custom" ? licenseOptions.rider.sha256 : null,
+      covenant_code: "marketplace-listing",
+      covenant_version: "1.0",
+      covenant_sha256: licenseOptions.covenant.sha256,
+      seller_acceptance: {
+        signer_name: licenseSignerName.trim(),
+        signer_title: licenseSignerTitle.trim(),
+        authority_confirmed: true,
+      },
+    };
+  })();
 
   useEffect(() => {
     const active = activeStep === 2 && Boolean(metadata);
@@ -824,6 +1040,14 @@ export function ListingPreparation({
       toast({ title: "Confirmation required", description: "Confirm the public disclosure notice before publishing.", variant: "destructive" });
       return;
     }
+    if (listingLicensesEnabled && !licenseSelection) {
+      toast({
+        title: "Licence confirmation required",
+        description: "Choose and review a licence, enter your name and title, and confirm your authority before publishing.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setPublishing(true);
     const sourcePublishOperationId = newPublishOperationId();
@@ -853,6 +1077,7 @@ export function ListingPreparation({
         column_types: metadata?.column_summary?.map((column) => column.type) ?? dataset.metadata?.columns?.map((column) => column.type) ?? null,
         file_format: metadata?.file_format || dataset.file_type,
         file_size_bytes: metadata?.size_bytes || dataset.metadata?.size_bytes || null,
+        ...(licenseSelection ? { license_selection: licenseSelection } : {}),
       });
       const listingId = publishResponse.listing_id;
       if (!listingId) {
@@ -1272,6 +1497,28 @@ export function ListingPreparation({
               onStatus={setPreviewStatus}
               originReview={(job, onChange) => <PreviewOriginReview job={job} onChange={onChange} />} />
 
+            {listingLicensesEnabled && (
+              <LicenceSelectionFields
+                kind={licenseKind}
+                aiTraining={aiTraining}
+                options={licenseOptions}
+                customDocument={customLicense}
+                signerName={licenseSignerName}
+                signerTitle={licenseSignerTitle}
+                authorityConfirmed={licenseAuthorityConfirmed}
+                disabled={publishing}
+                uploading={licenseUploading}
+                error={licenseError}
+                onKindChange={(kind) => { setLicenseKind(kind); setLicenseAuthorityConfirmed(false); setLicenseTermsReviewed(false); }}
+                onAiTrainingChange={(allowed) => { void changeAiTraining(allowed); }}
+                onUpload={(file) => { void uploadCustomLicense(file); }}
+                onSignerNameChange={(value) => { setLicenseSignerName(value); setLicenseAuthorityConfirmed(false); }}
+                onSignerTitleChange={(value) => { setLicenseSignerTitle(value); setLicenseAuthorityConfirmed(false); }}
+                onAuthorityChange={setLicenseAuthorityConfirmed}
+                onReviewed={() => setLicenseTermsReviewed(true)}
+              />
+            )}
+
             <div className="rounded-md border p-3 text-sm">
               <h3 className="font-medium">Disclosure summary</h3>
               <div className="mt-2 grid gap-2 md:grid-cols-2">
@@ -1319,9 +1566,10 @@ export function ListingPreparation({
             {dataset.file_type === "directory" ? <DirectoryPublishControl
               datasetId={dataset.id}
               sampleCount={dataset.metadata?.directory?.sample_member_count ?? 0}
-              disabled={publishing || memberStateBlocked || !finalDisclosureConfirmed || !approvedMetadataDraft}
+              disabled={publishing || memberStateBlocked || !finalDisclosureConfirmed || !approvedMetadataDraft || (listingLicensesEnabled && !licenseSelection)}
               publishPayload={{ title: form.title.trim(), description: form.description.trim(), tags: form.tags,
-                category: form.category, price_cents: Math.round(Number.parseFloat(form.priceUsd) * 100), file_format: "directory" }}
+                category: form.category, price_cents: Math.round(Number.parseFloat(form.priceUsd) * 100), file_format: "directory",
+                ...(licenseSelection ? { license_selection: licenseSelection } : {}) }}
               disclosurePayload={approvedMetadataDraft && finalDisclosureConfirmed ? {
                 ...buildDisclosureSnapshotPayload({ approvedFields: approvedMetadataDraft, sampleDecision: "none",
                   approvedSample: null, confirmed: true, sourcePublishOperationId: newPublishOperationId() }),
@@ -1331,7 +1579,7 @@ export function ListingPreparation({
               onPublished={(listingId, marketplaceUrl) => { void completePublication(listingId, marketplaceUrl); }}
             /> : <Button
               onClick={handlePublish}
-              disabled={Boolean(publishedListingId) || publishing || !finalDisclosureConfirmed || !approvedMetadataDraft}
+              disabled={Boolean(publishedListingId) || publishing || !finalDisclosureConfirmed || !approvedMetadataDraft || (listingLicensesEnabled && !licenseSelection)}
               size="sm"
               className="gap-2"
             >

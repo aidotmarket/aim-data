@@ -13,6 +13,12 @@ from app.services.serial_store import get_serial_store
 
 
 REFUSAL_MESSAGES = {
+    "SELLER_TERMS_ACCEPTANCE_PENDING": "Accept the current ai.market seller terms, then try publishing again.",
+    "LICENSE_ACCEPTANCE_INVALID": "The licence choice is incomplete or invalid. Review the licence and confirmation, then try again.",
+    "LICENSE_LANGUAGE_NOT_ENGLISH": "The seller licence must have English as its canonical language. Upload an English licence and try again.",
+    "LICENSE_ACCEPTANCE_STALE": "The licence terms changed. Review the current terms and confirm them again.",
+    "LICENSE_RIDER_ACCEPTANCE_STALE": "The AI-training rider changed. Review the current rider and confirm it again.",
+    "dataset_version_content_mismatch": "The dataset content changed after this version was prepared. Reprocess the current dataset version and publish again.",
     "stale_source_revision": "The listing changed. Refresh At a glance, approve the current version, and try again.",
     "stale_summary": "At a glance is no longer current. Review and approve the current summary, then try again.",
     "stale_expected_head": "The verified preview changed on ai.market. Refresh its live state and try again.",

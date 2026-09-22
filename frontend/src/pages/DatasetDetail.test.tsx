@@ -114,6 +114,9 @@ function renderPreparation(apiDataset: ApiDataset, onDatasetRefresh = vi.fn()) {
 
 beforeEach(() => {
   vi.spyOn(previewBuildApi, "latest").mockResolvedValue(null);
+  vi.spyOn(marketplaceApi, "publishStatus").mockResolvedValue({
+    can_publish: true, reason: null, listing_licenses: false,
+  });
   const storage = new Map<string, string>();
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -129,6 +132,59 @@ afterEach(() => {
 });
 
 describe("seller listing preparation", () => {
+  it("shows exactly two licence cards, defaults AI training to Allow, and gates publish on authority confirmation", async () => {
+    vi.mocked(marketplaceApi.publishStatus).mockResolvedValue({
+      can_publish: true, reason: null, listing_licenses: true,
+    });
+    vi.spyOn(marketplaceApi, "licenseOptions").mockResolvedValue({
+      standard: { summary: [], full_text: "Standard full text", sha256: "a".repeat(64) },
+      covenant: { summary: [], full_text: "Covenant full text", sha256: "b".repeat(64) },
+      rider: { summary: [], full_text: "Rider full text", sha256: "c".repeat(64) },
+    });
+    vi.spyOn(piiApi, "getConfig").mockResolvedValue({
+      dataset_id: "ds-1", column_actions: {}, privacy_attested: false, updated_at: null,
+    });
+    vi.spyOn(piiApi, "getScan").mockResolvedValue(cleanScan);
+    const publish = vi.spyOn(marketplaceApi, "publish").mockResolvedValue({
+      status: "published", listing_id: "listing-1",
+    });
+    vi.spyOn(marketplaceApi, "createDisclosureSnapshot").mockResolvedValue({
+      status: "complete", listing_id: "listing-1", disclosure_version: "v1",
+    });
+    vi.spyOn(datasetsApi, "get").mockResolvedValue({ ...dataset(listingMetadata), listing_id: "listing-1" });
+
+    renderPreparation(dataset(listingMetadata));
+    fireEvent.click(await screen.findByRole("button", { name: "Accept all & continue" }));
+
+    expect(await screen.findByRole("heading", { name: "How can buyers use this data?" })).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(screen.getByRole("radio", { name: /Standard/ })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Allow AI/ML training" })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: AIM_CHANNEL_DISCLOSURE_CONFIRMATION_COPY }));
+    expect(screen.getByRole("button", { name: "Publish to ai.market" })).toBeDisabled();
+    const terms = screen.getByText("Review summary and full licence text").closest("details")!;
+    terms.open = true;
+    fireEvent(terms, new Event("toggle"));
+    fireEvent.change(screen.getByLabelText("Your full name"), { target: { value: "Ada Seller" } });
+    fireEvent.change(screen.getByLabelText("Your title"), { target: { value: "Director" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Confirm licence covenant and authority" }));
+    const publishButton = screen.getByRole("button", { name: "Publish to ai.market" });
+    expect(publishButton).toBeEnabled();
+    fireEvent.click(publishButton);
+    await waitFor(() => expect(publish).toHaveBeenCalledWith(expect.objectContaining({
+      license_selection: expect.objectContaining({
+        kind: "standard",
+        ai_training: true,
+        license_sha256: "a".repeat(64),
+        covenant_sha256: "b".repeat(64),
+        seller_acceptance: {
+          signer_name: "Ada Seller", signer_title: "Director", authority_confirmed: true,
+        },
+      }),
+    })));
+  });
+
   it("enables metadata acceptance without a draft listing id", async () => {
     vi.spyOn(piiApi, "getConfig").mockResolvedValue({
       dataset_id: "ds-1",

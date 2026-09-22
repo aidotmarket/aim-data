@@ -9,6 +9,7 @@ Flow: VZ Frontend -> VZ Backend (this router) -> ai.market Backend
 The Ed25519 private key lives on VZ backend only.
 """
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -19,7 +20,7 @@ from uuid import UUID, uuid5, NAMESPACE_URL
 from typing import Annotated, Any, Literal, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
@@ -55,6 +56,7 @@ from app.services.marketplace_action_signer import (
     canonical_payload_hash,
 )
 from app.services.processing_service import ProcessingService, get_processing_service
+from app.services.preview_marketplace_transport import REFUSAL_MESSAGES
 from app.services.s3_publish_source_resolver import (
     NotS3PublishSource,
     S3PublishSourceResolution,
@@ -92,6 +94,33 @@ class MarketplacePublishRequest(BaseModel):
     secondary_categories: Optional[list[str]] = None
     model_provider: Optional[str] = None
     vz_dataset_id: str  # local VZ dataset ID, becomes vz_raw_listing_id
+    license_selection: Optional["LicenseSelection"] = None
+
+
+class SellerAcceptance(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    signer_name: str = Field(..., min_length=1, max_length=255)
+    signer_title: str = Field(..., min_length=1, max_length=255)
+    authority_confirmed: Literal[True]
+
+
+class LicenseSelection(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    kind: Literal["standard", "custom"]
+    version: Literal["1.0"] = "1.0"
+    ai_training: bool = True
+    license_document_id: Optional[str] = None
+    license_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    rider_sha256: Optional[str] = Field(None, pattern=r"^[0-9a-f]{64}$")
+    covenant_code: Literal["marketplace-listing"] = "marketplace-listing"
+    covenant_version: Literal["1.0"] = "1.0"
+    covenant_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    seller_acceptance: SellerAcceptance
+
+
+MarketplacePublishRequest.model_rebuild()
 
 
 class MarketplacePublishResponse(BaseModel):
@@ -385,6 +414,9 @@ def _build_publish_payload(
 ) -> dict[str, Any]:
     """Build the single canonical publish payload used for wire body and hash."""
     payload = body.model_dump(exclude_none=True)
+    license_selection = getattr(body, "license_selection", None)
+    if license_selection is not None:
+        payload["license_selection"] = license_selection.model_dump()
     payload["vz_raw_listing_id"] = payload.pop("vz_dataset_id")
     payload["download_channel"] = CHANNEL.value
     if isinstance(s3_source, S3PublishSourceResolution):
@@ -660,6 +692,88 @@ def _seller_auth_headers(request: Request) -> dict[str, str]:
     if incoming_api_key:
         return {"X-API-Key": incoming_api_key}
     return {}
+
+
+def _marketplace_refusal_detail(detail: Any) -> Any:
+    """Attach stable seller guidance without discarding upstream refusal facts."""
+    code = detail if isinstance(detail, str) else detail.get("code") if isinstance(detail, dict) else None
+    if not isinstance(code, str) or code not in REFUSAL_MESSAGES:
+        return detail
+    if isinstance(detail, dict):
+        return {**detail, "code": code, "message": REFUSAL_MESSAGES[code]}
+    return {"code": code, "message": REFUSAL_MESSAGES[code]}
+
+
+def _license_capability_from_payload(payload: Any) -> Optional[bool]:
+    if not isinstance(payload, dict):
+        return None
+    for key in ("listing_licenses", "listing_license", "license_selection"):
+        value = payload.get(key)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, dict) and isinstance(value.get("enabled"), bool):
+            return value["enabled"]
+    capabilities = payload.get("capabilities")
+    if isinstance(capabilities, dict):
+        return _license_capability_from_payload(capabilities)
+    return None
+
+
+async def _marketplace_supports_license_selection() -> bool:
+    """Prefer the backend capability and fall back to its published OpenAPI shape."""
+    store = get_serial_store()
+    headers = {}
+    if store.state.ai_market_access_token:
+        headers["Authorization"] = f"Bearer {store.state.ai_market_access_token}"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            capability_response = await client.get(
+                f"{settings.ai_market_url}/api/v1/seller-workspace/capabilities",
+                headers=headers,
+            )
+            if capability_response.status_code == 200:
+                advertised = _license_capability_from_payload(capability_response.json())
+                if advertised is not None:
+                    return advertised
+            openapi_response = await client.get(f"{settings.ai_market_url}/openapi.json")
+            if openapi_response.status_code != 200:
+                return False
+            paths = openapi_response.json().get("paths", {})
+            publish_operation = paths.get("/api/v1/vz/publish", {}).get("post", {})
+            return '"license_selection"' in json.dumps(publish_operation, sort_keys=True)
+    except (httpx.HTTPError, ValueError, AttributeError, TypeError):
+        return False
+
+
+async def _public_license_document(path: str) -> dict[str, Any]:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{settings.ai_market_url}{path}")
+    except httpx.RequestError as exc:
+        raise HTTPException(502, "Cannot reach ai.market to load the licence terms") from exc
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise HTTPException(502, "ai.market returned invalid licence terms") from exc
+    if response.status_code != 200 or not isinstance(data, dict):
+        detail = data.get("detail") if isinstance(data, dict) else None
+        raise HTTPException(response.status_code, _marketplace_refusal_detail(detail or "Licence terms unavailable"))
+    return data
+
+
+def _normalize_license_document(data: dict[str, Any], hash_field: str) -> dict[str, Any]:
+    sha256 = data.get("sha256") or data.get(hash_field)
+    full_text = data.get("full_text") or data.get("canonical_text") or data.get("text")
+    if not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256):
+        raise HTTPException(502, "ai.market returned licence terms without a valid hash")
+    if not isinstance(full_text, str) or not full_text:
+        raise HTTPException(502, "ai.market returned licence terms without full text")
+    return {
+        **data,
+        "summary": data.get("summary") or [],
+        "full_text": full_text,
+        "sha256": sha256,
+    }
 
 
 def _preview_signer(owner: str):
@@ -1489,7 +1603,76 @@ async def publish_via_signed_proxy(
         detail = resp.text or f"ai.market returned {resp.status_code}"
 
     logger.warning("ai.market publish failed (%d): %s", resp.status_code, detail)
-    raise HTTPException(status_code=resp.status_code, detail=detail)
+    raise HTTPException(status_code=resp.status_code, detail=_marketplace_refusal_detail(detail))
+
+
+@router.get("/marketplace/licenses/selection-options")
+async def license_selection_options(
+    ai_training: bool = Query(True),
+    user=Depends(get_current_user),
+):
+    """Return the current marketplace-owned Standard licence and covenant."""
+    variant = "ai-training" if ai_training else "no-ai-training"
+    standard, covenant, rider = await asyncio.gather(
+        _public_license_document(f"/licenses/standard/1.0/{variant}"),
+        _public_license_document("/licenses/marketplace-listing/1.0"),
+        _public_license_document(
+            f"/licenses/ai-training-rider/1.0/{'permitted' if ai_training else 'not-permitted'}"
+        ),
+    )
+    return {
+        "standard": _normalize_license_document(standard, "license_sha256"),
+        "covenant": _normalize_license_document(covenant, "covenant_sha256"),
+        "rider": _normalize_license_document(rider, "rider_sha256"),
+    }
+
+
+@router.post("/marketplace/licenses/custom")
+async def upload_custom_license(
+    request: Request,
+    file: UploadFile = File(...),
+    title: str = Form(..., min_length=1, max_length=255),
+    user=Depends(get_current_user),
+):
+    """Carry a seller's custom licence through the authenticated marketplace transport."""
+    content = await file.read(1048577)
+    if len(content) > 1048576:
+        raise HTTPException(413, "Custom licence must be 1 MiB or smaller")
+    headers = _seller_auth_headers(request)
+    if not headers:
+        raise HTTPException(409, "Seller ai.market token or API key not available")
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{settings.ai_market_url}/licenses/custom",
+                headers=headers,
+                data={"title": title},
+                files={"file": (file.filename or "license.txt", content, file.content_type or "application/octet-stream")},
+            )
+    except httpx.ConnectError as exc:
+        raise HTTPException(502, "Cannot reach ai.market — check network connectivity") from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(504, "ai.market custom licence upload timed out") from exc
+    try:
+        data = response.json()
+    except ValueError:
+        data = {}
+    if response.status_code not in (200, 201):
+        detail = data.get("detail") or data.get("error") or response.text or f"ai.market returned {response.status_code}"
+        raise HTTPException(response.status_code, _marketplace_refusal_detail(detail))
+    if not isinstance(data, dict):
+        raise HTTPException(502, "ai.market returned an invalid custom licence response")
+    document_id = data.get("license_document_id") or data.get("id")
+    sha256 = data.get("sha256") or data.get("license_sha256")
+    if not isinstance(document_id, str) or not document_id or not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256):
+        raise HTTPException(502, "ai.market returned an invalid custom licence record")
+    return {
+        **data,
+        "license_document_id": document_id,
+        "sha256": sha256,
+        "summary": data.get("summary") or [],
+        "full_text": data.get("full_text") or data.get("canonical_text") or data.get("text") or "",
+    }
 
 
 @router.get("/marketplace/publish-status")
@@ -1517,7 +1700,12 @@ async def publish_status(dataset_id: Optional[str] = None, user=Depends(get_curr
     if not crypto.has_platform_keys():
         return {**progress, "can_publish": False, "reason": "Device not registered with ai.market"}
 
-    return {**progress, "can_publish": True, "reason": None}
+    return {
+        **progress,
+        "can_publish": True,
+        "reason": None,
+        "listing_licenses": await _marketplace_supports_license_selection(),
+    }
 
 
 @router.post("/marketplace/listings/{listing_id}/at-a-glance/approve")

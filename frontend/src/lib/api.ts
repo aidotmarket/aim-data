@@ -670,6 +670,51 @@ export interface MarketplacePublishRequest {
   file_format?: string | null;
   file_size_bytes?: number | null;
   vz_dataset_id: string;
+  license_selection?: LicenseSelection;
+}
+
+export interface SellerLicenseAcceptance {
+  signer_name: string;
+  signer_title: string;
+  authority_confirmed: true;
+}
+
+export interface LicenseSelection {
+  kind: 'standard' | 'custom';
+  version: '1.0';
+  ai_training: boolean;
+  license_document_id: string | null;
+  license_sha256: string;
+  rider_sha256: string | null;
+  covenant_code: 'marketplace-listing';
+  covenant_version: '1.0';
+  covenant_sha256: string;
+  seller_acceptance: SellerLicenseAcceptance;
+}
+
+export interface MarketplaceLicenseDocument {
+  code?: string;
+  version?: string;
+  title?: string;
+  summary: string[] | string;
+  full_text: string;
+  sha256: string;
+  license_document_id?: string;
+  rider_sha256?: string | null;
+  download_url?: string;
+}
+
+export interface MarketplaceLicenseOptions {
+  standard: MarketplaceLicenseDocument;
+  covenant: MarketplaceLicenseDocument;
+  rider: MarketplaceLicenseDocument;
+}
+
+export interface MarketplacePublishStatus {
+  can_publish: boolean;
+  reason: string | null;
+  listing_licenses?: boolean;
+  [key: string]: unknown;
 }
 
 export interface MarketplacePublishResponse {
@@ -1171,6 +1216,31 @@ export const notificationsApi = {
 };
 
 export const marketplaceApi = {
+  publishStatus: () => apiFetch<MarketplacePublishStatus>('/api/marketplace/publish-status'),
+
+  licenseOptions: (aiTraining: boolean) =>
+    apiFetch<MarketplaceLicenseOptions>(`/api/marketplace/licenses/selection-options?ai_training=${aiTraining}`),
+
+  uploadCustomLicense: async (file: File, title: string): Promise<MarketplaceLicenseDocument> => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('title', title);
+    const headers: Record<string, string> = {};
+    const marketplaceAuth = getStoredAccessToken();
+    if (marketplaceAuth) headers.Authorization = `Bearer ${marketplaceAuth}`;
+    const response = await fetch(`${getApiUrl()}/api/marketplace/licenses/custom`, {
+      method: 'POST', headers, body: form,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Custom licence upload failed' })) as {
+        detail?: string | { code?: string; message?: string };
+      };
+      const detail = error.detail;
+      throw new Error(typeof detail === 'string' ? detail : detail?.message || detail?.code || `Upload failed: ${response.status}`);
+    }
+    return response.json();
+  },
+
   publish: async (req: MarketplacePublishRequest): Promise<MarketplacePublishResponse> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     const accessToken = getStoredAccessToken();
@@ -1186,13 +1256,16 @@ export const marketplaceApi = {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Publish failed' })) as {
-        detail?: string;
+        detail?: string | { code?: string; message?: string };
         error?: {
           safe_message?: string;
           title?: string;
         };
       };
-      const message = error.detail || error.error?.safe_message || error.error?.title || `Publish failed: ${response.status}`;
+      const detail = error.detail;
+      const message = typeof detail === 'string'
+        ? detail
+        : detail?.message || detail?.code || error.error?.safe_message || error.error?.title || `Publish failed: ${response.status}`;
       throw new Error(message);
     }
 
