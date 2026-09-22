@@ -29,6 +29,7 @@ from app.services.preview_signing_service import (
 from app.services.dataset_merkle_service import (
     canonical_json_bytes,
     decode_base64url,
+    encode_base64url,
     checkpoint_signing_bytes,
 )
 from tests.preview_fixture_factory import (
@@ -293,6 +294,42 @@ def test_reattestation_round_trip_and_commitment_domain_isolation(signer):
         raw_fixture_key,
         encode_base64url(key.sign(same_commitment_payload_wrong_domain)),
         commitment_preimage,
+    )
+
+
+def test_commitment_previous_id_matches_backend_closed_contract_bytes():
+    key, commitment, _ = material()
+    commitment["previous_commitment_id"] = uid(40)
+    expected_contract = {
+        field: commitment[field]
+        for field in (
+            "commitment_id",
+            "listing_id",
+            "seller_dataset_version",
+            "previous_commitment_id",
+            "canonicalization_profile",
+            "hash_algorithm",
+            "schema_digest",
+            "dataset_merkle_root",
+            "leaf_count",
+            "seller_attestation_digest",
+            "aim_data_signer_reference",
+            "signature_algorithm",
+            "signed_at",
+            "proofs",
+        )
+    }
+    backend_bytes = (
+        b"aim-dataset-commitment-signature-v1\0"
+        + canonical_json_bytes(expected_contract)
+    )
+    signature = key.sign(commitment_bytes(commitment))
+
+    assert commitment_bytes(commitment) == backend_bytes
+    assert verify_bytes(
+        public_bytes(key.public_key()),
+        encode_base64url(signature),
+        backend_bytes,
     )
 
 

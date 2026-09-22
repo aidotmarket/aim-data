@@ -30,6 +30,7 @@ export function CommitmentPreviewBuilder({ datasetId, onStatus, originReview }: 
   const [declarationsNeeded, setDeclarationsNeeded] = useState(false);
   const [declarations, setDeclarations] = useState('');
   const [marketplaceSummary, setMarketplaceSummary] = useState<MarketplaceSummaryPreview | null>(null);
+  const [retirePreviousPending, setRetirePreviousPending] = useState(false);
   const [rights, setRights] = useState<PreviewConsent['rights_basis'] | ''>('');
   const [permission, setPermission] = useState(false);
   const [restricted, setRestricted] = useState(false);
@@ -217,9 +218,17 @@ export function CommitmentPreviewBuilder({ datasetId, onStatus, originReview }: 
         setJob(value); setSelected(value.selection.leaf_indices); setColumns(value.selection.display_columns); setSizes(value.selection.row_sizes || {}); setStart(0);
         setPermission(false); setRestricted(false); setAccuracy(false);
       })}>Refresh attestation</Button>}
-      {job.prior_job_id && <p>Prior hosting retirement remains separate. <Button type="button" variant="outline" disabled={busy} onClick={() => run(async () => {
-        await previewBuildApi.withdraw(job.prior_job_id!);
-      })}>Retire previous package</Button></p>}
+      {job.prior_job_id && !retirePreviousPending && <p>Prior hosting retirement remains separate. <Button type="button" variant="outline" disabled={busy} onClick={() => setRetirePreviousPending(true)}>Retire previous package</Button></p>}
+      {job.prior_job_id && retirePreviousPending && <div role="group" aria-label="Confirm previous package retirement" className="space-y-2 rounded-md border border-destructive p-3">
+        <p role="alert">Retiring the previous package will make the public verified preview disappear until a replacement is accepted.</p>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={() => run(async () => {
+            await previewBuildApi.withdraw(job.prior_job_id!);
+            setRetirePreviousPending(false);
+          })}>Confirm retire previous package</Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => setRetirePreviousPending(false)}>Keep previous package</Button>
+        </div>
+      </div>}
       {job.state === 'withdrawn' && <p role="status">Local package retired. Remove the external object at {job.origin || job.publication?.relative_path}, then retry withdrawal to verify GET/OPTIONS retirement receipts.</p>}
       {job.publication && <Button type="button" variant="outline" disabled={busy || job.state === 'retired'} onClick={() => run(async () => { try { await previewBuildApi.withdraw(job.job_id); } finally { setJob(await previewBuildApi.status(job.job_id)); } })}>Withdraw preview</Button>}
       {job.state === 'retired' && <Button type="button" disabled={busy} onClick={prepare}>Replace preview</Button>}

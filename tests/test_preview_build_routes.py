@@ -1,6 +1,7 @@
 """Synthetic local source and authenticated identities; never real data or egress."""
 
 from datetime import datetime, timezone
+import json
 import time
 from types import SimpleNamespace
 from uuid import uuid4
@@ -504,6 +505,12 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
     assert signed.json()["candidate"]["kind"] == "marketplace_candidate"
     approved_disclosure = signed.json()["candidate"]["disclosure_version"]
     assert approved_disclosure != pub["disclosure_version"]
+    first_saved = service.load(id, OWNER)
+    first_request = json.loads(
+        service.journal.read(tuple(first_saved["journal_key"]))["request"]
+    )
+    assert first_request["commitment"]["previous_commitment_id"] is None
+    prior_commitment_id = first_request["commitment"]["commitment_id"]
     assert id not in service.live and not signed.json()["review_ready"]
 
     response = client.post(base + "/submit", json={})
@@ -563,12 +570,17 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
         newer + "/candidate", json={**consent, "metadata_accuracy_confirmed": True}
     )
     assert candidate.status_code == 200, candidate.text
-    import json
-
     saved = service.load(refreshed.json()["job_id"], OWNER)
-    binding = json.loads(service.journal.read(tuple(saved["journal_key"]))["candidate"])
+    journal_entry = service.journal.read(tuple(saved["journal_key"]))
+    binding = json.loads(journal_entry["candidate"])
+    refreshed_request = json.loads(journal_entry["request"])
     assert binding["supersedes"] == approved_disclosure
     assert binding["sample_hash"] == pub["sample_hash"]
+    assert (
+        refreshed_request["commitment"]["previous_commitment_id"]
+        == prior_commitment_id
+    )
+    assert "withdraw" not in [entry[0] for entry in service.fake_backend.requests]
     assert client.post(base + "/withdraw", json={}).json()["state"] == "retired"
     assert [entry[0] for entry in service.fake_backend.requests].count("submit") >= 1
     assert "withdraw" in [entry[0] for entry in service.fake_backend.requests]
