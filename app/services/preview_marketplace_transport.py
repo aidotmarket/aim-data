@@ -16,21 +16,39 @@ REFUSAL_MESSAGES = {
     "stale_source_revision": "The listing changed. Refresh At a glance, approve the current version, and try again.",
     "stale_summary": "At a glance is no longer current. Review and approve the current summary, then try again.",
     "stale_expected_head": "The verified preview changed on ai.market. Refresh its live state and try again.",
-    "signer_authority_invalid": "This AIM Data install is no longer active. Sign in and register this install again.",
-    "signer_fingerprint_mismatch": "The registered install key does not match this AIM Data key. Sign in and register this install again.",
-    "approval_binding_mismatch": "The listing metadata changed while the preview was being approved. Refresh and try again.",
-    "decision_mismatch": "The marketplace received the wrong preview action. Retry the requested action.",
-    "request_id_conflict": "This request identifier was already used for different preview data. Refresh and try again.",
+    "approval_binding_invalid": "The preview approval does not match this request. Refresh At a glance and prepare the preview again.",
     "candidate_binding_mismatch": "The marketplace candidate expired or changed. Refresh and prepare the signed preview again.",
-    "summary_schema_mismatch": "The selected fields no longer match At a glance. Update At a glance or rebuild the preview.",
+    "commitment_binding_mismatch": "The commitment does not match the current preview. Rebuild and submit it again.",
+    "commitment_not_current": "A newer dataset commitment is current. Rebuild the preview from the current dataset.",
+    "summary_binding_mismatch": "At a glance no longer matches this preview. Review the current summary and prepare the preview again.",
     "approval_expired": "The preview approval expired. Refresh the attestation and submit again.",
+    "idempotency_conflict": "At a glance already used this request identifier for different data. Refresh At a glance and retry.",
+    "request_id_conflict": "This request identifier was already used for different preview data. Refresh and try again.",
+    "registration_evidence_stale": "This install registration is out of date. Sign in and register this install again.",
+    "verified_sample_unavailable_above_25_column_cap": "Verified previews support at most 25 fields. Select a dataset version with 25 or fewer fields.",
+    "dictionary_must_match_committed_dataset_schema_republish_through_aim_data": "The data dictionary does not match the committed dataset schema. Republish the dataset through AIM Data.",
+    "decision_mismatch": "The marketplace received the wrong preview action. Retry the requested action.",
     "disclosure_signature_invalid": "The preview signature was rejected. Register this install key again and retry.",
     "commitment_signature_invalid": "The dataset commitment signature was rejected. Rebuild and submit the preview again.",
     "proof_signature_invalid": "A selected-row proof signature was rejected. Rebuild and submit the preview again.",
-    "commitment_not_current": "A newer dataset commitment is current. Rebuild the preview from the current dataset.",
-    "commitment_binding_mismatch": "The commitment does not match the current preview. Rebuild and submit it again.",
+    "signer_authority_invalid": "This AIM Data install is no longer active. Sign in and register this install again.",
+    "signer_evidence_invalid": "The install registration evidence was rejected. Sign in and register this install again.",
+    "signer_evidence_missing": "The install registration evidence is missing. Sign in and register this install again.",
+    "signer_evidence_expired": "The install registration evidence expired. Sign in and register this install again.",
+    "signer_fingerprint_mismatch": "The registered install key does not match this AIM Data key. Sign in and register this install again.",
+    "registration_key_mismatch": "The registered install key does not match this request. Sign in and register this install again.",
+    "registration_owner_mismatch": "This install is registered to a different seller. Sign in with the listing owner and register it again.",
+    "registration_inactive": "This install registration is inactive. Sign in and register this install again.",
+    "envelope_binding_mismatch": "The signed preview envelope does not match this listing. Rebuild the preview and try again.",
+    "contract_mismatch": "The signed preview contract is not current. Update AIM Data and rebuild the preview.",
+    "aggregate_hash_mismatch": "The preview summary hash does not match the signed request. Refresh At a glance and rebuild the preview.",
+    "invalid_evidence_policy": "The preview evidence policy is invalid. Update AIM Data and rebuild the preview.",
+    "invalid_public_key": "The install public key is invalid. Sign in and register this install again.",
+    "invalid_preview_metadata": "The preview request is invalid. Update AIM Data, rebuild the preview, and try again.",
+    "metadata_bound_exceeded": "The preview metadata is too large. Reduce the selected metadata and rebuild the preview.",
+    "approval_binding_mismatch": "The listing metadata changed while the preview was being approved. Refresh and try again.",
+    "summary_schema_mismatch": "The selected fields no longer match At a glance. Update At a glance or rebuild the preview.",
     "preview_contract_invalid": "The marketplace rejected the preview contract. Update AIM Data and rebuild the preview.",
-    "idempotency_conflict": "At a glance already used this request identifier for different data. Refresh At a glance and retry.",
     "summary_approval_incomplete": "At a glance was not approved. Review the current summary and retry.",
 }
 
@@ -46,6 +64,7 @@ class PreviewTransportError(ValueError):
     code: str
     message: str
     status: int = 409
+    correlation_id: str | None = None
 
     def __str__(self) -> str:
         return self.code
@@ -91,10 +110,23 @@ class PreviewMarketplaceTransport:
             return None
         if response.status_code < 200 or response.status_code >= 300:
             try:
-                detail = response.json().get("detail")
+                error_body = response.json()
             except (ValueError, AttributeError):
-                detail = None
-            code = detail if isinstance(detail, str) and detail else f"marketplace_http_{response.status_code}"
+                error_body = {}
+            if not isinstance(error_body, dict):
+                error_body = {}
+            detail = error_body.get("detail")
+            body_code = error_body.get("code")
+            correlation_id = error_body.get("correlation_id")
+            if not isinstance(correlation_id, str) or not correlation_id:
+                correlation_id = None
+            code = (
+                body_code
+                if isinstance(body_code, str) and body_code
+                else detail
+                if isinstance(detail, str) and detail
+                else f"marketplace_http_{response.status_code}"
+            )
             if response.status_code == 401:
                 code = "seller_session_expired"
                 message = "Your ai.market session expired. Sign in again, then retry."
@@ -107,16 +139,23 @@ class PreviewMarketplaceTransport:
             elif response.status_code == 422 and code.startswith("marketplace_http_"):
                 code = "preview_contract_invalid"
                 message = REFUSAL_MESSAGES[code]
+            elif response.status_code == 503 and code == "unexpected_error":
+                reference = correlation_id or "unavailable"
+                message = f"ai.market could not complete this step (reference {reference}); try again later"
             else:
                 message = REFUSAL_MESSAGES.get(
                     code, f"ai.market refused the preview ({code}). Refresh the listing and retry."
                 )
+            if correlation_id and not (
+                response.status_code == 503 and code == "unexpected_error"
+            ):
+                message = f"{message} Reference: {correlation_id}."
             local_status = (
                 MARKETPLACE_AUTH_LOCAL_STATUS
                 if response.status_code in MARKETPLACE_AUTH_UPSTREAM_STATUSES
                 else response.status_code
             )
-            raise PreviewTransportError(code, message, local_status)
+            raise PreviewTransportError(code, message, local_status, correlation_id)
         try:
             data = response.json()
         except ValueError as exc:

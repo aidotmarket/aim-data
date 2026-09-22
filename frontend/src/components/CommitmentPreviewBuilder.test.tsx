@@ -170,3 +170,19 @@ it('keeps withdrawal retry available and hides preparation until retirement',asy
   fireEvent.click(retry);
   expect(await screen.findByRole('button',{name:'Replace preview'})).toBeEnabled();
 });
+
+it('requires a warned second confirmation before retiring the previous package',async () => {
+  job={...job,state:'submitted',review_ready:false,prior_job_id:'prior-job'};
+  vi.mocked(previewBuildApi.latest).mockResolvedValue(job);
+  vi.mocked(previewBuildApi.withdraw).mockResolvedValue(job);
+  render(<CommitmentPreviewBuilder datasetId="ds" metadataApproved />);
+
+  fireEvent.click(await screen.findByRole('button',{name:'Retire previous package'}));
+
+  expect(previewBuildApi.withdraw).not.toHaveBeenCalled();
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'public verified preview disappear until a replacement is accepted'
+  );
+  fireEvent.click(screen.getByRole('button',{name:'Confirm retire previous package'}));
+  await waitFor(() => expect(previewBuildApi.withdraw).toHaveBeenCalledWith('prior-job'));
+});

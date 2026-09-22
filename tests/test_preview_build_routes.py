@@ -580,6 +580,7 @@ def test_sealed_scan_export_sign_and_local_submit(setup, monkeypatch, tmp_path):
         refreshed_request["commitment"]["previous_commitment_id"]
         == prior_commitment_id
     )
+    assert "withdraw" not in [entry[0] for entry in service.fake_backend.requests]
     assert client.post(base + "/withdraw", json={}).json()["state"] == "retired"
     assert [entry[0] for entry in service.fake_backend.requests].count("submit") >= 1
     assert "withdraw" in [entry[0] for entry in service.fake_backend.requests]
