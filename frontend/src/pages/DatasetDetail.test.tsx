@@ -132,6 +132,26 @@ afterEach(() => {
 });
 
 describe("seller listing preparation", () => {
+  it("sends the exact custom-upload form and reads the backend response fields", async () => {
+    const backendBody = {
+      id: "document-1", title: "terms.txt", content_type: "text/plain", size_bytes: 12,
+      source_sha256: "d".repeat(64), license_sha256: "c".repeat(64), status: "active",
+    };
+    const request = vi.fn().mockResolvedValue({ ok: true, json: async () => backendBody });
+    vi.stubGlobal("fetch", request);
+    const file = new File(["Custom terms"], "terms.txt", { type: "text/plain" });
+
+    expect(await marketplaceApi.uploadCustomLicense(file, "terms.txt", false)).toEqual(backendBody);
+    const [url, init] = request.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/marketplace/licenses/custom");
+    expect(init.method).toBe("POST");
+    const form = init.body as FormData;
+    expect(form.get("upload")).toBe(file);
+    expect(form.get("title")).toBe("terms.txt");
+    expect(form.get("ai_training")).toBe("false");
+    expect(form.has("file")).toBe(false);
+  });
+
   it("shows exactly two licence cards, defaults AI training to Allow, and gates publish on authority confirmation", async () => {
     vi.mocked(marketplaceApi.publishStatus).mockResolvedValue({
       can_publish: true, reason: null, listing_licenses: true,

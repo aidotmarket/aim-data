@@ -704,6 +704,16 @@ export interface MarketplaceLicenseDocument {
   download_url?: string;
 }
 
+export interface CustomLicenseUploadResponse {
+  id: string;
+  title: string;
+  content_type: string;
+  size_bytes: number;
+  source_sha256: string;
+  license_sha256: string;
+  status: string;
+}
+
 export interface MarketplaceLicenseOptions {
   standard: MarketplaceLicenseDocument;
   covenant: MarketplaceLicenseDocument;
@@ -1221,10 +1231,11 @@ export const marketplaceApi = {
   licenseOptions: (aiTraining: boolean) =>
     apiFetch<MarketplaceLicenseOptions>(`/api/marketplace/licenses/selection-options?ai_training=${aiTraining}`),
 
-  uploadCustomLicense: async (file: File, title: string): Promise<MarketplaceLicenseDocument> => {
+  uploadCustomLicense: async (file: File, title: string, aiTraining: boolean): Promise<CustomLicenseUploadResponse> => {
     const form = new FormData();
-    form.append('file', file);
+    form.append('upload', file);
     form.append('title', title);
+    form.append('ai_training', String(aiTraining));
     const headers: Record<string, string> = {};
     const marketplaceAuth = getStoredAccessToken();
     if (marketplaceAuth) headers.Authorization = `Bearer ${marketplaceAuth}`;

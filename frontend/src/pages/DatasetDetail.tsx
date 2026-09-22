@@ -605,6 +605,11 @@ export function ListingPreparation({
   const [licenseUploading, setLicenseUploading] = useState(false);
   const [licenseError, setLicenseError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const previewUrl = customLicense?.download_url;
+    return () => { if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl); };
+  }, [customLicense]);
+
   const datasetReady = dataset.status === "preview_ready";
   const flaggedColumns = piiScan?.column_results ?? [];
   const allFlaggedColumnsSaved = flaggedColumns.length === 0 || flaggedColumns.every((column) => Boolean(piiActions[column.column]));
@@ -636,6 +641,7 @@ export function ListingPreparation({
 
   const changeAiTraining = async (allowed: boolean) => {
     setAiTraining(allowed);
+    setCustomLicense(null);
     setLicenseAuthorityConfirmed(false);
     setLicenseTermsReviewed(false);
     setLicenseError(null);
@@ -654,7 +660,15 @@ export function ListingPreparation({
     setLicenseAuthorityConfirmed(false);
     setLicenseTermsReviewed(false);
     try {
-      setCustomLicense(await marketplaceApi.uploadCustomLicense(file, file.name));
+      const uploaded = await marketplaceApi.uploadCustomLicense(file, file.name, aiTraining);
+      setCustomLicense({
+        license_document_id: uploaded.id,
+        sha256: uploaded.license_sha256,
+        title: uploaded.title,
+        summary: [],
+        full_text: file.type === "text/plain" ? await file.text() : "",
+        download_url: URL.createObjectURL(file),
+      });
     } catch (error) {
       setLicenseError(error instanceof Error ? error.message : "Custom licence upload failed.");
     } finally {

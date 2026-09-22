@@ -704,23 +704,8 @@ def _marketplace_refusal_detail(detail: Any) -> Any:
     return {"code": code, "message": REFUSAL_MESSAGES[code]}
 
 
-def _license_capability_from_payload(payload: Any) -> Optional[bool]:
-    if not isinstance(payload, dict):
-        return None
-    for key in ("listing_licenses", "listing_license", "license_selection"):
-        value = payload.get(key)
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, dict) and isinstance(value.get("enabled"), bool):
-            return value["enabled"]
-    capabilities = payload.get("capabilities")
-    if isinstance(capabilities, dict):
-        return _license_capability_from_payload(capabilities)
-    return None
-
-
 async def _marketplace_supports_license_selection() -> bool:
-    """Prefer the backend capability and fall back to its published OpenAPI shape."""
+    """Read the backend-owned listing licence capability."""
     store = get_serial_store()
     headers = {}
     if store.state.ai_market_access_token:
@@ -728,27 +713,25 @@ async def _marketplace_supports_license_selection() -> bool:
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             capability_response = await client.get(
-                f"{settings.ai_market_url}/api/v1/seller-workspace/capabilities",
+                f"{settings.ai_market_url.rstrip('/')}/api/v1/seller-workspace/capabilities",
                 headers=headers,
             )
-            if capability_response.status_code == 200:
-                advertised = _license_capability_from_payload(capability_response.json())
-                if advertised is not None:
-                    return advertised
-            openapi_response = await client.get(f"{settings.ai_market_url}/openapi.json")
-            if openapi_response.status_code != 200:
+            if capability_response.status_code != 200:
                 return False
-            paths = openapi_response.json().get("paths", {})
-            publish_operation = paths.get("/api/v1/vz/publish", {}).get("post", {})
-            return '"license_selection"' in json.dumps(publish_operation, sort_keys=True)
+            payload = capability_response.json()
+            return isinstance(payload, dict) and payload.get("listing_licenses") is True
     except (httpx.HTTPError, ValueError, AttributeError, TypeError):
         return False
+
+
+def _license_url(path: str) -> str:
+    return f"{settings.ai_market_url.rstrip('/')}/api/v1/licenses/{path}"
 
 
 async def _public_license_document(path: str) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{settings.ai_market_url}{path}")
+            response = await client.get(_license_url(path))
     except httpx.RequestError as exc:
         raise HTTPException(502, "Cannot reach ai.market to load the licence terms") from exc
     try:
@@ -1614,10 +1597,10 @@ async def license_selection_options(
     """Return the current marketplace-owned Standard licence and covenant."""
     variant = "ai-training" if ai_training else "no-ai-training"
     standard, covenant, rider = await asyncio.gather(
-        _public_license_document(f"/licenses/standard/1.0/{variant}"),
-        _public_license_document("/licenses/marketplace-listing/1.0"),
+        _public_license_document(f"standard/1.0/{variant}"),
+        _public_license_document("marketplace-listing/1.0"),
         _public_license_document(
-            f"/licenses/ai-training-rider/1.0/{'permitted' if ai_training else 'not-permitted'}"
+            f"ai-training-rider/1.0/{'permitted' if ai_training else 'not-permitted'}"
         ),
     )
     return {
@@ -1630,12 +1613,13 @@ async def license_selection_options(
 @router.post("/marketplace/licenses/custom")
 async def upload_custom_license(
     request: Request,
-    file: UploadFile = File(...),
+    upload: UploadFile = File(...),
     title: str = Form(..., min_length=1, max_length=255),
+    ai_training: bool = Form(True),
     user=Depends(get_current_user),
 ):
     """Carry a seller's custom licence through the authenticated marketplace transport."""
-    content = await file.read(1048577)
+    content = await upload.read(1048577)
     if len(content) > 1048576:
         raise HTTPException(413, "Custom licence must be 1 MiB or smaller")
     headers = _seller_auth_headers(request)
@@ -1644,10 +1628,10 @@ async def upload_custom_license(
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{settings.ai_market_url}/licenses/custom",
+                _license_url("custom"),
                 headers=headers,
-                data={"title": title},
-                files={"file": (file.filename or "license.txt", content, file.content_type or "application/octet-stream")},
+                data={"title": title, "ai_training": str(ai_training).lower()},
+                files={"upload": (upload.filename or "license.txt", content, upload.content_type or "application/octet-stream")},
             )
     except httpx.ConnectError as exc:
         raise HTTPException(502, "Cannot reach ai.market — check network connectivity") from exc
@@ -1662,17 +1646,13 @@ async def upload_custom_license(
         raise HTTPException(response.status_code, _marketplace_refusal_detail(detail))
     if not isinstance(data, dict):
         raise HTTPException(502, "ai.market returned an invalid custom licence response")
-    document_id = data.get("license_document_id") or data.get("id")
-    sha256 = data.get("sha256") or data.get("license_sha256")
-    if not isinstance(document_id, str) or not document_id or not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256):
+    if (set(data) != {"id", "title", "content_type", "size_bytes", "source_sha256", "license_sha256", "status"}
+            or not all(isinstance(data[key], str) and data[key] for key in ("id", "title", "content_type", "status"))
+            or not isinstance(data["size_bytes"], int) or isinstance(data["size_bytes"], bool) or data["size_bytes"] < 0
+            or not all(isinstance(data[key], str) and re.fullmatch(r"[0-9a-f]{64}", data[key])
+                       for key in ("source_sha256", "license_sha256"))):
         raise HTTPException(502, "ai.market returned an invalid custom licence record")
-    return {
-        **data,
-        "license_document_id": document_id,
-        "sha256": sha256,
-        "summary": data.get("summary") or [],
-        "full_text": data.get("full_text") or data.get("canonical_text") or data.get("text") or "",
-    }
+    return data
 
 
 @router.get("/marketplace/publish-status")
