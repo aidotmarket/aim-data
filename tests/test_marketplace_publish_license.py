@@ -298,6 +298,7 @@ async def test_document_contract_refuses_plain_text_and_wrong_json(monkeypatch):
     "code",
     [
         "SELLER_TERMS_ACCEPTANCE_PENDING",
+        "SELLER_LEGAL_IDENTITY_REQUIRED",
         "LICENSE_SELECTION_REQUIRED",
         "LICENSE_SELECTION_INVALID",
         "LICENSE_ACCEPTANCE_INVALID",

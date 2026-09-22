@@ -14,6 +14,7 @@ from app.services.serial_store import get_serial_store
 
 REFUSAL_MESSAGES = {
     "SELLER_TERMS_ACCEPTANCE_PENDING": "Accept the current ai.market seller terms, then try publishing again.",
+    "SELLER_LEGAL_IDENTITY_REQUIRED": "Add your legal name and jurisdiction to your seller profile, then try publishing again.",
     "LICENSE_ACCEPTANCE_INVALID": "The licence choice is incomplete or invalid. Review the licence and confirmation, then try again.",
     "LICENSE_SELECTION_REQUIRED": "Choose a licence and confirm the marketplace covenant before publishing.",
     "LICENSE_SELECTION_INVALID": "The licence choice is invalid. Review the document and confirmation, then try again.",
