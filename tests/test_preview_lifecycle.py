@@ -59,13 +59,18 @@ def test_journal_round_trips_previous_commitment_id(tmp_path):
     ] == uid(40)
 
 
-def test_withdrawal_refresh_supersession():
+@pytest.mark.parametrize("profile", [None, "aim-approved-aggregates-v1", "aim-approved-aggregates-v2"])
+def test_withdrawal_refresh_supersession(profile):
     r = request_fixture()
     old = r["binding"]
+    if profile is not None:
+        old["aggregate_hash_profile"] = profile
     w = withdrawal_candidate(
         old, disclosure_version=uid(30), request_id=uid(31), approved_at=STAMP
     ).binding()
     assert w["decision"] == "withdraw" and w["sample_hash"] is None
+    assert w.get("aggregate_hash_profile") == profile
+    assert ("aggregate_hash_profile" in w) == (profile is not None)
     assert (
         w["expected_current_disclosure_id"]
         == w["supersedes"]
@@ -86,10 +91,14 @@ def test_withdrawal_refresh_supersession():
         "schema_descriptors",
     ):
         assert refreshed[field] == old[field]
+    assert refreshed.get("aggregate_hash_profile") == profile
+    assert ("aggregate_hash_profile" in refreshed) == (profile is not None)
     superseded = supersession_candidate(
         old, dict(old, disclosure_version=uid(34), request_id=uid(35))
     ).binding()
     assert superseded["supersedes"] == old["disclosure_version"]
+    assert superseded.get("aggregate_hash_profile") == profile
+    assert ("aggregate_hash_profile" in superseded) == (profile is not None)
     assert old == r["binding"]
 
 
