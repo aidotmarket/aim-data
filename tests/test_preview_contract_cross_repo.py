@@ -5,16 +5,21 @@ import copy
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from scripts.preview_contract_gate import (
     GateError,
+    ACCEPT,
+    REJECT,
+    allowed_values,
     canonical,
     compare,
     digest,
     lock,
+    model_registry,
     operation_tokens,
     verify_manifest,
     coverage,
@@ -124,15 +129,36 @@ def test_lock_canonical_and_exact(tmp_path):
 def test_manifest_integrity_and_mutations(tmp_path):
     binding = request_fixture()["binding"]
     root, expected = corpus(
-        tmp_path, [("binding-v2-approve-owner", "binding-model", binding, "accept")]
+        tmp_path, [("binding-v2-approve-public-domain", "binding-model", binding, "accept")]
     )
     assert verify_manifest(root, expected)[0] == expected
     with pytest.raises(GateError, match="lock_manifest_digest"):
         verify_manifest(root, "c" * 64)
-    byte_file = root / "bytes/binding-v2-approve-owner.bin"
+    byte_file = root / "bytes/binding-v2-approve-public-domain.bin"
     byte_file.write_bytes(byte_file.read_bytes() + b"x")
     with pytest.raises(GateError, match="byte_digest"):
         verify_manifest(root, expected)
+
+
+@pytest.mark.parametrize("expected", ["accept", "reject"])
+def test_manifest_rejects_digest_consistent_unknown_id(tmp_path, expected):
+    ident = f"binding-unreviewed-{expected}"
+    binding = request_fixture()["binding"]
+    root, manifest_digest = corpus(
+        tmp_path, [(ident, "binding-model", binding, expected)]
+    )
+    assert digest((root / "manifest.json").read_bytes()) == manifest_digest
+    assert (root / "manifest.sha256").read_text() == (
+        f"{manifest_digest}  manifest.json\n"
+    )
+    with pytest.raises(GateError, match="vector_id_inventory"):
+        verify_manifest(root, manifest_digest)
+
+
+def test_inventory_matches_reviewed_vector_counts():
+    assert len(ACCEPT) == 36
+    assert len(REJECT) == 45
+    assert ACCEPT.isdisjoint(REJECT)
 
 
 def test_manifest_rejects_symlink_and_extra_file(tmp_path):
@@ -140,7 +166,7 @@ def test_manifest_rejects_symlink_and_extra_file(tmp_path):
         tmp_path,
         [
             (
-                "binding-v2-approve-owner",
+                "binding-v2-approve-public-domain",
                 "binding-model",
                 request_fixture()["binding"],
                 "accept",
@@ -188,7 +214,7 @@ def test_compare_checks_expected_bytes_and_error_code(tmp_path):
         tmp_path,
         [
             (
-                "binding-v2-approve-owner",
+                "binding-v2-approve-public-domain",
                 "binding-model",
                 request_fixture()["binding"],
                 "accept",
@@ -240,7 +266,7 @@ def test_coverage_fails_on_small_corpus(tmp_path):
         tmp_path,
         [
             (
-                "binding-v2-approve-owner",
+                "binding-v2-approve-public-domain",
                 "binding-model",
                 request_fixture()["binding"],
                 "accept",
@@ -258,7 +284,7 @@ def test_runner_writes_canonical_result_from_temporary_corpus(tmp_path):
         tmp_path,
         [
             (
-                "binding-v2-approve-owner",
+                "binding-v2-approve-public-domain",
                 "binding-model",
                 request_fixture()["binding"],
                 "accept",
@@ -271,6 +297,96 @@ def test_runner_writes_canonical_result_from_temporary_corpus(tmp_path):
     assert payload["manifest_sha256"] == expected
     assert output.read_bytes() == canonical(payload)
     assert payload["results"][0]["status"] == "accept"
+
+
+def test_runner_script_works_from_unrelated_directory(tmp_path):
+    root, _ = corpus(
+        tmp_path,
+        [
+            (
+                "binding-v2-approve-public-domain",
+                "binding-model",
+                request_fixture()["binding"],
+                "accept",
+            )
+        ],
+    )
+    repo = Path(__file__).resolve().parents[1]
+    output = tmp_path / "runner-result.json"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(repo / "tests/preview_contract_runner.py"),
+            "--repo-root",
+            str(repo),
+            "--corpus",
+            str(root),
+            "--output",
+            str(output),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(output.read_text())["results"][0]["status"] == "accept"
+
+
+def test_coverage_script_works_from_repo_and_unrelated_directory(tmp_path):
+    # This payload exercises the CLI import path with a complete field walk.
+    observations = []
+    for token, model in model_registry().items():
+        variants = [{}]
+        for name, field in model.model_fields.items():
+            values = allowed_values(field.annotation)
+            for value in values or {"synthetic"}:
+                variants.append({name: value})
+        for variant in variants:
+            ident = f"synthetic-{len(observations)}"
+            fields = []
+            for name, field in sorted(model.model_fields.items()):
+                if name in variant:
+                    value = variant[name]
+                elif field.is_required():
+                    values = allowed_values(field.annotation)
+                    value = next(iter(values)) if values else "synthetic"
+                else:
+                    fields.append({"name": name, "present": False})
+                    continue
+                fields.append({"name": name, "present": True, "value": value})
+            observations.append(
+                {
+                    "id": ident,
+                    "model": token,
+                    "input_path": "",
+                    "direct": True,
+                    "fields": fields,
+                }
+            )
+    payload = {
+        "repo_sha": "a" * 40,
+        "manifest_sha256": "b" * 64,
+        "results": [
+            {"id": observation["id"], "status": "accept"}
+            for observation in observations
+        ],
+        "coverage_observations": observations,
+    }
+    path = tmp_path / "coverage-result.json"
+    path.write_bytes(canonical(payload))
+    repo = Path(__file__).resolve().parents[1]
+    for cwd, script in (
+        (repo, Path("scripts/preview_contract_gate.py")),
+        (tmp_path, repo / "scripts/preview_contract_gate.py"),
+    ):
+        completed = subprocess.run(
+            [sys.executable, str(script), "coverage", "--result", str(path)],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr
+        assert completed.stdout.strip() == str(len(observations))
 
 
 def test_exact_literal_error():
@@ -375,7 +491,7 @@ def test_aim_transition_and_immutable_event_bases(tmp_path, monkeypatch):
         tmp_path,
         [
             (
-                "binding-v2-approve-owner",
+                "binding-v2-approve-public-domain",
                 "binding-model",
                 request_fixture()["binding"],
                 "accept",

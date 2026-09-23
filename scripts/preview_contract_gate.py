@@ -8,12 +8,53 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 from typing import get_args, get_origin, Literal
 from enum import Enum
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 SHA64 = re.compile(r"[0-9a-f]{64}\Z")
 VECTOR_ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+ACCEPT = frozenset(
+    """binding-legacy-approve-owner binding-legacy-withdraw
+    binding-v1-approve-licensed binding-v1-withdraw
+    binding-v2-approve-other-authorized binding-v2-approve-public-domain
+    binding-v2-none binding-v2-withdraw
+    commitment-no-proofs commitment-v1-previous-absent commitment-v2-previous-present
+    envelope-model-legacy-open envelope-model-v1-all-statuses envelope-model-v2-bounded
+    envelope-preimage-legacy envelope-preimage-v1 envelope-preimage-v2
+    local-candidate-legacy local-candidate-v1 local-candidate-v2
+    preimage-binding-legacy preimage-binding-v1 preimage-binding-v2
+    proof-v1-policy-v1 proof-v2-policy-v2
+    request-approve-v2 request-none
+    request-refresh-legacy request-refresh-v1 request-refresh-v2
+    request-supersede-legacy request-supersede-v1 request-supersede-v2
+    request-withdraw-legacy request-withdraw-v1 request-withdraw-v2""".split()
+)
+REJECT = frozenset(
+    """extra-binding extra-commitment extra-envelope extra-envelope-binding
+    extra-proof extra-request local-candidate-extra
+    literal-binding-aggregate-profile literal-binding-content-type
+    literal-binding-decision literal-binding-preview-type literal-binding-profile
+    literal-binding-rights-code literal-binding-sample-decision
+    literal-binding-signature-algorithm literal-binding-signature-profile
+    literal-commitment-canonicalization literal-commitment-hash
+    literal-commitment-signature-algorithm literal-envelope-profile
+    literal-envelope-signature-algorithm literal-proof-media-type
+    literal-proof-package-profile literal-proof-scan-policy literal-proof-scan-verdict
+    literal-proof-sibling-direction literal-proof-signature-algorithm
+    literal-request-profile literal-signer-key-algorithm literal-signer-key-status
+    package-mismatch-byte-ceiling package-mismatch-media-type
+    package-mismatch-profile package-mismatch-scan-policy
+    package-mismatch-scan-policy-version package-mismatch-scan-verdict
+    package-mismatch-scanned-at package-mismatch-signer-reference
+    package-mismatch-url proof-sampled-leaf-list-mismatch
+    request-proof-v1-unsupported
+    schema-binary-array schema-binary-object schema-binary-object-array
+    schema-binary-top""".split()
+)
 TOKENS = {
     "binding-model": {"shared.DisclosureBinding"},
     "disclosure-preimage": {"shared.DisclosureBinding"},
@@ -202,6 +243,10 @@ def verify_manifest(corpus, expected=None):
         ident = row["id"]
         require(
             isinstance(ident, str) and bool(VECTOR_ID.fullmatch(ident)), "vector_id"
+        )
+        require(
+            ident in (ACCEPT if row["expected"] == "accept" else REJECT),
+            "vector_id_inventory",
         )
         ids.append(ident)
         models = row["models"]
