@@ -1,5 +1,7 @@
 # BQ-VZ-RAW-LISTINGS — Raw File Listings on ai.market via AIM Data
 
+> **S1740 anonymity amendment:** [ENTITLEMENT-BUYER-ID-ANONYMITY-S1740](https://github.com/aidotmarket/runbooks/blob/afc428cc/specs/ENTITLEMENT-BUYER-ID-ANONYMITY-S1740.md) controls any conflicting entitlement-token clauses below. Seller-visible tokens and logs must not contain the buyer's user ID.
+
 **Version:** 1.0
 **Gate 1:** APPROVED_WITH_MANDATES (3/3 — Vulcan, MP, XAI)
 **Session:** S209
@@ -151,7 +153,7 @@ Purchase flow:
      "order_id": "...",
      "listing_id": "...",
      "file_hash": "abc123...",         // Expected hash
-     "buyer_id": "...",
+     ~~"buyer_id": "...",~~          // Superseded by S1740: omit buyer identity
      "issued_at": "2026-03-03T...",
      "expires_at": "2026-03-03T+1h",   // 1h TTL
      "nonce": "random-uuid",           // Replay protection (M1)

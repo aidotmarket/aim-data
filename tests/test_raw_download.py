@@ -42,7 +42,6 @@ def _entitlement_payload(file_hash: str) -> dict:
         "order_id": str(uuid.uuid4()),
         "listing_id": str(uuid.uuid4()),
         "file_hash": file_hash,
-        "buyer_id": str(uuid.uuid4()),
         "issued_at": time.time(),
         "expires_at": time.time() + 3600,
         "nonce": str(uuid.uuid4()),
@@ -101,6 +100,23 @@ class TestRawDownload:
         )
         assert resp.status_code == 200
         assert b"Hello, buyer!" in resp.content
+
+    def test_legacy_token_log_omits_buyer_identity(self, client, registered_file, caplog):
+        """A legacy token's extra buyer field never enters the seller download log."""
+        file_id = registered_file["id"]
+        payload = _entitlement_payload(registered_file["content_hash"])
+        payload["buyer_id"] = str(uuid.uuid4())
+
+        with caplog.at_level("INFO", logger="app.routers.raw_listings"):
+            resp = client.get(
+                f"/api/raw/download/{file_id}",
+                headers={"Authorization": f"Bearer {_make_token(payload)}"},
+            )
+
+        assert resp.status_code == 200
+        records = [record for record in caplog.records if record.name == "app.routers.raw_listings"]
+        assert any(file_id in record.getMessage() and payload["order_id"] in record.getMessage() for record in records)
+        assert all(payload["buyer_id"] not in record.getMessage() for record in records)
 
     def test_hash_mismatch(self, client, registered_file):
         """Download with wrong file_hash in token returns 409."""

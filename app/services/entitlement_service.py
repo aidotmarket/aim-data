@@ -83,7 +83,7 @@ class EntitlementService:
         Expected format: Bearer base64(<json_payload>).<base64_signature>
 
         The JSON payload contains:
-            order_id, listing_id, file_hash, buyer_id, issued_at, expires_at, nonce
+            order_id, listing_id, file_hash, issued_at, expires_at, nonce
 
         Returns the decoded payload dict on success.
 
@@ -125,7 +125,7 @@ class EntitlementService:
             raise ValueError("Invalid entitlement token payload")
 
         # Validate required fields
-        required = ("order_id", "listing_id", "file_hash", "buyer_id", "issued_at", "expires_at", "nonce")
+        required = ("order_id", "listing_id", "file_hash", "issued_at", "expires_at", "nonce")
         for field in required:
             if field not in payload:
                 raise ValueError(f"Missing required field: {field}")

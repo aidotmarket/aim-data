@@ -6,6 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Entitlement anonymity (S1740)
+
+- Entitlement tokens no longer require `buyer_id`; AIM Data accepts new tokens without it and older tokens that still carry it. Raw download logs contain file and order IDs only.
+- Completing M3 (the buyer-to-seller-node redirect) requires the seller-node fleet to run at least the AIM Data release containing this change.
+
 ### Planned aim-data-v1.24.0 — verified preview producer
 
 - Build full-dataset commitments locally, select complete records, run strict local policy checks, and export a signed v2 preview package to a seller-controlled origin. Marketplace requests contain metadata and proofs, not rows.
