@@ -261,6 +261,7 @@ def build(
     indices,
     fixture_time,
     confirmation,
+    contract_manifest_sha256=None,
 ):
     from app.services.dataset_canonicalization import CanonicalSchema
     from app.services.preview_package_service import CommitmentPreviewBuilder
@@ -286,6 +287,13 @@ def build(
 
     if not confirmation:
         raise ValueError("explicit_consent_required")
+    from scripts.preview_contract_gate import lock
+
+    pinned_digest = lock("aim-data", ROOT / "preview-contract-backend.lock.json")[
+        "manifest_sha256"
+    ]
+    if contract_manifest_sha256 != pinned_digest:
+        raise ValueError("verified_contract_manifest_required")
     parsed = validate_url(origin)
     if parsed.path not in ("", "/"):
         raise ValueError("origin_must_be_root")
@@ -496,9 +504,7 @@ def build(
             "fields": len(schema.descriptors),
             "canonical_selected_bytes": collected["canonical_bytes"],
             "manifest_budget_bytes": manifest_budget(request),
-            "fixture_manifest_sha256": file_sha(
-                ROOT / "tests/fixtures/preview-fixture-manifest.json"
-            ),
+            "contract_manifest_sha256": contract_manifest_sha256,
         },
     )
     expected_platform_fixture(output, request, signer)
@@ -659,6 +665,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("build", "check-host", "retire"))
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--contract-corpus", type=Path)
     parser.add_argument("--dataset", type=Path)
     parser.add_argument(
         "--declaration", type=Path, help="JSON: parsing and schema_descriptors"
@@ -689,6 +696,14 @@ def main():
     args = parser.parse_args()
     try:
         if args.action == "build":
+            from scripts.preview_contract_gate import lock, verify_manifest
+
+            if args.contract_corpus is None:
+                raise ValueError("verified_contract_corpus_required")
+            expected = lock("aim-data", ROOT / "preview-contract-backend.lock.json")
+            contract_digest, _ = verify_manifest(
+                args.contract_corpus, expected["manifest_sha256"]
+            )
             if any(
                 getattr(args, name) is None
                 for name in (
@@ -730,6 +745,7 @@ def main():
                 indices=[int(i) for i in args.leaf_indices.split(",")],
                 fixture_time=args.fixture_time,
                 confirmation=args.confirm_public_preview,
+                contract_manifest_sha256=contract_digest,
             )
         else:
             result = check_host(args.output, retire=args.action == "retire")

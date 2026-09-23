@@ -22,8 +22,9 @@ sys.path.insert(0, str(ROOT))
 MARKER = "unique synthetic cell marker aabbccdd"
 
 
-def run(output):
+def run(output, contract_corpus):
     from scripts import build_preview_producer_evidence as evidence  # noqa: E402
+    from scripts.preview_contract_gate import lock, verify_manifest  # noqa: E402
     from app.config import settings  # noqa: E402
     from app.core.crypto import DeviceCrypto  # noqa: E402
     from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey  # noqa: E402
@@ -36,6 +37,9 @@ def run(output):
     )  # noqa: E402
     from app.services.registration_service import read_preview_registration_evidence  # noqa: E402
     from tests.preview_fixture_factory import test_key, uid, NOW, STAMP  # noqa: E402
+
+    expected = lock("aim-data", ROOT / "preview-contract-backend.lock.json")
+    contract_digest, _ = verify_manifest(contract_corpus, expected["manifest_sha256"])
 
     with tempfile.TemporaryDirectory(prefix="producer-synthetic-") as temporary:
         private = Path(temporary).resolve()
@@ -92,6 +96,7 @@ def run(output):
             indices=[0, 1],
             fixture_time=STAMP,
             confirmation=True,
+            contract_manifest_sha256=contract_digest,
         )
         store = PublicationStore(output / "public", output / ".private" / "publication")
         server = make_origin(store, origin="https://ai.market")
@@ -188,8 +193,9 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--reference", type=Path)
     parser.add_argument("--write-reference", type=Path)
+    parser.add_argument("--contract-corpus", required=True, type=Path)
     args = parser.parse_args()
-    result = run(args.output)
+    result = run(args.output, args.contract_corpus)
     if args.reference:
         assert result == json.loads(args.reference.read_bytes()), (
             "synthetic bundle checksum drift"

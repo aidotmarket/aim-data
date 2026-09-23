@@ -34,10 +34,8 @@ from app.services.dataset_merkle_service import (
 )
 from tests.preview_fixture_factory import (
     signing_corpus,
-    all_requests,
     platform_material,
     request_fixture,
-    test_key,
     uid,
     material,
 )
@@ -124,25 +122,34 @@ def test_missing_passphrase_and_pending_rotation(signer):
         s.signer_reference
 
 
+def contract_corpus():
+    import os
+    from scripts.preview_contract_gate import lock, verify_manifest
+
+    path = os.environ.get("PREVIEW_CONTRACT_CORPUS")
+    if not path:
+        pytest.skip("explicit PREVIEW_CONTRACT_CORPUS required")
+    corpus = Path(path)
+    expected = lock("aim-data", "preview-contract-backend.lock.json")
+    verify_manifest(corpus, expected["manifest_sha256"])
+    return corpus
+
+
 def test_golden_corpus():
-    expected = json.loads(
-        Path("tests/fixtures/aim_preview_signing_v1.json").read_bytes()
-    )
-    assert signing_corpus() == expected
-    assert all_requests() == json.loads(
-        Path("tests/fixtures/aim_preview_requests_v1.json").read_bytes()
-    )
-    for row in expected["signatures"]:
-        assert verify_bytes(
-            decode_base64url(row["public_key"]),
-            row["signature"],
-            bytes.fromhex(row["signed_bytes_hex"]),
-        )
-        assert not verify_bytes(
-            public_bytes(test_key(64).public_key()),
-            row["signature"],
-            bytes.fromhex(row["signed_bytes_hex"]),
-        )
+    from tests.preview_contract_runner import dispatch
+    from scripts.preview_contract_gate import read_json, verify_manifest
+
+    corpus = contract_corpus()
+    _, rows = verify_manifest(corpus)
+    for row in rows:
+        if row["expected"] != "accept" or row["operation"] not in {
+            "request-bytes", "disclosure-preimage", "platform-envelope-preimage",
+            "proof-model", "commitment-model",
+        }:
+            continue
+        value = read_json(corpus / row["input_path"])
+        raw, _ = dispatch(row, value)
+        assert raw == (corpus / row["bytes_path"]).read_bytes(), row["id"]
 
 
 def test_candidate_accepts_aggregate_hash_profile_and_round_trips():
@@ -559,60 +566,58 @@ async def test_rotation_timeout_keeps_original_and_blocks(signer, monkeypatch):
         s.signer_reference
 
 
-def test_node_independently_reconstructs_and_verifies_f2_bytes():
+def test_node_independently_reconstructs_and_verifies_contract_bytes():
     import subprocess
 
-    script = r"""
-const fs = require('fs'), crypto = require('crypto');
-const corpus=JSON.parse(fs.readFileSync('tests/fixtures/aim_preview_signing_v1.json'));
-const requests=JSON.parse(fs.readFileSync('tests/fixtures/aim_preview_requests_v1.json'));
-function canon(v) { if (v===null || typeof v!=='object') return JSON.stringify(v); if(Array.isArray(v)) return '['+v.map(canon).join(',')+']'; return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}'; }
-function without(v,k) { const o={...v};delete o[k];return o; }
-for (const row of corpus.signatures) {
- let object, domain;
- const c=requests.approve.commitment;
- if(row.name.startsWith('proof-')) { const p=c.proofs[Number(row.name.slice(-1))]; object={};for(const k of ['commitment_id','listing_id','seller_dataset_version','schema_digest','dataset_merkle_root'])object[k]=c[k];object.proof=without(p,'signature');domain='aim-preview-proof-signature-v1'; }
- else if(row.name==='commitment') {object=without(c,'seller_signature');domain='aim-dataset-commitment-signature-v1';}
- else if(row.name==='platform-envelope') {object=without(corpus.platform_envelope,'signature');domain='aim-preview-platform-envelope-v1';}
- else if(row.name!=='checkpoint') {object=requests[row.name].binding;domain='aim-preview-disclosure-signature-v1';}
- let bytes;
- if(row.name==='checkpoint') { const cp=corpus.checkpoint;bytes=Buffer.from(`aim-transparency-checkpoint-v1\n${cp.log_id}\n${cp.tree_size}\n${cp.root_hash}\n${cp.checkpoint_at}\n`);}
- else bytes=Buffer.concat([Buffer.from(domain+'\0'),Buffer.from(canon(object))]);
- if(bytes.toString('hex')!==row.signed_bytes_hex) throw Error('preimage mismatch: '+row.name);
- const der=Buffer.concat([Buffer.from('302a300506032b6570032100','hex'),Buffer.from(row.public_key,'base64url')]);
- const key=crypto.createPublicKey({key:der,format:'der',type:'spki'});
- if(!crypto.verify(null,bytes,key,Buffer.from(row.signature,'base64url')))throw Error('signature mismatch');
-}
-console.log(corpus.signatures.length+' F2 fixtures independently reconstructed and verified');
-"""
-    result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+    corpus = contract_corpus()
+    result = subprocess.run(
+        ["node", "tests/preview_differential_check.cjs", str(corpus)],
+        capture_output=True, text=True,
+    )
     assert result.returncode == 0, result.stderr
-    assert "10 F2 fixtures" in result.stdout
+    assert json.loads(result.stdout)["signatures"] > 0
+
+
+def test_node_rejects_corrupt_proof_signature_before_byte_comparison(tmp_path):
+    import shutil
+    import subprocess
+    from scripts.preview_contract_gate import canonical
+
+    corpus = tmp_path / "corpus"
+    shutil.copytree(contract_corpus(), corpus)
+    input_path = corpus / "inputs/proof-v1-policy-v1.json"
+    proof = json.loads(input_path.read_bytes())
+    proof["signature"] = (
+        "A" if proof["signature"][0] != "A" else "B"
+    ) + proof["signature"][1:]
+    input_path.write_bytes(canonical(proof))
+    result = subprocess.run(
+        ["node", "tests/preview_differential_check.cjs", str(corpus)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "signature: proof-v1-policy-v1" in result.stderr
 
 
 def test_pinned_differential_corpus_python_and_node():
-    import hashlib
     import subprocess
-    from app.services.dataset_merkle_service import CommitmentValidationError
-    from tests.preview_differential_corpus import FIXTURE, differential_corpus, preimage
+    from tests.preview_contract_runner import run
+    from scripts.preview_contract_gate import verify_manifest
 
-    raw = FIXTURE.read_bytes()
-    assert hashlib.sha256(raw).hexdigest() == FIXTURE.with_suffix(".sha256").read_text().split()[0]
-    corpus = json.loads(raw)
-    assert differential_corpus() == corpus
-    digests = {}
-    for vector in corpus["valid"]:
-        message = preimage(vector)
-        assert message.hex() == vector["signed_bytes_hex"]
-        digest = __import__("hashlib").sha256(message).hexdigest()
-        assert digest == vector["signed_bytes_sha256"]
-        assert verify_bytes(decode_base64url(vector["public_key"]), vector["signature"], message)
-        digests[vector["name"]] = digest
-    for vector in corpus["must_reject"]:
-        with pytest.raises(CommitmentValidationError, match="^" + vector["error"] + "$"):
-            preimage(vector)
-    result = subprocess.run(["node", "tests/preview_differential_check.cjs"], capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
-    node = json.loads(result.stdout)
-    assert node["digests"] == digests, "BLOCKER: Python/Node differential disagreement"
-    assert node["rejected"] == [v["name"] for v in corpus["must_reject"]]
+    corpus = contract_corpus()  # explicit --contract-corpus workflow peer checkout
+    digest, rows = verify_manifest(corpus)
+    with __import__("tempfile").TemporaryDirectory() as directory:
+        output = Path(directory) / "aim.json"
+        result = run(".", corpus, output)
+    assert result["manifest_sha256"] == digest
+    assert [r["id"] for r in result["results"]] == [r["id"] for r in rows]
+    assert all(r["status"] == row["expected"] for row, r in zip(rows, result["results"]))
+    node = subprocess.run(
+        ["node", "tests/preview_differential_check.cjs", str(corpus)],
+        capture_output=True, text=True,
+    )
+    assert node.returncode == 0, node.stderr
+    checks = json.loads(node.stdout)
+    assert checks["digests"] == {
+        row["id"]: row["sha256"] for row in rows if row["expected"] == "accept"
+    }

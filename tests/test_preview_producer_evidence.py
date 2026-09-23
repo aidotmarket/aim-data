@@ -67,6 +67,7 @@ def test_missing_authority_does_not_export(tmp_path):
             indices=[0],
             fixture_time="2026-09-17T00:00:00.000000Z",
             confirmation=True,
+            contract_manifest_sha256="45f9d6a10d5bbe9d5577064b1f8330b6829381e1a2fd3df223f70509974b9ad5",
         )
     assert not (tmp_path / "out").exists()
 
@@ -163,3 +164,19 @@ def test_synthetic_reference_is_only_hashes():
         set(f) == {"path", "sha256"} and len(f["sha256"]) == 64
         for f in reference["files"]
     )
+
+
+def test_synthetic_build_receipt_uses_verified_contract_manifest(tmp_path):
+    from scripts.preview_contract_gate import lock
+    from tests.run_preview_producer_synthetic import run
+
+    corpus = os.environ.get("PREVIEW_CONTRACT_CORPUS")
+    if not corpus:
+        pytest.skip("explicit PREVIEW_CONTRACT_CORPUS required")
+    output = tmp_path / "bundle"
+    run(output, Path(corpus))
+    stored = json.loads((output / "build-receipt.json").read_bytes())
+    assert stored["contract_manifest_sha256"] == lock(
+        "aim-data", "preview-contract-backend.lock.json"
+    )["manifest_sha256"]
+    assert "fixture_manifest_sha256" not in stored
