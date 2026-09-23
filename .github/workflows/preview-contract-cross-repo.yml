@@ -1,0 +1,74 @@
+name: Preview contract cross-repo
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  preview-contract-cross-repo:
+    name: Preview contract cross-repo
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      VECTORAIZ_AUTH_ENABLED: 'false'
+      VECTORAIZ_DATA_DIRECTORY: /tmp/preview-contract/data
+      VECTORAIZ_UPLOAD_DIRECTORY: /tmp/preview-contract/uploads
+      VECTORAIZ_PROCESSED_DIRECTORY: /tmp/preview-contract/processed
+      DATABASE_URL: sqlite:////tmp/preview-contract/test.db
+    steps:
+      - name: Checkout AIM Data
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate lock
+        id: lock
+        run: python scripts/preview_contract_gate.py lock --kind aim-data --file preview-contract-backend.lock.json --github-output "$GITHUB_OUTPUT"
+      - name: Require target-only backend key
+        env:
+          DEPLOY_KEY: ${{ secrets.PREVIEW_CONTRACT_BACKEND_READ_DEPLOY_KEY }}
+        run: test -n "$DEPLOY_KEY"
+      - name: Checkout pinned backend
+        uses: actions/checkout@v4
+        with:
+          repository: aidotmarket/ai-market-backend
+          ref: ${{ steps.lock.outputs.backend_sha }}
+          path: peer/ai-market-backend
+          ssh-key: ${{ secrets.PREVIEW_CONTRACT_BACKEND_READ_DEPLOY_KEY }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify checkout and manifest
+        run: |
+          test "$(git -C peer/ai-market-backend rev-parse HEAD)" = "${{ steps.lock.outputs.backend_sha }}"
+          python scripts/preview_contract_gate.py verify-manifest --corpus peer/ai-market-backend/tests/fixtures/preview/cross_repo_contract/v1 --expected "${{ steps.lock.outputs.manifest_sha256 }}"
+          python scripts/preview_contract_gate.py aim-transition --event "$GITHUB_EVENT_PATH" --peer peer/ai-market-backend
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated repositories
+        run: |
+          python -m venv /tmp/preview-contract/aim-venv
+          /tmp/preview-contract/aim-venv/bin/pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt -r requirements-dev.txt
+          python -m venv /tmp/preview-contract/backend-venv
+          /tmp/preview-contract/backend-venv/bin/pip install -r peer/ai-market-backend/requirements.txt -r peer/ai-market-backend/requirements-dev.txt
+          mkdir -p /tmp/preview-contract/data /tmp/preview-contract/uploads /tmp/preview-contract/processed /tmp/preview-contract/results
+      - name: Run both implementations
+        run: |
+          /tmp/preview-contract/backend-venv/bin/python peer/ai-market-backend/tests/preview_contract_runner.py --repo-root peer/ai-market-backend --corpus peer/ai-market-backend/tests/fixtures/preview/cross_repo_contract/v1 --output /tmp/preview-contract/results/backend.json
+          /tmp/preview-contract/aim-venv/bin/python tests/preview_contract_runner.py --repo-root . --corpus peer/ai-market-backend/tests/fixtures/preview/cross_repo_contract/v1 --output /tmp/preview-contract/results/aim-data.json
+          /tmp/preview-contract/aim-venv/bin/python scripts/preview_contract_gate.py coverage --result /tmp/preview-contract/results/aim-data.json
+          /tmp/preview-contract/backend-venv/bin/python peer/ai-market-backend/scripts/preview_contract_gate.py coverage --result /tmp/preview-contract/results/backend.json
+          /tmp/preview-contract/aim-venv/bin/python scripts/preview_contract_gate.py compare --corpus peer/ai-market-backend/tests/fixtures/preview/cross_repo_contract/v1 --left /tmp/preview-contract/results/aim-data.json --right /tmp/preview-contract/results/backend.json
+          node tests/preview_differential_check.cjs peer/ai-market-backend/tests/fixtures/preview/cross_repo_contract/v1
+      - name: Focused regressions and deletion proof
+        run: |
+          /tmp/preview-contract/aim-venv/bin/python -m pytest -q tests/test_preview_contract_cross_repo.py tests/test_preview_disclosure_schemas.py tests/test_preview_lifecycle.py tests/test_preview_signing_service.py tests/test_preview_producer_evidence.py
+          /tmp/preview-contract/aim-venv/bin/python tests/run_preview_producer_synthetic.py --output /tmp/preview-contract/synthetic-bundle --reference tests/fixtures/preview-producer-synthetic-shas.json --contract-corpus peer/ai-market-backend/tests/fixtures/preview/cross_repo_contract/v1
+          /tmp/preview-contract/aim-venv/bin/python scripts/preview_contract_gate.py deleted-consumers

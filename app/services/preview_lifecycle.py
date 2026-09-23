@@ -121,6 +121,13 @@ GRANT_NULLS = (
 )
 
 
+def _inherit_aggregate_hash_profile(candidate, prior):
+    if "aggregate_hash_profile" in prior:
+        candidate["aggregate_hash_profile"] = prior["aggregate_hash_profile"]
+    else:
+        candidate.pop("aggregate_hash_profile", None)
+
+
 def withdrawal_candidate(prior, *, disclosure_version, request_id, approved_at):
     old = closed(DisclosureBinding, prior)
     b = dict(
@@ -133,6 +140,7 @@ def withdrawal_candidate(prior, *, disclosure_version, request_id, approved_at):
         supersedes=old["disclosure_version"],
         expected_current_disclosure_id=old["disclosure_version"],
     )
+    _inherit_aggregate_hash_profile(b, old)
     b.update({k: None for k in GRANT_NULLS})
     b.update(proof_ids=[], schema_descriptors=[], selected_fields=[])
     return LocalCandidate.validate(b)
@@ -155,6 +163,7 @@ def refresh_candidate(
         supersedes=old["disclosure_version"],
         expected_current_disclosure_id=old["disclosure_version"],
     )
+    _inherit_aggregate_hash_profile(b, old)
     if b["last_attested_by_seller_at"] <= old["last_attested_by_seller_at"]:
         raise LifecycleError("refresh_time_not_new")
     return LocalCandidate.validate(b)
@@ -173,6 +182,7 @@ def supersession_candidate(prior, replacement):
         supersedes=old["disclosure_version"],
         expected_current_disclosure_id=old["disclosure_version"],
     )
+    _inherit_aggregate_hash_profile(b, old)
     return LocalCandidate.validate(b)
 
 

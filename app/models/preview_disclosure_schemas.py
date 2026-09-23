@@ -1,6 +1,6 @@
 """Closed T metadata wire contracts; seller-origin content has no carrier here."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Mapping
 import unicodedata
 from pydantic import Field, model_serializer, model_validator
 from app.models.dataset_commitment_schemas import (
@@ -121,6 +121,19 @@ class DisclosureBinding(WireModel):
             ):
                 raise ValueError("approval_evidence_missing")
             schema = CanonicalSchema(self.schema_descriptors)
+            def public_types(fields):
+                for _, tag, _, params in fields:
+                    if tag == "binary":
+                        raise ValueError("binary_sample_forbidden")
+                    if tag == "array":
+                        element = params["element_type"]
+                        public_types([["element", element["type"], False, element["type_parameters"]]])
+                    if tag == "object":
+                        public_types([
+                            [field["name"], field["type"], field["nullable"], field["type_parameters"]]
+                            for field in params["object_fields"]
+                        ])
+            public_types(schema.descriptors)
             if (
                 schema.descriptors != self.schema_descriptors
                 or len(schema.descriptors) > 25
@@ -146,6 +159,25 @@ class PreviewDisclosureRequest(WireModel):
     seller_signature: Signature
     commitment: DatasetCommitmentContract | None
     proofs: list[DatasetPreviewProofContract] = Field(max_length=100)
+
+    @model_validator(mode="before")
+    @classmethod
+    def raw_package_identity(cls, value):
+        package_keys = (
+            "preview_package_url", "package_media_type", "package_profile",
+            "package_byte_ceiling", "scan_policy", "scan_policy_version",
+            "scanned_at", "scan_verdict", "signer_reference",
+        )
+        if isinstance(value, Mapping):
+            proofs = value.get("proofs")
+            if (
+                isinstance(proofs, list)
+                and len(proofs) >= 2
+                and all(isinstance(proof, Mapping) and all(key in proof for key in package_keys) for proof in proofs)
+                and any(tuple(proof[key] for key in package_keys) != tuple(proofs[0][key] for key in package_keys) for proof in proofs[1:])
+            ):
+                raise ValueError("package_mismatch")
+        return value
 
     @model_validator(mode="after")
     def agreement(self):
@@ -190,6 +222,11 @@ class PreviewDisclosureRequest(WireModel):
                     p.package_media_type,
                     p.package_profile,
                     p.package_byte_ceiling,
+                    p.scan_policy,
+                    p.scan_policy_version,
+                    p.scanned_at,
+                    p.scan_verdict,
+                    p.signer_reference,
                 )
                 for p in self.proofs
             }
@@ -207,9 +244,12 @@ class PreviewDisclosureRequest(WireModel):
                 compute_leaf_hash,
             )
 
+            sampled_digest = sampled_leaf_list_digest(proofs)
+            if any(p.sampled_leaf_list_digest != sampled_digest for p in self.proofs):
+                raise ValueError("sampled_leaf_list_mismatch")
             if b.sample_hash != sample_hash(
                 proofs
-            ) or b.sampled_leaf_list_digest != sampled_leaf_list_digest(proofs):
+            ) or b.sampled_leaf_list_digest != sampled_digest:
                 raise ValueError("sample_mismatch")
             if b.scan_attestation_digest != scan_attestation_digest(proofs):
                 raise ValueError("scan_mismatch")
