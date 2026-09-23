@@ -246,7 +246,7 @@ class PreviewDisclosureRequest(WireModel):
 
             sampled_digest = sampled_leaf_list_digest(proofs)
             if any(p.sampled_leaf_list_digest != sampled_digest for p in self.proofs):
-                raise ValueError("sampled_leaf_list_mismatch")
+                raise ValueError("sampled_leaf_digest_mismatch")
             if b.sample_hash != sample_hash(
                 proofs
             ) or b.sampled_leaf_list_digest != sampled_digest:
