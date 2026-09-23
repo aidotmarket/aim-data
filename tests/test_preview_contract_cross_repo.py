@@ -4,6 +4,7 @@ import base64
 import copy
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -138,6 +139,26 @@ def test_manifest_integrity_and_mutations(tmp_path):
     byte_file.write_bytes(byte_file.read_bytes() + b"x")
     with pytest.raises(GateError, match="byte_digest"):
         verify_manifest(root, expected)
+
+
+def test_verified_peer_path_reaches_later_workflow_tests(tmp_path):
+    root, expected = corpus(
+        tmp_path,
+        [("binding-v2-approve-public-domain", "binding-model", request_fixture()["binding"], "accept")],
+    )
+    github_env = tmp_path / "github-env"
+    command = [
+        sys.executable, "scripts/preview_contract_gate.py", "verify-manifest",
+        "--corpus", str(root), "--expected", expected,
+    ]
+    environment = dict(os.environ, GITHUB_ENV=str(github_env))
+    result = subprocess.run(command, env=environment, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert github_env.read_text() == f"PREVIEW_CONTRACT_CORPUS={root.resolve()}\n"
+    command[-1] = "c" * 64
+    result = subprocess.run(command, env=environment, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert github_env.read_text() == f"PREVIEW_CONTRACT_CORPUS={root.resolve()}\n"
 
 
 @pytest.mark.parametrize("expected", ["accept", "reject"])

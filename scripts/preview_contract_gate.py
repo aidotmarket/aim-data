@@ -629,7 +629,14 @@ def main():
         if args.command == "lock":
             print(lock(args.kind, args.file, args.github_output))
         elif args.command == "verify-manifest":
-            print(verify_manifest(args.corpus, args.expected)[0])
+            manifest_digest, _ = verify_manifest(args.corpus, args.expected)
+            print(manifest_digest)
+            github_env = os.environ.get("GITHUB_ENV")
+            if github_env:
+                corpus_path = str(Path(args.corpus).resolve(strict=True))
+                require("\n" not in corpus_path and "\r" not in corpus_path, "corpus_path")
+                with open(github_env, "a", encoding="utf-8") as output:
+                    output.write(f"PREVIEW_CONTRACT_CORPUS={corpus_path}\n")
         elif args.command == "aim-transition":
             print(aim_transition(args.event, args.peer))
         elif args.command == "compare":
