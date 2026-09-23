@@ -41,7 +41,6 @@ def _valid_payload(file_hash: str = "a" * 64) -> dict:
         "order_id": str(uuid.uuid4()),
         "listing_id": str(uuid.uuid4()),
         "file_hash": file_hash,
-        "buyer_id": str(uuid.uuid4()),
         "issued_at": time.time(),
         "expires_at": time.time() + 3600,
         "nonce": str(uuid.uuid4()),
@@ -76,8 +75,16 @@ class TestEntitlementValid:
         payload = _valid_payload()
         token = _make_token(payload)
         result = svc.validate_entitlement(f"Bearer {token}")
-        for key in ("order_id", "listing_id", "file_hash", "buyer_id", "issued_at", "expires_at", "nonce"):
+        for key in ("order_id", "listing_id", "file_hash", "issued_at", "expires_at", "nonce"):
             assert key in result
+        assert "buyer_id" not in result
+
+    def test_legacy_token_with_buyer_id_still_validates(self, svc):
+        """Extra legacy fields remain accepted during the transition."""
+        payload = _valid_payload()
+        payload["buyer_id"] = str(uuid.uuid4())
+        result = svc.validate_entitlement(f"Bearer {_make_token(payload)}")
+        assert result["order_id"] == payload["order_id"]
 
 
 class TestEntitlementExpired:
@@ -158,7 +165,7 @@ class TestEntitlementTampered:
     def test_missing_required_field(self, svc):
         """Token missing a required field is rejected."""
         payload = _valid_payload()
-        del payload["buyer_id"]
+        del payload["order_id"]
         token = _make_token(payload)
         with pytest.raises(ValueError, match="Missing required field"):
             svc.validate_entitlement(f"Bearer {token}")

@@ -447,8 +447,8 @@ async def download_raw_file(
         raise HTTPException(status_code=409, detail=str(e))
 
     logger.info(
-        "Serving raw file %s to buyer %s (order=%s)",
-        file_id, payload.get("buyer_id"), payload.get("order_id"),
+        "Serving raw file %s (order=%s)",
+        file_id, payload.get("order_id"),
     )
 
     return FileResponse(
