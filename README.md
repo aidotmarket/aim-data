@@ -1,5 +1,10 @@
 # AIM Data
 
+> **This repository is archived (October 2026) and no longer maintained.**
+> AIM Data has been replaced by the **AIM Data Gateway**, a small self-hosted gateway that scans files in place, sends listing metadata only, and serves purchased files straight to the buyer: <https://github.com/aidotmarket/aim-data-gateway>.
+> Sellers who keep data in cloud storage can list it from the website instead, in Seller Workspace at <https://ai.market>.
+> The code below is kept for reference only. ai.market no longer accepts deliveries from this product.
+
 **Connect your private data to ai.market.**
 
 AIM Data is the seller-side toolkit for the ai.market marketplace. Stand up a private data store, connect it to your buckets and databases, publish dataset metadata to ai.market, and let buyers discover your data without ever moving it off your infrastructure.
